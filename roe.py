@@ -47,6 +47,7 @@ if generate_equations:
         [hRL - a*vn, ek, hRL + a*vn, uRL*ny - vRL*nx],
     ])
     Q = Q_inv.inv()
+    breakpoint()
 
     # Write to file for later use, since this takes a
     # long time to generate

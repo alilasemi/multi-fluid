@@ -92,13 +92,13 @@ def exact_solution(
             p[i] = p1
 
     # Write to file
-    with open(f'r_exact_t_{t}.npy', 'wb') as f:
+    with open(f'data/r_exact_t_{t}.npy', 'wb') as f:
         np.save(f, r)
-    with open(f'u_exact_t_{t}.npy', 'wb') as f:
+    with open(f'data/u_exact_t_{t}.npy', 'wb') as f:
         np.save(f, u)
-    with open(f'p_exact_t_{t}.npy', 'wb') as f:
+    with open(f'data/p_exact_t_{t}.npy', 'wb') as f:
         np.save(f, p)
-    with open(f'x_exact_t_{t}.npy', 'wb') as f:
+    with open(f'data/x_exact_t_{t}.npy', 'wb') as f:
         np.save(f, x)
 
     # Plot

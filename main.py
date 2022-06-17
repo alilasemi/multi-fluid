@@ -2,10 +2,11 @@ import matplotlib.pyplot as plt
 from matplotlib import rc
 import numpy as np
 import sympy as sp
-from sympy.utilities.autowrap import autowrap
+from sympy.utilities.autowrap import autowrap, ufuncify
 import pickle
 
 from exact_solution import exact_solution
+
 
 # Inputs
 r4 = 1    # left
@@ -19,8 +20,8 @@ v1 = 0    # right
 g = 1.4
 
 def main():
-    exact_solution(
-            r4, p4, u4, v4, r1, p1, u1, v1, g)
+    #exact_solution(
+    #        r4, p4, u4, v4, r1, p1, u1, v1, g)
     compute_solution(Roe())
 
 class Mesh:
@@ -215,13 +216,13 @@ def compute_solution(flux):
         p = V[:, 3]
 
         # Exact solution
-        with open(f'r_exact_t_{t}.npy', 'rb') as f:
+        with open(f'data/r_exact_t_{t}.npy', 'rb') as f:
             r_exact = np.load(f)
-        with open(f'u_exact_t_{t}.npy', 'rb') as f:
+        with open(f'data/u_exact_t_{t}.npy', 'rb') as f:
             u_exact = np.load(f)
-        with open(f'p_exact_t_{t}.npy', 'rb') as f:
+        with open(f'data/p_exact_t_{t}.npy', 'rb') as f:
             p_exact = np.load(f)
-        with open(f'x_exact_t_{t}.npy', 'rb') as f:
+        with open(f'data/x_exact_t_{t}.npy', 'rb') as f:
             x_exact = np.load(f)
 
         # Index of y to slice for plotting
@@ -393,15 +394,37 @@ class Roe:
         hRL = (np.sqrt(rR) * hR + np.sqrt(rL) * hL) / (np.sqrt(rR) + np.sqrt(rL))
 
         # Compute A_RL
-        A_RL = np.array([self.A_RL_func(uRL[i], vRL[i], hRL[i], nx[i], ny[i], g) for i in
-                range(n_faces)])
+        A_RL = self.A_RL_func(uRL, vRL, hRL, nx, ny, g)
+        breakpoint()
         # Compute eigendecomp
-        Lambda = np.array([self.Lambda_func(uRL[i], vRL[i], hRL[i], nx[i],
-            ny[i], g) for i in range(n_faces)])
-        Q_inv = np.array([self.Q_inv_func(uRL[i], vRL[i], hRL[i], nx[i],
-            ny[i], g) for i in range(n_faces)])
-        Q = np.array([self.Q_func(uRL[i], vRL[i], hRL[i], nx[i],
-            ny[i], g) for i in range(n_faces)])
+        Lambda = np.empty((n_faces, 4, 4))
+        self.Lambda_func(uRL, vRL, hRL, nx, ny, g, Lambda, n_faces)
+        Q_inv = np.empty((n_faces, 4, 4))
+        self.Q_inv_func(uRL, vRL, hRL, nx, ny, g, Q_inv, n_faces)
+        Q = np.empty((n_faces, 4, 4))
+        self.Q_func(uRL, vRL, hRL, nx, ny, g, Q, n_faces)
+
+        # -- Get everything in (n_faces, 4, 4) shape -- #
+        # Replace the int zeros with array zeros
+        for i in range(Lambda.shape[0]):
+            for j in range(Lambda.shape[1]):
+                if type(Lambda[i, j]) == int:
+                    Lambda[i, j] = np.zeros(n_faces)
+                if type(A_RL[i, j]) == int:
+                    A_RL[i, j] = np.zeros(n_faces)
+        # Stack and reshape
+        Lambda = np.stack(np.hstack(Lambda)).reshape(-1, 4, 4)
+        A_RL = np.stack(np.hstack(A_RL)).reshape(-1, 4, 4)
+
+        # Hardcode the scalar values for Q_inv and Q
+        Q_inv[0, 0] = np.ones(n_faces)
+        Q_inv[0, 1] = np.ones(n_faces)
+        Q_inv[0, 2] = np.ones(n_faces)
+        Q_inv[0, 3] = np.zeros(n_faces)
+        Q[-1, -1] = np.zeros(n_faces)
+        # Stack and reshape
+        Q_inv = np.stack(np.hstack(Q_inv)).reshape(-1, 4, 4)
+        Q = np.stack(np.hstack(Q)).reshape(-1, 4, 4)
 
         Lambda_m = (Lambda - np.abs(Lambda))/2
         Lambda_p = Lambda - Lambda_m
@@ -430,11 +453,58 @@ class Roe:
             loaded_equations = pickle.load(equations_file)
             A_RL, Q_inv, Lambda, Q = loaded_equations
 
-        # Turn these into Python lambda functions
-        A_RL_func   = autowrap(expr=A_RL,   args=[uRL, vRL, hRL, nx, ny, gamma])
-        Lambda_func = autowrap(expr=Lambda, args=[uRL, vRL, hRL, nx, ny, gamma])
-        Q_inv_func  = autowrap(expr=Q_inv,  args=[uRL, vRL, hRL, nx, ny, gamma])
-        Q_func      = autowrap(expr=Q,      args=[uRL, vRL, hRL, nx, ny, gamma])
+        # Function for generating C code
+        def generate_code(expression, var_name):
+            code = ''
+            tab = '    '
+            args = f'double u_RL, double v_RL, double h_RL, double n_x, double n_y, double gamma, double* {var_name}'
+            # TODO fix the i*4*4
+            args_i = f'u_RL[i], v_RL[i], h_RL[i], n_x[i], n_y[i], gamma, {var_name} + i*4*4'
+            all_args = f'double* u_RL, double* v_RL, double* h_RL, double* n_x, double* n_y, double gamma, double* {var_name}, int n'
+            # Includes
+            code += '#include <math.h>\n'
+            code += '#include <pybind11/pybind11.h>\n'
+            code += 'namespace py = pybind11;\n\n'
+
+            # Function signature
+            # TODO: fix the *4
+            code += f'void compute_{var_name}({args}){{\n'
+            for i in range(expression.shape[0]):
+                for j in range(expression.shape[1]):
+                    code += tab + (var_name + f'[{i} * 4 + {j}] = '
+                            + sp.ccode(expression[i, j]) + ';\n')
+            code += '}\n\n'
+
+            # Function for computing across all elements
+            code += f'void compute_all_{var_name}({all_args}){{\n'
+            code += tab + 'for (int i = 0; i < n; i++) {\n'
+            code += tab + tab + f'compute_{var_name}({args_i});\n'
+            code += tab + '}\n'
+            code += '}\n\n'
+
+            # Pybind code
+            code += f'PYBIND11_MODULE(compute_{var_name}, m) {{\n'
+            code += tab + f'm.doc() = "Generated code"; // optional module docstring;\n'
+            code += tab + f'm.def("compute_{var_name}", &compute_{var_name}, "A function that computes {var_name}");\n'
+            code += '}'
+
+            with open(f'cache/compute_{var_name}.cpp', 'w') as f:
+                f.write(code)
+
+        #generate_code(A_RL, 'A_RL')
+        #generate_code(Lambda, 'Lambda')
+        #generate_code(Q_inv, 'Q_inv')
+        #generate_code(Q, 'Q')
+
+        # Get python functions
+        import cache.compute_A_RL
+        import cache.compute_Lambda
+        import cache.compute_Q_inv
+        import cache.compute_Q
+        A_RL_func   = cache.compute_A_RL.compute_A_RL
+        Lambda_func = cache.compute_Lambda.compute_Lambda
+        Q_inv_func  = cache.compute_Q_inv.compute_Q_inv
+        Q_func      = cache.compute_Q.compute_Q
         return A_RL_func, Lambda_func, Q_inv_func, Q_func
 
 def primitive_to_conservative(r, u, v, p, g):
