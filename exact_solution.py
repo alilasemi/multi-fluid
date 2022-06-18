@@ -8,7 +8,7 @@ def exact_solution(
     # Domain
     n_points = 1601
     x = np.linspace(-10, 10, n_points)
-    t = .008
+    t = .004
 
     # Compute speed of sound
     def compute_c(g, p, r): return np.sqrt(g * p / r)

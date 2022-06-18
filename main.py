@@ -142,7 +142,7 @@ def compute_solution(flux):
     n_t = 400
     t_final = .01
     dt = t_final / n_t
-    t_list = [.002, .004, .006, .008]
+    t_list = [.004, .008]#[.002, .004, .006, .008]
 
     nx = 100
     ny = 20
@@ -395,36 +395,11 @@ class Roe:
 
         # Compute A_RL
         A_RL = self.A_RL_func(uRL, vRL, hRL, nx, ny, g)
-        breakpoint()
         # Compute eigendecomp
-        Lambda = np.empty((n_faces, 4, 4))
-        self.Lambda_func(uRL, vRL, hRL, nx, ny, g, Lambda, n_faces)
-        Q_inv = np.empty((n_faces, 4, 4))
-        self.Q_inv_func(uRL, vRL, hRL, nx, ny, g, Q_inv, n_faces)
-        Q = np.empty((n_faces, 4, 4))
-        self.Q_func(uRL, vRL, hRL, nx, ny, g, Q, n_faces)
-
-        # -- Get everything in (n_faces, 4, 4) shape -- #
-        # Replace the int zeros with array zeros
-        for i in range(Lambda.shape[0]):
-            for j in range(Lambda.shape[1]):
-                if type(Lambda[i, j]) == int:
-                    Lambda[i, j] = np.zeros(n_faces)
-                if type(A_RL[i, j]) == int:
-                    A_RL[i, j] = np.zeros(n_faces)
-        # Stack and reshape
-        Lambda = np.stack(np.hstack(Lambda)).reshape(-1, 4, 4)
-        A_RL = np.stack(np.hstack(A_RL)).reshape(-1, 4, 4)
-
-        # Hardcode the scalar values for Q_inv and Q
-        Q_inv[0, 0] = np.ones(n_faces)
-        Q_inv[0, 1] = np.ones(n_faces)
-        Q_inv[0, 2] = np.ones(n_faces)
-        Q_inv[0, 3] = np.zeros(n_faces)
-        Q[-1, -1] = np.zeros(n_faces)
-        # Stack and reshape
-        Q_inv = np.stack(np.hstack(Q_inv)).reshape(-1, 4, 4)
-        Q = np.stack(np.hstack(Q)).reshape(-1, 4, 4)
+        Lambda = self.Lambda_func(uRL, vRL, hRL, nx, ny, g)
+        Q_inv = self.Q_inv_func(uRL, vRL, hRL, nx, ny, g)
+        Q = self.Q_func(uRL, vRL, hRL, nx, ny, g)
+        breakpoint()
 
         Lambda_m = (Lambda - np.abs(Lambda))/2
         Lambda_p = Lambda - Lambda_m
@@ -457,12 +432,14 @@ class Roe:
         def generate_code(expression, var_name):
             code = ''
             tab = '    '
+            darray = 'py::array_t<double>'
             args = f'double u_RL, double v_RL, double h_RL, double n_x, double n_y, double gamma, double* {var_name}'
             # TODO fix the i*4*4
-            args_i = f'u_RL[i], v_RL[i], h_RL[i], n_x[i], n_y[i], gamma, {var_name} + i*4*4'
-            all_args = f'double* u_RL, double* v_RL, double* h_RL, double* n_x, double* n_y, double gamma, double* {var_name}, int n'
+            args_i = f'u_RL_ptr[i], v_RL_ptr[i], h_RL_ptr[i], n_x_ptr[i], n_y_ptr[i], gamma, {var_name}_ptr + i*4*4'
+            all_args = f'{darray} u_RL, {darray} v_RL, {darray} h_RL, {darray} n_x, {darray} n_y, double gamma'
             # Includes
             code += '#include <math.h>\n'
+            code += '#include <pybind11/numpy.h>\n'
             code += '#include <pybind11/pybind11.h>\n'
             code += 'namespace py = pybind11;\n\n'
 
@@ -476,25 +453,46 @@ class Roe:
             code += '}\n\n'
 
             # Function for computing across all elements
-            code += f'void compute_all_{var_name}({all_args}){{\n'
+            code += f'{darray} compute_all_{var_name}({all_args}){{\n'
+            # Get Pybind buffers
+            code += f'py::buffer_info u_RL_buf = u_RL.request();\n'
+            code += f'py::buffer_info v_RL_buf = v_RL.request();\n'
+            code += f'py::buffer_info h_RL_buf = h_RL.request();\n'
+            code += f'py::buffer_info n_x_buf = n_x.request();\n'
+            code += f'py::buffer_info n_y_buf = n_y.request();\n'
+            # Allocate the return buffer
+            code += f'int n = u_RL.size();\n'
+            code += f'py::array_t<double> {var_name} = py::array_t<double>(n * 4 * 4);\n'
+            code += f'py::buffer_info {var_name}_buf = {var_name}.request();\n'
+            # Set pointers
+            code += 'double* u_RL_ptr = (double*) u_RL_buf.ptr;\n'
+            code += 'double* v_RL_ptr = (double*) v_RL_buf.ptr;\n'
+            code += 'double* h_RL_ptr = (double*) h_RL_buf.ptr;\n'
+            code += 'double* n_x_ptr = (double*) n_x_buf.ptr;\n'
+            code += 'double* n_y_ptr = (double*) n_y_buf.ptr;\n'
+            code += f'double* {var_name}_ptr = (double*) {var_name}_buf.ptr;\n'
+            # Compute
             code += tab + 'for (int i = 0; i < n; i++) {\n'
             code += tab + tab + f'compute_{var_name}({args_i});\n'
             code += tab + '}\n'
+            # Reshape
+            code += f'{var_name}.resize({{n, 4, 4}});\n'
+            code += tab + f'return {var_name};\n'
             code += '}\n\n'
 
             # Pybind code
             code += f'PYBIND11_MODULE(compute_{var_name}, m) {{\n'
             code += tab + f'm.doc() = "Generated code"; // optional module docstring;\n'
-            code += tab + f'm.def("compute_{var_name}", &compute_{var_name}, "A function that computes {var_name}");\n'
+            code += tab + f'm.def("compute_{var_name}", &compute_all_{var_name}, "A function that computes {var_name}");\n'
             code += '}'
 
             with open(f'cache/compute_{var_name}.cpp', 'w') as f:
                 f.write(code)
 
-        #generate_code(A_RL, 'A_RL')
+        generate_code(A_RL, 'A_RL')
         #generate_code(Lambda, 'Lambda')
-        #generate_code(Q_inv, 'Q_inv')
-        #generate_code(Q, 'Q')
+        generate_code(Q_inv, 'Q_inv')
+        generate_code(Q, 'Q')
 
         # Get python functions
         import cache.compute_A_RL
