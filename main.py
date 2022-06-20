@@ -376,8 +376,8 @@ class Roe:
             edge_area_normal = mesh.bc_area_normal
         length = np.linalg.norm(edge_area_normal, axis=1, keepdims=True)
         unit_normals = edge_area_normal / length
-        nx = unit_normals[:, 0]
-        ny = unit_normals[:, 1]
+        nx = unit_normals[:, 0].copy()
+        ny = unit_normals[:, 1].copy()
 
         # Convert to primitives
         rL, rR = U_L[:, 0], U_R[:, 0]
@@ -399,7 +399,6 @@ class Roe:
         Lambda = self.Lambda_func(uRL, vRL, hRL, nx, ny, g)
         Q_inv = self.Q_inv_func(uRL, vRL, hRL, nx, ny, g)
         Q = self.Q_func(uRL, vRL, hRL, nx, ny, g)
-        breakpoint()
 
         Lambda_m = (Lambda - np.abs(Lambda))/2
         Lambda_p = Lambda - Lambda_m

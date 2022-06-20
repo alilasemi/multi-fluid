@@ -3,3 +3,6 @@
 *.swp
 *.swo
 *.pkl
+*.out
+__pycache__/
+cache/
