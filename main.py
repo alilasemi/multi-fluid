@@ -3,6 +3,7 @@ from matplotlib import rc
 import numpy as np
 import sympy as sp
 from sympy.utilities.autowrap import autowrap, ufuncify
+import pathlib
 import pickle
 
 from exact_solution import exact_solution
@@ -347,16 +348,14 @@ def update(U, dt, mesh, flux_function):
     # Evalute boundary fluxes
     F_bc = flux_function(U[mesh.bc_type[:, 0]], U_ghost, mesh)
 
-    # Update cells by looping over faces and updating left and right sides
-    for i in range(mesh.n_faces):
-        cellL_ID = mesh.edge[i, 0]
-        cellR_ID = mesh.edge[i, 1]
-        U_new[cellL_ID] -= dt / mesh.area[cellL_ID] * F[i]
-        U_new[cellR_ID] += dt / mesh.area[cellR_ID] * F[i]
-    for i in range(mesh.bc_type.shape[0]):
-        cellL_ID = mesh.bc_type[i, 0]
-        U_new[cellL_ID] -= dt / mesh.area[cellL_ID] * F_bc[i]
-
+    # Update cells on the left and right sides, for interior faces
+    cellL_ID = mesh.edge[:, 0]
+    cellR_ID = mesh.edge[:, 1]
+    np.add.at(U_new, cellL_ID, -dt / mesh.area[cellL_ID].reshape(-1, 1) * F)
+    np.add.at(U_new, cellR_ID,  dt / mesh.area[cellR_ID].reshape(-1, 1) * F)
+    # Incorporate boundary faces
+    cellL_ID = mesh.bc_type[:, 0]
+    np.add.at(U_new, cellL_ID, -dt / mesh.area[cellL_ID].reshape(-1, 1) * F_bc)
     return U_new
 
 class Roe:
@@ -376,6 +375,8 @@ class Roe:
             edge_area_normal = mesh.bc_area_normal
         length = np.linalg.norm(edge_area_normal, axis=1, keepdims=True)
         unit_normals = edge_area_normal / length
+        # The copy here is needed, since the slice is not c-contiguous, which
+        # causes the wrong data to be passed to Pybind.
         nx = unit_normals[:, 0].copy()
         ny = unit_normals[:, 1].copy()
 
@@ -485,23 +486,25 @@ class Roe:
             code += tab + f'm.def("compute_{var_name}", &compute_all_{var_name}, "A function that computes {var_name}");\n'
             code += '}'
 
+            path = pathlib.Path("cache/") # Create Path object
+            path.mkdir(exist_ok=True)
             with open(f'cache/compute_{var_name}.cpp', 'w') as f:
                 f.write(code)
 
         generate_code(A_RL, 'A_RL')
-        #generate_code(Lambda, 'Lambda')
+        generate_code(Lambda, 'Lambda')
         generate_code(Q_inv, 'Q_inv')
         generate_code(Q, 'Q')
 
         # Get python functions
-        import cache.compute_A_RL
-        import cache.compute_Lambda
-        import cache.compute_Q_inv
-        import cache.compute_Q
-        A_RL_func   = cache.compute_A_RL.compute_A_RL
-        Lambda_func = cache.compute_Lambda.compute_Lambda
-        Q_inv_func  = cache.compute_Q_inv.compute_Q_inv
-        Q_func      = cache.compute_Q.compute_Q
+        import cache.build.compute_A_RL
+        import cache.build.compute_Lambda
+        import cache.build.compute_Q_inv
+        import cache.build.compute_Q
+        A_RL_func   = cache.build.compute_A_RL.compute_A_RL
+        Lambda_func = cache.build.compute_Lambda.compute_Lambda
+        Q_inv_func  = cache.build.compute_Q_inv.compute_Q_inv
+        Q_func      = cache.build.compute_Q.compute_Q
         return A_RL_func, Lambda_func, Q_inv_func, Q_func
 
 def primitive_to_conservative(r, u, v, p, g):
