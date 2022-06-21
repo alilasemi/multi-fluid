@@ -14,15 +14,17 @@ r4 = 1    # left
 p4 = 1e5  # left
 u4 = 100  # left
 v4 = 0    # left
+phi4 = 1  # left
 r1 = .125 # right
 p1 = 1e4  # right
 u1 = 50   # right
 v1 = 0    # right
+phi1 = 0  # right
 g = 1.4
 
 def main():
-    #exact_solution(
-    #        r4, p4, u4, v4, r1, p1, u1, v1, g)
+    exact_solution(
+            r4, p4, u4, v4, r1, p1, u1, v1, g)
     compute_solution(Roe())
 
 class Mesh:
@@ -135,6 +137,9 @@ class Mesh:
 
 
 def compute_solution(flux):
+    # Set the flux of phi to be upwind
+    flux_phi = Upwind()
+
     # Get initial conditions as conservatives
     W4 = primitive_to_conservative(r4, u4, v4, p4, g)
     W1 = primitive_to_conservative(r1, u1, v1, p1, g)
@@ -143,10 +148,10 @@ def compute_solution(flux):
     n_t = 400
     t_final = .01
     dt = t_final / n_t
-    t_list = [.004, .008]#[.002, .004, .006, .008]
+    t_list = [2.5e-5, .004, .008]#[.002, .004, .006, .008]
 
-    nx = 100
-    ny = 20
+    nx = 50#100
+    ny = 10#20
 
     # Create mesh
     mesh = Mesh(nx, ny)
@@ -154,31 +159,25 @@ def compute_solution(flux):
     U = np.empty((mesh.n, 4))
     U[mesh.xy[:, 0] <= 0] = W4
     U[mesh.xy[:, 0] > 0] = W1
+    # Phi set to be zero at the initial contact (x = 0)
+    phi = mesh.xy[:, 0]**2
+    phi /= np.max(phi)
+    rphi = U[:, 0] * phi
 
     # Loop over time
     U_list = []
-    r_probe = np.empty((n_t, 4))
-    p_probe = np.empty((n_t, 4))
+    U_ghost = np.empty((mesh.bc_type.shape[0], 4))
+    rphi_list = []
     x_shock = np.empty(n_t)
-    idx_A = 4*nx  + (nx // 2) - 1
-    idx_B = 4*nx  + (nx // 2)
-    idx_C = 6*nx  + (nx // 2)
-    idx_D = 11*nx + (nx // 2)
-    probe_list = [idx_A, idx_B, idx_C, idx_D]
     for i in range(n_t):
         print(i)
         # Update solution
-        U = update(U, dt, mesh, flux.compute_flux)
+        U = update(U, U_ghost, dt, mesh, flux.compute_flux)
+        rphi = update_rphi(U, U_ghost, rphi, dt, mesh, flux_phi.compute_flux)
         t = (i + 1) * dt
         if t in t_list:
             U_list.append(U)
-        # Store probe values
-        for j in range(4):
-            idx = probe_list[j]
-            V = conservative_to_primitive(
-                    U[idx, 0], U[idx, 1], U[idx, 2], U[idx, 3], g)
-            r_probe[i, j] = V[0]
-            p_probe[i, j] = V[3]
+            rphi_list.append(rphi)
         # Find shock
         for j in range(nx):
             # Jump in x-velocity
@@ -194,12 +193,14 @@ def compute_solution(flux):
 
     # Final primitives
     V_list = []
-    for U in U_list:
+    phi_list = []
+    for U, rphi in zip(U_list, rphi_list):
         V = np.empty_like(U)
         for i in range(mesh.n):
             V[i] = conservative_to_primitive(
                     U[i, 0], U[i, 1], U[i, 2], U[i, 3], g)
         V_list.append(V)
+        phi_list.append(rphi / V[:, 0])
 
     # Plot
     rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
@@ -209,6 +210,7 @@ def compute_solution(flux):
     fig, axes = plt.subplots(len(t_list), 3, figsize=(6.5, 8))
     for i in range(len(t_list)):
         V = V_list[i]
+        phi = phi_list[i]
         t = t_list[i]
 
         r = V[:, 0]
@@ -227,7 +229,7 @@ def compute_solution(flux):
             x_exact = np.load(f)
 
         # Index of y to slice for plotting
-        j = 10
+        j = ny // 2
         # Plotting rho, u, and p
         f = [r, u, p]
         f_exact = [r_exact, u_exact, p_exact]
@@ -237,6 +239,9 @@ def compute_solution(flux):
         for idx in range(3):
             ax = axes[i, idx]
             ax.plot(mesh.xy[j*nx:(j+1)*nx, 0], f[idx][j*nx:(j+1)*nx], 'k', linewidth=2)
+            # Plot phi on top of rho
+            if idx == 0:
+                ax.plot(mesh.xy[j*nx:(j+1)*nx, 0], phi[j*nx:(j+1)*nx], 'k', linewidth=1)
             ax.plot(x_exact, f_exact[idx], '--k', linewidth=1)
             ax.set_ylabel(ylabels[idx], fontsize=10)
             ax.tick_params(labelsize=10)
@@ -246,27 +251,6 @@ def compute_solution(flux):
     # Save
     plt.tight_layout()
     plt.savefig(f'result_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
-
-    # Probe values
-    fig, axes = plt.subplots(len(probe_list), 2, figsize=(6.5, 8))
-    probe_name_list = ['A', 'B', 'C', 'D']
-    for i in range(len(probe_list)):
-        probe_name = probe_name_list[i]
-        # Plotting rho and p
-        f = [r_probe[:, i], p_probe[:, i]]
-        ylabels = [f'$\\rho_{probe_name}$ (kg/m$^3$)', f'$p_{probe_name}$ (N/m$^2$)']
-        # Loop over rho and p
-        for idx in range(2):
-            ax = axes[i, idx]
-            ax.plot(np.linspace(dt, t_final, n_t), f[idx], 'k', linewidth=2)
-            ax.set_ylabel(ylabels[idx], fontsize=10)
-            ax.tick_params(labelsize=10)
-            ax.grid(linestyle='--')
-    for idx in range(2):
-        axes[-1, idx].set_xlabel('t (s)', fontsize=10)
-    # Save
-    plt.tight_layout()
-    plt.savefig(f'probe_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
 
     # Density, velocity, and pressure contour plots
     fig, axes = plt.subplots(len(t_list), 3, figsize=(6.5, 8))
@@ -301,7 +285,7 @@ def compute_solution(flux):
 
     print('Plots written to file.')
 
-def update(U, dt, mesh, flux_function):
+def update(U, U_ghost, dt, mesh, flux_function):
     U_new = U.copy()
     # Evaluate solution at faces on left and right
     U_L = U[mesh.edge[:, 0]]
@@ -310,7 +294,6 @@ def update(U, dt, mesh, flux_function):
     F = flux_function(U_L, U_R, mesh)
 
     # Compute boundary fluxes
-    U_ghost = np.empty((mesh.bc_type.shape[0], 4))
     for i in range(mesh.bc_type.shape[0]):
         cell_ID, bc = mesh.bc_type[i]
         # Get primitives
@@ -357,6 +340,94 @@ def update(U, dt, mesh, flux_function):
     cellL_ID = mesh.bc_type[:, 0]
     np.add.at(U_new, cellL_ID, -dt / mesh.area[cellL_ID].reshape(-1, 1) * F_bc)
     return U_new
+
+def update_rphi(U, U_ghost, rphi, dt, mesh, flux_function):
+    U_new = U.copy()
+    rphi_new = rphi.copy()
+    # Evaluate solution at faces on left and right
+    U_L = U[mesh.edge[:, 0]]
+    U_R = U[mesh.edge[:, 1]]
+    rphi_L = rphi[mesh.edge[:, 0]]
+    rphi_R = rphi[mesh.edge[:, 1]]
+    # Evalute interior fluxes
+    F = flux_function(U_L, U_R, rphi_L, rphi_R, mesh)
+
+    # Compute boundary fluxes
+    rphi_ghost = np.empty((mesh.bc_type.shape[0]))
+    for i in range(mesh.bc_type.shape[0]):
+        cell_ID, bc = mesh.bc_type[i]
+        # Compute wall ghost state
+        if bc == 1:
+            # The density and pressure are kept the same in the ghost state, so
+            # seems reasonable to keep phi the same as well since it's a scalar
+            rphi_ghost[i] = rphi[cell_ID]
+        # Compute farfield ghost state
+        if bc == 2:
+            # If it's the inflow
+            if mesh.bc_area_normal[i, 0] < 0:
+                # Set state to the left state
+                rphi_ghost[i] = r4 * phi4
+            # If it's the outflow
+            if mesh.bc_area_normal[i, 0] > 0:
+                # Set state to the right state
+                rphi_ghost[i] = r1 * phi1
+    # Evalute boundary fluxes
+    F_bc = flux_function(U[mesh.bc_type[:, 0]], U_ghost, rphi[mesh.bc_type[:, 0]], rphi_ghost, mesh)
+
+    # Update cells on the left and right sides, for interior faces
+    cellL_ID = mesh.edge[:, 0]
+    cellR_ID = mesh.edge[:, 1]
+    np.add.at(rphi_new, cellL_ID, -dt / mesh.area[cellL_ID] * F)
+    np.add.at(rphi_new, cellR_ID,  dt / mesh.area[cellR_ID] * F)
+    # Incorporate boundary faces
+    cellL_ID = mesh.bc_type[:, 0]
+    np.add.at(rphi_new, cellL_ID, -dt / mesh.area[cellL_ID] * F_bc)
+    return rphi_new
+
+class Upwind:
+    '''
+    Class for computing a fully upwind flux for the level set equation.
+    '''
+    name = 'upwind'
+
+    def compute_flux(self, U_L, U_R, phi_L, phi_R, mesh):
+        n_faces = U_L.shape[0]
+        # Unit normals
+        if n_faces == mesh.n_faces:
+            edge_area_normal = mesh.edge_area_normal
+        else:
+            edge_area_normal = mesh.bc_area_normal
+        length = np.linalg.norm(edge_area_normal, axis=1, keepdims=True)
+        unit_normals = edge_area_normal / length
+        # The copy here is needed, since the slice is not c-contiguous, which
+        # causes the wrong data to be passed to Pybind.
+        nx = unit_normals[:, 0].copy()
+        ny = unit_normals[:, 1].copy()
+
+        # Convert to primitives
+        rL, rR = U_L[:, 0], U_R[:, 0]
+        uL = U_L[:, 1] / rL
+        uR = U_R[:, 1] / rR
+        vL = U_L[:, 2] / rL
+        vR = U_R[:, 2] / rR
+
+        # Momentum vector
+        mom_L = U_L[:, [1, 2]]
+        mom_R = U_R[:, [1, 2]]
+        # Check if momentum points from left to right
+        mom_dot_normal_L = np.einsum('ij, ij -> i', mom_L, unit_normals)
+        mom_dot_normal_R = np.einsum('ij, ij -> i', mom_R, unit_normals)
+        # TODO vectorize
+        # Loop
+        F = np.empty(n_faces)
+        for i in range(n_faces):
+            # If momentum points left to right, then the left state is upwind
+            if (mom_dot_normal_L[i] > 0):
+                F[i] = phi_L[i] * mom_dot_normal_L[i]
+            # Otherwise, the right state is upwind
+            else:
+                F[i] = phi_R[i] * mom_dot_normal_R[i]
+        return F
 
 class Roe:
     name = 'roe'
