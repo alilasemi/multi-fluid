@@ -11,20 +11,22 @@ from exact_solution import exact_solution
 
 # Inputs
 r4 = 1    # left
-p4 = 1e5  # left
+p4 = 1e4#1e5  # left
 u4 = 100  # left
 v4 = 0    # left
 phi4 = 1  # left
-r1 = .125 # right
+r1 = 1#.125 # right
 p1 = 1e4  # right
-u1 = 50   # right
+u1 = 100#50   # right
 v1 = 0    # right
-phi1 = 0  # right
+phi1 = 1  # right
 g = 1.4
+
+t_list = [2.5e-5, .004, .008]#[.002, .004, .006, .008]
 
 def main():
     exact_solution(
-            r4, p4, u4, v4, r1, p1, u1, v1, g)
+            r4, p4, u4, v4, r1, p1, u1, v1, g, t_list)
     compute_solution(Roe())
 
 class Mesh:
@@ -148,10 +150,9 @@ def compute_solution(flux):
     n_t = 400
     t_final = .01
     dt = t_final / n_t
-    t_list = [2.5e-5, .004, .008]#[.002, .004, .006, .008]
 
-    nx = 50#100
-    ny = 10#20
+    nx = 100
+    ny = 20
 
     # Create mesh
     mesh = Mesh(nx, ny)
@@ -160,28 +161,30 @@ def compute_solution(flux):
     U[mesh.xy[:, 0] <= 0] = W4
     U[mesh.xy[:, 0] > 0] = W1
     # Phi set to be zero at the initial contact (x = 0)
-    phi = mesh.xy[:, 0]**2
+    #phi = mesh.xy[:, 0]**2
+    phi = 50 + (1 + np.tanh((mesh.xy[:, 0]+5)))/2 * (-50 + mesh.xy[:, 0]**2 + (1 + np.tanh((mesh.xy[:, 0]-5)))/2 * (-mesh.xy[:, 0]**2 + 50))
     phi /= np.max(phi)
-    rphi = U[:, 0] * phi
 
     # Loop over time
     U_list = []
     U_ghost = np.empty((mesh.bc_type.shape[0], 4))
-    rphi_list = []
+    phi_list = []
     x_shock = np.empty(n_t)
     for i in range(n_t):
         print(i)
         # Update solution
         U = update(U, U_ghost, dt, mesh, flux.compute_flux)
-        rphi = update_rphi(U, U_ghost, rphi, dt, mesh, flux_phi.compute_flux)
+        phi = update_phi(U, U_ghost, phi, dt, mesh, flux_phi.compute_flux)
         t = (i + 1) * dt
         if t in t_list:
             U_list.append(U)
-            rphi_list.append(rphi)
+            phi_list.append(phi)
         # Find shock
         for j in range(nx):
             # Jump in x-velocity
-            delta_u = U[6*nx + nx - 1 - j, 1] / U[6*nx + nx - 1 - j, 0] - u4
+            #TODO
+            delta_u = 0
+            #delta_u = U[6*nx + nx - 1 - j, 1] / U[6*nx + nx - 1 - j, 0] - u4
             if delta_u > .01 * u4:
                 x_shock[i] = mesh.xy[nx - 1 - j, 0]
                 break
@@ -193,14 +196,12 @@ def compute_solution(flux):
 
     # Final primitives
     V_list = []
-    phi_list = []
-    for U, rphi in zip(U_list, rphi_list):
+    for U in U_list:
         V = np.empty_like(U)
         for i in range(mesh.n):
             V[i] = conservative_to_primitive(
                     U[i, 0], U[i, 1], U[i, 2], U[i, 3], g)
         V_list.append(V)
-        phi_list.append(rphi / V[:, 0])
 
     # Plot
     rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
@@ -341,48 +342,47 @@ def update(U, U_ghost, dt, mesh, flux_function):
     np.add.at(U_new, cellL_ID, -dt / mesh.area[cellL_ID].reshape(-1, 1) * F_bc)
     return U_new
 
-def update_rphi(U, U_ghost, rphi, dt, mesh, flux_function):
-    U_new = U.copy()
-    rphi_new = rphi.copy()
+def update_phi(U, U_ghost, phi, dt, mesh, flux_function):
+    phi_new = phi.copy()
     # Evaluate solution at faces on left and right
     U_L = U[mesh.edge[:, 0]]
     U_R = U[mesh.edge[:, 1]]
-    rphi_L = rphi[mesh.edge[:, 0]]
-    rphi_R = rphi[mesh.edge[:, 1]]
+    phi_L = phi[mesh.edge[:, 0]]
+    phi_R = phi[mesh.edge[:, 1]]
     # Evalute interior fluxes
-    F = flux_function(U_L, U_R, rphi_L, rphi_R, mesh)
+    F = flux_function(U_L, U_R, phi_L, phi_R, mesh)
 
     # Compute boundary fluxes
-    rphi_ghost = np.empty((mesh.bc_type.shape[0]))
+    phi_ghost = np.empty((mesh.bc_type.shape[0]))
     for i in range(mesh.bc_type.shape[0]):
         cell_ID, bc = mesh.bc_type[i]
         # Compute wall ghost state
         if bc == 1:
             # The density and pressure are kept the same in the ghost state, so
             # seems reasonable to keep phi the same as well since it's a scalar
-            rphi_ghost[i] = rphi[cell_ID]
+            phi_ghost[i] = phi[cell_ID]
         # Compute farfield ghost state
         if bc == 2:
             # If it's the inflow
             if mesh.bc_area_normal[i, 0] < 0:
                 # Set state to the left state
-                rphi_ghost[i] = r4 * phi4
+                phi_ghost[i] = phi4
             # If it's the outflow
             if mesh.bc_area_normal[i, 0] > 0:
                 # Set state to the right state
-                rphi_ghost[i] = r1 * phi1
+                phi_ghost[i] = phi1
     # Evalute boundary fluxes
-    F_bc = flux_function(U[mesh.bc_type[:, 0]], U_ghost, rphi[mesh.bc_type[:, 0]], rphi_ghost, mesh)
+    F_bc = flux_function(U[mesh.bc_type[:, 0]], U_ghost, phi[mesh.bc_type[:, 0]], phi_ghost, mesh)
 
     # Update cells on the left and right sides, for interior faces
     cellL_ID = mesh.edge[:, 0]
     cellR_ID = mesh.edge[:, 1]
-    np.add.at(rphi_new, cellL_ID, -dt / mesh.area[cellL_ID] * F)
-    np.add.at(rphi_new, cellR_ID,  dt / mesh.area[cellR_ID] * F)
+    np.add.at(phi_new, cellL_ID, -dt / mesh.area[cellL_ID] * F)
+    np.add.at(phi_new, cellR_ID,  dt / mesh.area[cellR_ID] * F)
     # Incorporate boundary faces
     cellL_ID = mesh.bc_type[:, 0]
-    np.add.at(rphi_new, cellL_ID, -dt / mesh.area[cellL_ID] * F_bc)
-    return rphi_new
+    np.add.at(phi_new, cellL_ID, -dt / mesh.area[cellL_ID] * F_bc)
+    return phi_new
 
 class Upwind:
     '''
@@ -411,22 +411,22 @@ class Upwind:
         vL = U_L[:, 2] / rL
         vR = U_R[:, 2] / rR
 
-        # Momentum vector
-        mom_L = U_L[:, [1, 2]]
-        mom_R = U_R[:, [1, 2]]
-        # Check if momentum points from left to right
-        mom_dot_normal_L = np.einsum('ij, ij -> i', mom_L, unit_normals)
-        mom_dot_normal_R = np.einsum('ij, ij -> i', mom_R, unit_normals)
+        # Velocity vector
+        vel_L = np.stack((uL, vL), axis=1)
+        vel_R = np.stack((uR, vR), axis=1)
+        # Check if velocity points from left to right
+        vel_dot_normal_L = np.einsum('ij, ij -> i', vel_L, unit_normals)
+        vel_dot_normal_R = np.einsum('ij, ij -> i', vel_R, unit_normals)
         # TODO vectorize
         # Loop
         F = np.empty(n_faces)
         for i in range(n_faces):
-            # If momentum points left to right, then the left state is upwind
-            if (mom_dot_normal_L[i] > 0):
-                F[i] = phi_L[i] * mom_dot_normal_L[i]
+            # If velocity points left to right, then the left state is upwind
+            if (vel_dot_normal_L[i] > 0):
+                F[i] = length[i] * phi_L[i] * vel_dot_normal_L[i]
             # Otherwise, the right state is upwind
             else:
-                F[i] = phi_R[i] * mom_dot_normal_R[i]
+                F[i] = length[i] * phi_R[i] * vel_dot_normal_R[i]
         return F
 
 class Roe:
