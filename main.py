@@ -20,6 +20,7 @@ u1 = 50   # right
 v1 = 0    # right
 phi1 = 1  # right
 g = 1.4
+include_phi_source = False
 
 t_list = [2.5e-5, .004, .008]#[.002, .004, .006, .008]
 
@@ -289,14 +290,15 @@ def update_phi(i_iter, U, U_ghost, gradU, phi, dt, mesh, flux_function):
     cellL_ID = mesh.bc_type[:, 0]
     np.add.at(phi_new, cellL_ID, -dt / mesh.area[cellL_ID] * F_bc)
 
-    # Compute velocity gradient. We have the momentum gradient, and using chain
-    # rule:
-    # du/dx = d(r * u)/dx * du/d(r * u) = d(r * u)/dx * (d(r * u)/du)^-1
-    # = d(r * u)/dx * 1/r
-    # Therefore div(u) = div(r * u) / r
-    div_u = np.trace(gradU[:, 1:3], axis1=1, axis2=2) / U[:, 0]
-    # Add source term
-    phi_new -= phi * div_u
+    if include_phi_source:
+        # Compute velocity gradient. We have the momentum gradient, and using chain
+        # rule:
+        # du/dx = d(r * u)/dx * du/d(r * u) = d(r * u)/dx * (d(r * u)/du)^-1
+        # = d(r * u)/dx * 1/r
+        # Therefore div(u) = div(r * u) / r
+        div_u = np.trace(gradU[:, 1:3], axis1=1, axis2=2) / U[:, 0]
+        # Add source term
+        phi_new -= phi * div_u
     return phi_new
 
 class Upwind:
@@ -335,7 +337,6 @@ class Upwind:
         # TODO vectorize
         # Loop
         F = np.empty(n_faces)
-        breakpoint()
         for i in range(n_faces):
             # If velocity points left to right, then the left state is upwind
             if (vel_dot_normal_L[i] > 0):
