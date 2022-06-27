@@ -50,11 +50,16 @@ class Mesh:
         self.area[idx_yR] = boundary_area
         self.area[idx_yL] = boundary_area
         # Find corners and set their area
-        self.area[np.intersect1d(idx_xR, idx_yR)] = triangle_area - small_triangle_area
-        self.area[np.intersect1d(idx_xR, idx_yL)] = small_triangle_area
-        self.area[np.intersect1d(idx_xL, idx_yR)] = small_triangle_area
-        self.area[np.intersect1d(idx_xL, idx_yL)] = triangle_area - small_triangle_area
+        self.corner_NE = np.intersect1d(idx_xR, idx_yR)[0]
+        self.corner_SE = np.intersect1d(idx_xR, idx_yL)[0]
+        self.corner_NW = np.intersect1d(idx_xL, idx_yR)[0]
+        self.corner_SW = np.intersect1d(idx_xL, idx_yL)[0]
+        self.area[self.corner_NE] = triangle_area - small_triangle_area
+        self.area[self.corner_SE] = small_triangle_area
+        self.area[self.corner_NW] = small_triangle_area
+        self.area[self.corner_SW] = triangle_area - small_triangle_area
         # -- Faces -- #
+        self.stencil = np.empty(self.n, dtype=object)
         self.edge = np.empty((self.n_faces, 2), dtype=int)
         self.edge_area_normal = np.empty((self.n_faces, 2))
         self.bc_type = np.empty((2*nx + 2*ny, 2), dtype=int)
@@ -68,9 +73,13 @@ class Mesh:
                 # Get unstructured index
                 cell_ID = j * nx + i
 
+                # List containing stencil points, including the current cell
+                stencil = [cell_ID]
+
                 # Make face above
                 if (j < ny - 1):
                     above_ID = (j + 1)*nx + i
+                    stencil.append(above_ID)
                     self.edge[face_ID] = [cell_ID, above_ID]
                     self.edge_area_normal[face_ID] = rotation90 @ np.array([2*dx/3, dy/3])
                     # If this is a left/right boundary, cut it in half
@@ -80,6 +89,7 @@ class Mesh:
                 # Make face to the right
                 if (i < nx - 1):
                     right_ID = j*nx + i + 1
+                    stencil.append(right_ID)
                     self.edge[face_ID] = [cell_ID, right_ID]
                     self.edge_area_normal[face_ID] = rotation90 @ np.array([-dx/3, -2*dy/3])
                     # If this is a top/bottom boundary, cut it in half
@@ -89,9 +99,22 @@ class Mesh:
                 # Make face diagonally above and to the right
                 if (i < nx - 1 and j < ny - 1):
                     diag_ID = (j + 1)*nx + i + 1
+                    stencil.append(diag_ID)
                     self.edge[face_ID] = [cell_ID, diag_ID]
                     self.edge_area_normal[face_ID] = rotation90 @ np.array([dx/3, -dy/3])
                     face_ID += 1
+
+                # Also check left and bottom side (not needed for faces since
+                # it's redundant, but useful for finishing the stencil)
+                if (i > 0):
+                    left_ID = j*nx + i - 1
+                    stencil.append(left_ID)
+                if (j > 0):
+                    below_ID = (j - 1)*nx + i
+                    stencil.append(below_ID)
+
+                # Store stencil
+                self.stencil[cell_ID] = stencil
 
                 # If it's a left/right BC
                 if i == 0 or i == nx - 1:
@@ -115,4 +138,3 @@ class Mesh:
                     if i == 0 or i == nx - 1:
                         self.bc_area_normal[BC_ID] /= 2
                     BC_ID += 1
-
