@@ -2,22 +2,21 @@ import matplotlib.pyplot as plt
 from matplotlib import rc
 import numpy as np
 import sympy as sp
-from sympy.utilities.autowrap import autowrap, ufuncify
 import pathlib
 import pickle
 
 from exact_solution import exact_solution
-
+from mesh import Mesh
 
 # Inputs
 r4 = 1    # left
-p4 = 1e4#1e5  # left
+p4 = 1e5  # left
 u4 = 100  # left
 v4 = 0    # left
 phi4 = 1  # left
-r1 = 1#.125 # right
+r1 = .125 # right
 p1 = 1e4  # right
-u1 = 100#50   # right
+u1 = 50   # right
 v1 = 0    # right
 phi1 = 1  # right
 g = 1.4
@@ -28,115 +27,6 @@ def main():
     exact_solution(
             r4, p4, u4, v4, r1, p1, u1, v1, g, t_list)
     compute_solution(Roe())
-
-class Mesh:
-    # Domain
-    xL = -10
-    xR = 10
-    yL = -1
-    yR = 1
-
-    def __init__(self, nx, ny):
-        self.nx = nx
-        self.ny = ny
-        self.n = nx * ny
-        # Number of faces (formula given in assignment)
-        self.n_faces = int( (nx - 1)*ny + (ny - 1)*nx + (nx - 1)*(ny - 1) )
-        # Grid spacing
-        dx = (self.xR - self.xL) / (nx - 1)
-        dy = (self.yR - self.yL) / (ny - 1)
-        # Compute nodes
-        x = np.linspace(self.xL, self.xR, nx)
-        y = np.linspace(self.yL, self.yR, ny)
-        grid = np.meshgrid(x, y)
-        self.xy = np.empty((self.n, 2))
-        self.xy[:, 0] = grid[0].flatten()
-        self.xy[:, 1] = grid[1].flatten()
-        # Compute areas. There are three types of cells:
-        # 1. Interior hexagons
-        # 2. Boundary quads
-        # 3. Corner quads
-        triangle_area = (.5 * np.sqrt( (4/3 * dx)**2 + (2/3 * dy)**2 )
-                * np.sqrt( (1/3 * dx)**2 + (1/3 * dy)**2 ))
-        small_triangle_area = .5 * (dx/2) * (dy/2)
-        self.area = 2*triangle_area * np.ones(nx * ny)
-        # Find boundaries and set their area
-        boundary_area = triangle_area
-        idx_xR = np.where(np.isclose(self.xy[:, 0], self.xR))[0]
-        idx_xL = np.where(np.isclose(self.xy[:, 0], self.xL))[0]
-        idx_yR = np.where(np.isclose(self.xy[:, 1], self.yR))[0]
-        idx_yL = np.where(np.isclose(self.xy[:, 1], self.yL))[0]
-        self.area[idx_xR] = boundary_area
-        self.area[idx_xL] = boundary_area
-        self.area[idx_yR] = boundary_area
-        self.area[idx_yL] = boundary_area
-        # Find corners and set their area
-        self.area[np.intersect1d(idx_xR, idx_yR)] = triangle_area - small_triangle_area
-        self.area[np.intersect1d(idx_xR, idx_yL)] = small_triangle_area
-        self.area[np.intersect1d(idx_xL, idx_yR)] = small_triangle_area
-        self.area[np.intersect1d(idx_xL, idx_yL)] = triangle_area - small_triangle_area
-        # -- Faces -- #
-        self.edge = np.empty((self.n_faces, 2), dtype=int)
-        self.edge_area_normal = np.empty((self.n_faces, 2))
-        self.bc_type = np.empty((2*nx + 2*ny, 2), dtype=int)
-        self.bc_area_normal = np.empty((2*nx + 2*ny, 2))
-        face_ID = 0
-        BC_ID = 0
-        # Loop over indices
-        rotation90 = np.array([[0, -1], [1, 0]])
-        for i in range(nx):
-            for j in range(ny):
-                # Get unstructured index
-                cell_ID = j * nx + i
-
-                # Make face above
-                if (j < ny - 1):
-                    above_ID = (j + 1)*nx + i
-                    self.edge[face_ID] = [cell_ID, above_ID]
-                    self.edge_area_normal[face_ID] = rotation90 @ np.array([2*dx/3, dy/3])
-                    # If this is a left/right boundary, cut it in half
-                    if i == 0 or i == nx - 1: self.edge_area_normal[face_ID] /= 2
-                    face_ID += 1
-
-                # Make face to the right
-                if (i < nx - 1):
-                    right_ID = j*nx + i + 1
-                    self.edge[face_ID] = [cell_ID, right_ID]
-                    self.edge_area_normal[face_ID] = rotation90 @ np.array([-dx/3, -2*dy/3])
-                    # If this is a top/bottom boundary, cut it in half
-                    if j == 0 or j == ny - 1: self.edge_area_normal[face_ID] /= 2
-                    face_ID += 1
-
-                # Make face diagonally above and to the right
-                if (i < nx - 1 and j < ny - 1):
-                    diag_ID = (j + 1)*nx + i + 1
-                    self.edge[face_ID] = [cell_ID, diag_ID]
-                    self.edge_area_normal[face_ID] = rotation90 @ np.array([dx/3, -dy/3])
-                    face_ID += 1
-
-                # If it's a left/right BC
-                if i == 0 or i == nx - 1:
-                    self.bc_type[BC_ID] = [cell_ID, 2]
-                    self.bc_area_normal[BC_ID] = [dy, 0]
-                    # Inflow is negative
-                    if i == 0:
-                        self.bc_area_normal[BC_ID] *= -1
-                    # If it's a corner, cut the area in half
-                    if j == 0 or j == ny - 1:
-                        self.bc_area_normal[BC_ID] /= 2
-                    BC_ID += 1
-                # If it's a bottom/top BC
-                if j == 0 or j == ny - 1:
-                    self.bc_type[BC_ID] = [cell_ID, 1]
-                    self.bc_area_normal[BC_ID] = [0, dx]
-                    # Bottom wall is negative
-                    if j == 0:
-                        self.bc_area_normal[BC_ID] *= -1
-                    # If it's a corner, cut the area in half
-                    if i == 0 or i == nx - 1:
-                        self.bc_area_normal[BC_ID] /= 2
-                    BC_ID += 1
-
 
 def compute_solution(flux):
     # Set the flux of phi to be upwind
@@ -161,8 +51,8 @@ def compute_solution(flux):
     U[mesh.xy[:, 0] <= 0] = W4
     U[mesh.xy[:, 0] > 0] = W1
     # Phi set to be zero at the initial contact (x = 0)
-    #phi = mesh.xy[:, 0]**2
-    phi = 50 + (1 + np.tanh((mesh.xy[:, 0]+5)))/2 * (-50 + mesh.xy[:, 0]**2 + (1 + np.tanh((mesh.xy[:, 0]-5)))/2 * (-mesh.xy[:, 0]**2 + 50))
+    phi = mesh.xy[:, 0]**2
+    #phi = 50 + (1 + np.tanh((mesh.xy[:, 0]+5)))/2 * (-50 + mesh.xy[:, 0]**2 + (1 + np.tanh((mesh.xy[:, 0]-5)))/2 * (-mesh.xy[:, 0]**2 + 50))
     phi /= np.max(phi)
 
     # Loop over time
@@ -420,6 +310,7 @@ class Upwind:
         # TODO vectorize
         # Loop
         F = np.empty(n_faces)
+        breakpoint()
         for i in range(n_faces):
             # If velocity points left to right, then the left state is upwind
             if (vel_dot_normal_L[i] > 0):
