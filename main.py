@@ -62,9 +62,11 @@ def compute_solution(flux):
     x_shock = np.empty(n_t)
     for i in range(n_t):
         print(i)
+        # Compute gradient
+        gradU = compute_gradient(U, mesh)
         # Update solution
         U = update(U, U_ghost, dt, mesh, flux.compute_flux)
-        phi = update_phi(U, U_ghost, phi, dt, mesh, flux_phi.compute_flux)
+        phi = update_phi(i, U, U_ghost, gradU, phi, dt, mesh, flux_phi.compute_flux)
         t = (i + 1) * dt
         if t in t_list:
             U_list.append(U)
@@ -72,9 +74,7 @@ def compute_solution(flux):
         # Find shock
         for j in range(nx):
             # Jump in x-velocity
-            #TODO
-            delta_u = 0
-            #delta_u = U[6*nx + nx - 1 - j, 1] / U[6*nx + nx - 1 - j, 0] - u4
+            delta_u = U[6*nx + nx - 1 - j, 1] / U[6*nx + nx - 1 - j, 0] - u4
             if delta_u > .01 * u4:
                 x_shock[i] = mesh.xy[nx - 1 - j, 0]
                 break
@@ -176,6 +176,22 @@ def compute_solution(flux):
 
     print('Plots written to file.')
 
+def compute_gradient(U, mesh):
+    gradU = np.empty((mesh.n, 4, 2))
+    # Loop over all cells
+    for i in range(mesh.n):
+        n_points = len(mesh.stencil[i])
+        # Construct A matrix: [x_i, y_i, 1]
+        A = np.ones((n_points, 3))
+        A[:, :-1] = mesh.xy[mesh.stencil[i]]
+        # We desired [x_i, y_i, 1] @ [c0, c1, c2] = U[i], therefore Ax=b.
+        # However, there are more equations than unknowns (for most points)
+        # so instead, solve the normal equations: A.T @ A x = A.T @ b
+        c = np.linalg.solve(A.T @ A, A.T @ U[mesh.stencil[i]])
+        # Since U = c0 x + c1 u + c2, then dU/dx = c0 and dU/dy = c1.
+        gradU[i] = c[:-1].T
+    return gradU
+
 def update(U, U_ghost, dt, mesh, flux_function):
     U_new = U.copy()
     # Evaluate solution at faces on left and right
@@ -232,7 +248,7 @@ def update(U, U_ghost, dt, mesh, flux_function):
     np.add.at(U_new, cellL_ID, -dt / mesh.area[cellL_ID].reshape(-1, 1) * F_bc)
     return U_new
 
-def update_phi(U, U_ghost, phi, dt, mesh, flux_function):
+def update_phi(i_iter, U, U_ghost, gradU, phi, dt, mesh, flux_function):
     phi_new = phi.copy()
     # Evaluate solution at faces on left and right
     U_L = U[mesh.edge[:, 0]]
@@ -272,6 +288,15 @@ def update_phi(U, U_ghost, phi, dt, mesh, flux_function):
     # Incorporate boundary faces
     cellL_ID = mesh.bc_type[:, 0]
     np.add.at(phi_new, cellL_ID, -dt / mesh.area[cellL_ID] * F_bc)
+
+    # Compute velocity gradient. We have the momentum gradient, and using chain
+    # rule:
+    # du/dx = d(r * u)/dx * du/d(r * u) = d(r * u)/dx * (d(r * u)/du)^-1
+    # = d(r * u)/dx * 1/r
+    # Therefore div(u) = div(r * u) / r
+    div_u = np.trace(gradU[:, 1:3], axis1=1, axis2=2) / U[:, 0]
+    # Add source term
+    phi_new -= phi * div_u
     return phi_new
 
 class Upwind:

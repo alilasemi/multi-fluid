@@ -1,5 +1,5 @@
 #TODO: Unhack these
-python='/home/alilasemi/software/anaconda3/bin/python'
+python='/home/ali/software/anaconda3/bin/python'
 # Compiler
 CXX = g++
 
