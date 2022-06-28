@@ -63,8 +63,11 @@ def compute_solution(flux):
     x_shock = np.empty(n_t)
     for i in range(n_t):
         print(i)
-        # Compute gradient
-        gradU = compute_gradient(U, mesh)
+        # Compute gradient, if needed
+        if include_phi_source:
+            gradU = compute_gradient(U, mesh)
+        else:
+            gradU = None
         # Update solution
         U = update(U, U_ghost, dt, mesh, flux.compute_flux)
         phi = update_phi(i, U, U_ghost, gradU, phi, dt, mesh, flux_phi.compute_flux)
@@ -199,7 +202,7 @@ def update(U, U_ghost, dt, mesh, flux_function):
     U_L = U[mesh.edge[:, 0]]
     U_R = U[mesh.edge[:, 1]]
     # Evalute interior fluxes
-    F = flux_function(U_L, U_R, mesh)
+    F = flux_function(U_L, U_R, mesh.edge_area_normal)
 
     # Compute boundary fluxes
     for i in range(mesh.bc_type.shape[0]):
@@ -237,7 +240,7 @@ def update(U, U_ghost, dt, mesh, flux_function):
         # Compute ghost state
         U_ghost[i] = primitive_to_conservative(r, u, v, p, g)
     # Evalute boundary fluxes
-    F_bc = flux_function(U[mesh.bc_type[:, 0]], U_ghost, mesh)
+    F_bc = flux_function(U[mesh.bc_type[:, 0]], U_ghost, mesh.bc_area_normal)
 
     # Update cells on the left and right sides, for interior faces
     cellL_ID = mesh.edge[:, 0]
@@ -257,7 +260,7 @@ def update_phi(i_iter, U, U_ghost, gradU, phi, dt, mesh, flux_function):
     phi_L = phi[mesh.edge[:, 0]]
     phi_R = phi[mesh.edge[:, 1]]
     # Evalute interior fluxes
-    F = flux_function(U_L, U_R, phi_L, phi_R, mesh)
+    F = flux_function(U_L, U_R, phi_L, phi_R, mesh.edge_area_normal)
 
     # Compute boundary fluxes
     phi_ghost = np.empty((mesh.bc_type.shape[0]))
@@ -279,7 +282,8 @@ def update_phi(i_iter, U, U_ghost, gradU, phi, dt, mesh, flux_function):
                 # Set state to the right state
                 phi_ghost[i] = phi1
     # Evalute boundary fluxes
-    F_bc = flux_function(U[mesh.bc_type[:, 0]], U_ghost, phi[mesh.bc_type[:, 0]], phi_ghost, mesh)
+    F_bc = flux_function(U[mesh.bc_type[:, 0]], U_ghost,
+            phi[mesh.bc_type[:, 0]], phi_ghost, mesh.bc_area_normal)
 
     # Update cells on the left and right sides, for interior faces
     cellL_ID = mesh.edge[:, 0]
@@ -307,15 +311,11 @@ class Upwind:
     '''
     name = 'upwind'
 
-    def compute_flux(self, U_L, U_R, phi_L, phi_R, mesh):
+    def compute_flux(self, U_L, U_R, phi_L, phi_R, area_normal):
         n_faces = U_L.shape[0]
         # Unit normals
-        if n_faces == mesh.n_faces:
-            edge_area_normal = mesh.edge_area_normal
-        else:
-            edge_area_normal = mesh.bc_area_normal
-        length = np.linalg.norm(edge_area_normal, axis=1, keepdims=True)
-        unit_normals = edge_area_normal / length
+        length = np.linalg.norm(area_normal, axis=1, keepdims=True)
+        unit_normals = area_normal / length
         # The copy here is needed, since the slice is not c-contiguous, which
         # causes the wrong data to be passed to Pybind.
         nx = unit_normals[:, 0].copy()
@@ -337,13 +337,13 @@ class Upwind:
         # TODO vectorize
         # Loop
         F = np.empty(n_faces)
-        for i in range(n_faces):
-            # If velocity points left to right, then the left state is upwind
-            if (vel_dot_normal_L[i] > 0):
-                F[i] = length[i] * phi_L[i] * vel_dot_normal_L[i]
-            # Otherwise, the right state is upwind
-            else:
-                F[i] = length[i] * phi_R[i] * vel_dot_normal_R[i]
+        # If velocity points left to right, then the left state is upwind.
+        # Otherwise, the right state is upwind
+        upwindL = vel_dot_normal_L >= 0
+        upwindR = vel_dot_normal_L < 0
+        # Compute the upwind flux in both cases
+        F[upwindL] = length[upwindL, 0] * phi_L[upwindL] * vel_dot_normal_L[upwindL]
+        F[upwindR] = length[upwindR, 0] * phi_R[upwindR] * vel_dot_normal_R[upwindR]
         return F
 
 class Roe:
@@ -354,15 +354,11 @@ class Roe:
         self.A_RL_func, self.Lambda_func, self.Q_inv_func, self.Q_func = \
                 self.get_diagonalization()
 
-    def compute_flux(self, U_L, U_R, mesh):
+    def compute_flux(self, U_L, U_R, area_normal):
         n_faces = U_L.shape[0]
         # Unit normals
-        if n_faces == mesh.n_faces:
-            edge_area_normal = mesh.edge_area_normal
-        else:
-            edge_area_normal = mesh.bc_area_normal
-        length = np.linalg.norm(edge_area_normal, axis=1, keepdims=True)
-        unit_normals = edge_area_normal / length
+        length = np.linalg.norm(area_normal, axis=1, keepdims=True)
+        unit_normals = area_normal / length
         # The copy here is needed, since the slice is not c-contiguous, which
         # causes the wrong data to be passed to Pybind.
         nx = unit_normals[:, 0].copy()
