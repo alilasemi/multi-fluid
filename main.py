@@ -65,7 +65,7 @@ def compute_solution(flux):
         print(i)
         gradU = compute_gradient(U, mesh)
         # Update solution
-        U = update(U, U_ghost, gradU, dt, mesh, flux.compute_flux)
+        U = update(i, U, U_ghost, gradU, dt, mesh, flux.compute_flux)
         phi = update_phi(i, U, U_ghost, gradU, phi, dt, mesh, flux_phi.compute_flux)
         t = (i + 1) * dt
         if t in t_list:
@@ -192,44 +192,47 @@ def compute_gradient(U, mesh):
         gradU[i] = c[:-1].T
     return gradU
 
-def update(U, U_ghost, gradU, dt, mesh, flux_function):
+def update(i_iter, U, U_ghost, gradU, dt, mesh, flux_function):
     U_new = U.copy()
+    # L and R cell IDs
+    L = mesh.edge[:, 0]
+    R = mesh.edge[:, 1]
     # Evaluate solution at faces on left and right
-    # First order component
+    # -- First order component -- #
     U_L = U[mesh.edge[:, 0]]
     U_R = U[mesh.edge[:, 1]]
-    # Second order component
-    # Loop faces
-    #for i in range(mesh.n_faces):
-    #    # L and R cell IDs
-    #    L, R = mesh.edge[i]
-    #    # Get edge midpoint
-    #    edge_midpoint = .5 * (mesh.xy[L] + mesh.xy[R])
-    #    # -- Left -- #
-    #    # Limiter ratio, computed against all nodes in stencil
-    #    ratio = (U[R] - U[L]) / (U[L] - U[mesh.stencil[L]])
-    #    # Bound between 0 and 2
-    #    ratio[np.nonzero(ratio > 2)] = 2
-    #    ratio[np.nonzero(ratio < 0)] = 0
-    #    # TODO: Does this make sense?
-    #    # The minimum across stencil nodes is used. Convert NaN's to 1
-    #    ratio = np.min(np.nan_to_num(ratio, nan=1), axis=0)
-    #    # Van Leer's slope limiter
-    #    limiter = 4*ratio / ((ratio + 1)**2)
-    #    U_L[i] += limiter * np.dot(gradU[mesh.edge[i, 0]], edge_midpoint - mesh.xy[L])
-
-    #    # -- Right -- #
-    #    # Limiter ratio, computed against all nodes in stencil
-    #    ratio = (U[L] - U[R]) / (U[R] - U[mesh.stencil[R]])
-    #    # Bound between 0 and 2
-    #    ratio[np.nonzero(ratio > 2)] = 2
-    #    ratio[np.nonzero(ratio < 0)] = 0
-    #    # TODO: Does this make sense?
-    #    # The minimum across stencil nodes is used. Convert NaN's to 1
-    #    ratio = np.min(np.nan_to_num(ratio, nan=1), axis=0)
-    #    # Van Leer's slope limiter
-    #    limiter = 4*ratio / ((ratio + 1)**2)
-    #    U_R[i] += limiter * np.dot(gradU[mesh.edge[i, 1]], edge_midpoint - mesh.xy[R])
+    # -- Second order component -- #
+    # Get edge midpoints
+    edge_midpoint = .5 * (mesh.xy[L] + mesh.xy[R])
+    # -- Left -- #
+    # Limiter ratio, computed against all nodes in stencil
+    ratio = np.empty((mesh.n_faces, 4, mesh.max_limiter_stencil_size))
+    for i in range(mesh.max_limiter_stencil_size):
+        ratio[:, :, i] = (U[R] - U[L]) / (U[L] - U[mesh.limiter_stencil[L, i]])
+    # Bound between 0 and 2
+    ratio[np.nonzero(ratio > 2)] = 2
+    ratio[np.nonzero(ratio < 0)] = 0
+    # TODO: Does this make sense?
+    # The minimum across stencil nodes is used. Convert NaN's to 1
+    ratio = np.min(np.nan_to_num(ratio, nan=1), axis=2)
+    # Van Leer's slope limiter
+    limiter = 4*ratio / ((ratio + 1)**2)
+    U_L += limiter * np.einsum('ijk, ik -> ij', gradU[L], edge_midpoint - mesh.xy[L])
+    # -- Right -- #
+    # Limiter ratio, computed against all nodes in stencil
+    ratio = np.empty((mesh.n_faces, 4, mesh.max_limiter_stencil_size))
+    for i in range(mesh.max_limiter_stencil_size):
+        ratio[:, :, i] = (U[L] - U[R]) / (U[R] - U[mesh.limiter_stencil[R, i]])
+    # Bound between 0 and 2
+    ratio[np.nonzero(ratio > 2)] = 2
+    ratio[np.nonzero(ratio < 0)] = 0
+    # TODO: Does this make sense?
+    # The minimum across stencil nodes is used. Convert NaN's to 1
+    ratio = np.min(np.nan_to_num(ratio, nan=1), axis=2)
+    # Van Leer's slope limiter
+    limiter = 4*ratio / ((ratio + 1)**2)
+    U_R += limiter * np.einsum('ijk, ik -> ij', gradU[R], edge_midpoint - mesh.xy[R])
+    if i_iter == 50: breakpoint()
 
     # Evalute interior fluxes
     F = flux_function(U_L, U_R, mesh.edge_area_normal)

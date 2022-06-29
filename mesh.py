@@ -60,6 +60,9 @@ class Mesh:
         self.area[self.corner_SW] = triangle_area - small_triangle_area
         # -- Faces -- #
         self.stencil = np.empty(self.n, dtype=object)
+        self.max_limiter_stencil_size = 6
+        self.limiter_stencil = np.empty((self.n, self.max_limiter_stencil_size),
+                dtype=int)
         self.edge = np.empty((self.n_faces, 2), dtype=int)
         self.edge_area_normal = np.empty((self.n_faces, 2))
         self.bc_type = np.empty((2*nx + 2*ny, 2), dtype=int)
@@ -115,6 +118,14 @@ class Mesh:
 
                 # Store stencil
                 self.stencil[cell_ID] = stencil
+
+                # Store a vectorized-friendly version of stencil, with a
+                # hardcoded maximum stencil size to avoid the jagged array.
+                # Also, don't include the current cell in this one. Instead, the
+                # extra "padded" array elements are  the current cell.
+                # This is used for the limiter.
+                self.limiter_stencil[cell_ID, :len(stencil)] = stencil
+                self.limiter_stencil[cell_ID, len(stencil):] = cell_ID
 
                 # If it's a left/right BC
                 if i == 0 or i == nx - 1:
