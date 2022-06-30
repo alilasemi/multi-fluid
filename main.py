@@ -219,16 +219,16 @@ def update(i_iter, U, U_ghost, gradU, dt, mesh, flux_function):
         u_A_max = np.max(U[mesh.limiter_stencil, k], axis=1)
         # Loop neighbors of cell i
         phi_j = np.empty((mesh.n, mesh.max_limiter_stencil_size))
-        for j in range(mesh.max_limiter_stencil_size):
-            # Condition 1
-            i = np.nonzero((U_face[:, j] - U[:, k]) > 0)
-            phi_j[i, j] = (u_A_max[i] - U[i, k]) / (U_face[i, j] - U[i, k])
-            # Condition 2
-            i = np.nonzero((U_face[:, j] - U[:, k]) < 0)
-            phi_j[i, j] = (u_A_min[i] - U[i, k]) / (U_face[i, j] - U[i, k])
-            # Condition 3
-            i = np.nonzero((U_face[:, j] - U[:, k]) == 0)
-            phi_j[i, j] = 1
+        # Condition 1
+        index = np.nonzero((U_face - U[:, k].reshape(-1, 1)) > 0)
+        phi_j[index] = (u_A_max[index[0]] - U[index[0], k]) / (U_face[index] - U[index[0], k])
+        # Condition 2
+        index = np.nonzero((U_face - U[:, k].reshape(-1, 1)) < 0)
+        phi_j[index] = (u_A_min[index[0]] - U[index[0], k]) / (U_face[index] - U[index[0], k])
+        # Condition 3
+        index = np.nonzero((U_face - U[:, k].reshape(-1, 1)) == 0)
+        phi_j[index] = 1
+        # Take the minimum across each face point
         phi[:, k] = damping * np.min(phi_j, axis=1)
 
     U_L += phi[L] * np.einsum('ijk, ik -> ij', gradU[L], edge_midpoint - mesh.xy[L])
