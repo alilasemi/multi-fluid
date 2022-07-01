@@ -13,7 +13,7 @@ r4 = 1    # left
 p4 = 1e5  # left
 u4 = 100  # left
 v4 = 0    # left
-phi4 = 1  # left
+phi4 = -1 # left
 r1 = .125 # right
 p1 = 1e4  # right
 u1 = 50   # right
@@ -52,9 +52,11 @@ def compute_solution(flux):
     U[mesh.xy[:, 0] <= 0] = W4
     U[mesh.xy[:, 0] > 0] = W1
     # Phi set to be zero at the initial contact (x = 0)
-    phi = mesh.xy[:, 0]**2
+    phi = mesh.xy[:, 0].copy()
+    #phi = mesh.xy[:, 0]**2
     #phi = 50 + (1 + np.tanh((mesh.xy[:, 0]+5)))/2 * (-50 + mesh.xy[:, 0]**2 + (1 + np.tanh((mesh.xy[:, 0]-5)))/2 * (-mesh.xy[:, 0]**2 + 50))
     phi /= np.max(phi)
+    #phi = np.zeros_like(mesh.xy[:, 0])
 
     # Loop over time
     U_list = []
@@ -201,15 +203,17 @@ def update(i_iter, U, U_ghost, gradU, dt, mesh, flux_function):
     # -- First order component -- #
     U_L = U[mesh.edge[:, 0]]
     U_R = U[mesh.edge[:, 1]]
+
     # -- Second order component -- #
     # Get edge midpoints
     edge_midpoint = .5 * (mesh.xy[L] + mesh.xy[R])
 
-    # -- Limiter -- #
-    # Uses the multidimensional Barth-Jesperson limiter from:
+    # Compute the limiter value
+    # This uses the multidimensional Barth-Jesperson limiter from:
     # https://arc.aiaa.org/doi/pdf/10.2514/6.1989-366
+    # TODO Why is this damping needed?
     damping = .8
-    phi = np.empty((mesh.n, 4))
+    limiter = np.empty((mesh.n, 4))
     # Loop state vars
     for k in range(4):
         # Compute extrapolated  value
@@ -217,51 +221,22 @@ def update(i_iter, U, U_ghost, gradU, dt, mesh, flux_function):
         U_face = U[:, k].reshape(-1, 1) + np.einsum('id, ijd -> ij', gradU[:, k], midpoint - mesh.xy[mesh.limiter_stencil])
         u_A_min = np.min(U[mesh.limiter_stencil, k], axis=1)
         u_A_max = np.max(U[mesh.limiter_stencil, k], axis=1)
-        # Loop neighbors of cell i
-        phi_j = np.empty((mesh.n, mesh.max_limiter_stencil_size))
+        # Limiter value for all neighbors of cell i
+        limiter_j = np.empty((mesh.n, mesh.max_limiter_stencil_size))
         # Condition 1
         index = np.nonzero((U_face - U[:, k].reshape(-1, 1)) > 0)
-        phi_j[index] = (u_A_max[index[0]] - U[index[0], k]) / (U_face[index] - U[index[0], k])
+        limiter_j[index] = (u_A_max[index[0]] - U[index[0], k]) / (U_face[index] - U[index[0], k])
         # Condition 2
         index = np.nonzero((U_face - U[:, k].reshape(-1, 1)) < 0)
-        phi_j[index] = (u_A_min[index[0]] - U[index[0], k]) / (U_face[index] - U[index[0], k])
+        limiter_j[index] = (u_A_min[index[0]] - U[index[0], k]) / (U_face[index] - U[index[0], k])
         # Condition 3
         index = np.nonzero((U_face - U[:, k].reshape(-1, 1)) == 0)
-        phi_j[index] = 1
+        limiter_j[index] = 1
         # Take the minimum across each face point
-        phi[:, k] = damping * np.min(phi_j, axis=1)
+        limiter[:, k] = damping * np.min(limiter_j, axis=1)
 
-    U_L += phi[L] * np.einsum('ijk, ik -> ij', gradU[L], edge_midpoint - mesh.xy[L])
-    U_R += phi[L] * np.einsum('ijk, ik -> ij', gradU[R], edge_midpoint - mesh.xy[R])
-
-#    # Limiter ratio, computed against all nodes in stencil
-#    ratio = np.empty((mesh.n_faces, 4, mesh.max_limiter_stencil_size))
-#    for i in range(mesh.max_limiter_stencil_size):
-#        ratio[:, :, i] = (U[R] - U[L]) / (U[L] - U[mesh.limiter_stencil[L, i]])
-#    # Bound between 0 and 2
-#    ratio[np.nonzero(ratio > 2)] = 2
-#    ratio[np.nonzero(ratio < 0)] = 0
-#    # TODO: Does this make sense?
-#    # The minimum across stencil nodes is used. Convert NaN's to 1
-#    ratio = np.min(np.nan_to_num(ratio, nan=1), axis=2)
-#    # Van Leer's slope limiter
-#    limiter = 4*ratio / ((ratio + 1)**2)
-#    U_L += limiter * np.einsum('ijk, ik -> ij', gradU[L], edge_midpoint - mesh.xy[L])
-#    # -- Right -- #
-#    # Limiter ratio, computed against all nodes in stencil
-#    ratio = np.empty((mesh.n_faces, 4, mesh.max_limiter_stencil_size))
-#    for i in range(mesh.max_limiter_stencil_size):
-#        ratio[:, :, i] = (U[L] - U[R]) / (U[R] - U[mesh.limiter_stencil[R, i]])
-#    # Bound between 0 and 2
-#    ratio[np.nonzero(ratio > 2)] = 2
-#    ratio[np.nonzero(ratio < 0)] = 0
-#    # TODO: Does this make sense?
-#    # The minimum across stencil nodes is used. Convert NaN's to 1
-#    ratio = np.min(np.nan_to_num(ratio, nan=1), axis=2)
-#    # Van Leer's slope limiter
-#    limiter = 4*ratio / ((ratio + 1)**2)
-#    U_R += limiter * np.einsum('ijk, ik -> ij', gradU[R], edge_midpoint - mesh.xy[R])
-#    if i_iter == 50: breakpoint()
+    U_L += limiter[L] * np.einsum('ijk, ik -> ij', gradU[L], edge_midpoint - mesh.xy[L])
+    U_R += limiter[R] * np.einsum('ijk, ik -> ij', gradU[R], edge_midpoint - mesh.xy[R])
 
     # Evalute interior fluxes
     F = flux_function(U_L, U_R, mesh.edge_area_normal)
