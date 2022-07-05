@@ -10,8 +10,8 @@ class Mesh:
     for the actual computation is the dual mesh.
     '''
     # Domain
-    xL = -5
-    xR = 5
+    xL = -10
+    xR = 10
     yL = -1
     yR = 1
 
@@ -33,16 +33,20 @@ class Mesh:
         self.xy = np.empty((self.n, 2))
         self.xy[:, 0] = grid[0].flatten()
         self.xy[:, 1] = grid[1].flatten()
-        # Compute areas. There are three types of cells:
-        # 1. Interior hexagons
-        # 2. Boundary quads
-        # 3. Corner quads
-        triangle_area = (.5 * np.sqrt( (4/3 * dx)**2 + (2/3 * dy)**2 )
-                * np.sqrt( (1/3 * dx)**2 + (1/3 * dy)**2 ))
-        small_triangle_area = .5 * (dx/2) * (dy/2)
-        self.area = 2*triangle_area * np.ones(nx * ny)
+        # Compute areas. The hexagon is split into triangles.
+        def get_area(x, y):
+            '''
+            Get area of a triangle defined by counterclockwise points.
+            '''
+            return 0.5*( (x[0]*(y[1]-y[2])) + (x[1]*(y[2]-y[0])) + (x[2]*(y[0]-y[1])) )
+        tri0 = get_area([0, dx/3, 0], [0, 2*dy/3, dy/2])
+        tri1 = get_area([0, 2*dx/3, dx/3], [0, dy/3, 2*dy/3])
+        tri2 = tri0
+        tri3 = get_area([0, dx/3, dx/2], [0, -dy/3, 0])
+        tri4 = tri3
+        self.area = 2 * (tri0 + tri1 + tri2 + tri3 + tri4) * np.ones(nx * ny)
         # Find boundaries and set their area
-        boundary_area = triangle_area
+        boundary_area = tri0 + tri1 + tri2 + tri3 + tri4
         idx_xR = np.where(np.isclose(self.xy[:, 0], self.xR))[0]
         idx_xL = np.where(np.isclose(self.xy[:, 0], self.xL))[0]
         idx_yR = np.where(np.isclose(self.xy[:, 1], self.yR))[0]
@@ -56,10 +60,10 @@ class Mesh:
         self.corner_SE = np.intersect1d(idx_xR, idx_yL)[0]
         self.corner_NW = np.intersect1d(idx_xL, idx_yR)[0]
         self.corner_SW = np.intersect1d(idx_xL, idx_yL)[0]
-        self.area[self.corner_NE] = triangle_area - small_triangle_area
-        self.area[self.corner_SE] = small_triangle_area
-        self.area[self.corner_NW] = small_triangle_area
-        self.area[self.corner_SW] = triangle_area - small_triangle_area
+        self.area[self.corner_NE] = tri0 + tri1 + tri2
+        self.area[self.corner_SE] = tri3 + tri4
+        self.area[self.corner_NW] = tri3 + tri4
+        self.area[self.corner_SW] = tri0 + tri1 + tri2
         # -- Faces -- #
         self.edge_points = np.empty((self.n_faces, 2))
         self.vol_points = np.empty((self.n_primal_cells, 2))

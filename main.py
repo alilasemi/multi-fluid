@@ -22,7 +22,7 @@ phi1 = 1  # right
 g = 1.4
 include_phi_source = False
 
-t_list = [.0001, .004, .008]#[.002, .004, .006, .008]
+t_list = [5e-5, .004, .008]#[.002, .004, .006, .008]
 
 def main():
     exact_solution(
@@ -38,12 +38,12 @@ def compute_solution(flux):
     W1 = primitive_to_conservative(r1, u1, v1, p1, g)
 
     # Solver inputs
-    n_t = 180
-    t_final = .009
+    n_t = 200
+    t_final = .01
     dt = t_final / n_t
 
-    nx = 40
-    ny = 10
+    nx = 5
+    ny = 5
 
     # Create mesh
     mesh = Mesh(nx, ny)
@@ -66,6 +66,8 @@ def compute_solution(flux):
     for i in range(n_t):
         print(i)
         gradU = compute_gradient(U, mesh)
+        # Update mesh
+        #mesh = update_mesh(i, mesh)
         # Update solution
         U = update(i, U, U_ghost, gradU, dt, mesh, flux.compute_flux)
         phi = update_phi(i, U, U_ghost, gradU, phi, dt, mesh, flux_phi.compute_flux)
@@ -105,7 +107,13 @@ def compute_solution(flux):
     rc('text', usetex=True)
 
     # Density, velocity, and pressure profiles
-    fig, axes = plt.subplots(len(t_list), 3, figsize=(6.5, 8))
+    only_rho = True
+    if only_rho:
+        fig, axes = plt.subplots(1, len(t_list), figsize=(10, 3))
+        num_vars = 1
+    else:
+        fig, axes = plt.subplots(len(t_list), 3, figsize=(6.5, 6.5))
+        num_vars = 3
     for i in range(len(t_list)):
         V = V_list[i]
         phi = phi_list[i]
@@ -134,19 +142,30 @@ def compute_solution(flux):
         time = f'(t={t} \\textrm{{ s}})'
         ylabels = [f'$\\rho{time}$ (kg/m$^3$)', f'$u{time}$ (m/s)', f'$p{time}$ (N/m$^2$)']
         # Loop over rho, u, p
-        for idx in range(3):
-            ax = axes[i, idx]
+        for idx in range(num_vars):
+            if only_rho:
+                ax = axes[i]
+            else:
+                ax = axes[i, idx]
             ax.plot(mesh.xy[j*nx:(j+1)*nx, 0], f[idx][j*nx:(j+1)*nx], 'k', linewidth=2)
             # Plot phi on top of rho
             if idx == 0:
+                # Plot phi
                 ax.plot(mesh.xy[j*nx:(j+1)*nx, 0], phi[j*nx:(j+1)*nx], 'k', linewidth=1)
+                # Find interface and plot as a vertical line
+                i_interface = np.argmin(np.abs(phi[j*nx:(j+1)*nx]))
+                ax.vlines(mesh.xy[j*nx:(j+1)*nx, 0][i_interface], mesh.yL,
+                        mesh.yR, color='r', ls='--')
             ax.plot(x_exact, f_exact[idx], '--k', linewidth=1)
+            if only_rho:
+                axes[i].set_xlabel('x (m)', fontsize=10)
             ax.set_ylabel(ylabels[idx], fontsize=10)
             ax.tick_params(labelsize=10)
             ax.grid(linestyle='--')
             ax.set_xlim([mesh.xL, mesh.xR])
-    for idx in range(3):
-        axes[-1, idx].set_xlabel('x (m)', fontsize=10)
+    for idx in range(num_vars):
+        if not only_rho:
+            axes[-1, idx].set_xlabel('x (m)', fontsize=10)
     # Save
     plt.tight_layout()
     plt.savefig(f'result_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
@@ -211,7 +230,7 @@ def compute_solution(flux):
 #    plt.tight_layout()
 #    plt.savefig(f'contour_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
 
-    print('Plots written to file.')
+    print(f'Plots written to files ({mesh.nx}x{mesh.ny}).')
 
 def compute_gradient(U, mesh):
     gradU = np.empty((mesh.n, 4, 2))
