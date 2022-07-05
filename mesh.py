@@ -10,8 +10,8 @@ class Mesh:
     for the actual computation is the dual mesh.
     '''
     # Domain
-    xL = -10
-    xR = 10
+    xL = -9
+    xR = 9
     yL = -1
     yR = 1
 
@@ -21,6 +21,8 @@ class Mesh:
         self.n = nx * ny
         # Number of faces (formula given in assignment)
         self.n_faces = int( (nx - 1)*ny + (ny - 1)*nx + (nx - 1)*(ny - 1) )
+        # Number of primal mesh cells
+        self.n_primal_cells = 2 * (nx - 1) * (ny - 1)
         # Grid spacing
         dx = (self.xR - self.xL) / (nx - 1)
         dy = (self.yR - self.yL) / (ny - 1)
@@ -59,6 +61,8 @@ class Mesh:
         self.area[self.corner_NW] = small_triangle_area
         self.area[self.corner_SW] = triangle_area - small_triangle_area
         # -- Faces -- #
+        self.edge_points = np.empty((self.n_faces, 2))
+        self.vol_points = np.empty((self.n_primal_cells, 2))
         self.stencil = np.empty(self.n, dtype=object)
         self.max_limiter_stencil_size = 6
         self.limiter_stencil = np.empty((self.n, self.max_limiter_stencil_size),
@@ -149,3 +153,110 @@ class Mesh:
                     if i == 0 or i == nx - 1:
                         self.bc_area_normal[BC_ID] /= 2
                     BC_ID += 1
+
+        # Loop over primal cells
+        self.primal_cell_to_nodes = np.empty((self.n_primal_cells, 3), dtype=int)
+        self.primal_cell_neighbors = np.empty((self.n_primal_cells, 3), dtype=int)
+        self.vol_points = np.empty((self.n_primal_cells, 2))
+        for idx in range(0, self.n_primal_cells, 2):
+            # Get node indices
+            i = (idx // 2) % (nx - 1)
+            j = (idx // 2) // (nx - 1)
+
+            # top-left primal triangle
+            self.primal_cell_to_nodes[idx] = np.array([
+                j * nx + i, (j+1) * nx + i+1, (j+1) * nx + i])
+            # bottom-right primal triangle
+            self.primal_cell_to_nodes[idx + 1] = np.array([
+                j * nx + i, j * nx + i+1, (j+1) * nx + i+1])
+
+            # Neighbors
+            self.primal_cell_neighbors[idx] = np.array([
+                idx - 1, idx + 1, idx + 2 * nx - 1])
+            self.primal_cell_neighbors[idx + 1] = np.array([
+                idx, idx - 2 * nx + 2, idx + 2])
+            # Account for boundaries by setting them to -1
+            self.primal_cell_neighbors[
+                    np.nonzero(self.primal_cell_neighbors < 0)] = -1
+            self.primal_cell_neighbors[
+                    np.nonzero(self.primal_cell_neighbors >= self.n_primal_cells)] = -1
+
+            # Centroids
+            self.vol_points[idx] = np.mean(
+                    self.xy[self.primal_cell_to_nodes[idx]], axis=0)
+            self.vol_points[idx + 1] = np.mean(
+                    self.xy[self.primal_cell_to_nodes[idx + 1]], axis=0)
+
+        # Loop over nodes
+        self.edge_points = np.empty((self.n_faces, 2))
+        edge_dict = {i : {} for i in range(self.n)}
+        for i in range(self.n):
+            # For each neighbor, add edge point to dict
+            # TODO: This assumes stencil = neighbors
+            for j in self.stencil[i]:
+                if i != j:
+                    edge_dict[i][j] = .5 * (self.xy[i] + self.xy[j])
+                    # Also copy to the inverse mapping
+                    edge_dict[j][i] = edge_dict[i][j].copy()
+        # Loop over this newly created dict
+        i_edge = 0
+        for i in edge_dict.keys():
+            # Loop over neighbors
+            for j in edge_dict[i].keys():
+                # Store point and i_edge
+                self.edge_points[i_edge] = edge_dict[i][j]
+                edge_dict[i][j] = i_edge
+                i_edge += 1
+                # Remove duplicate face
+                del edge_dict[j][i]
+
+        # Loop over faces
+        self.face_points = np.empty((self.n_faces, 3), dtype=int)
+        for i_face in range(self.n_faces):
+            # Get dual mesh neighbors
+            i, j = self.edge[i_face]
+            # Search for these nodes on the primal mesh
+            # TODO: This loop might make this all pretty slow
+            indices = []
+            for idx in range(self.n_primal_cells):
+                # If both nodes i and j are part of this primal cell
+                if i in self.primal_cell_to_nodes[idx] and j in self.primal_cell_to_nodes[idx]:
+                    # Store
+                    indices.append(idx)
+                    if len(indices) == 2: break
+
+            # If this is a boundary face
+            if len(indices) == 1:
+                # Start with an empty volume point
+                self.face_points[i_face, 0] = -1
+            # If this is an interior face
+            else:
+                # Start with whichever side came up first in the search
+                self.face_points[i_face, 0] = indices[0]
+
+            # Add edge point
+            try:
+                self.face_points[i_face, 1] = edge_dict[i][j]
+            except:
+                self.face_points[i_face, 1] = edge_dict[j][i]
+
+            # Add final volume point
+            self.face_points[i_face, 2] = indices[-1]
+        breakpoint()
+
+    def get_face_point_coords(self, i_face):
+        '''
+        Get coordinates of points on a given face.
+        '''
+        # If it's a boundary face
+        if self.face_points[i_face, 0] == -1:
+            coords = np.empty((2, 2))
+            coords[0] = self.edge_points[self.face_points[i_face, 1]]
+            coords[1] = self.vol_points[self.face_points[i_face, 2]]
+        # If it's an interior face
+        else:
+            coords = np.empty((3, 2))
+            coords[0] = self.vol_points[self.face_points[i_face, 0]]
+            coords[1] = self.edge_points[self.face_points[i_face, 1]]
+            coords[2] = self.vol_points[self.face_points[i_face, 2]]
+        return coords

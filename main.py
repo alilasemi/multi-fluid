@@ -11,18 +11,19 @@ from mesh import Mesh
 # Inputs
 r4 = 1    # left
 p4 = 1e5  # left
-u4 = 100  # left
+u4 = 1000#100  # left
 v4 = 0    # left
 phi4 = -1 # left
 r1 = .125 # right
-p1 = 1e4  # right
-u1 = 50   # right
+p1 = 1e5#1e4  # right
+u1 = 1000#50   # right
 v1 = 0    # right
 phi1 = 1  # right
 g = 1.4
 include_phi_source = False
 
-t_list = [2.5e-5, .004, .008]#[.002, .004, .006, .008]
+dt = 0.08459275 / 5
+t_list = np.linspace(dt, 3*dt, 3)#[2.5e-5, .004, .008]#[.002, .004, .006, .008]
 
 def main():
     exact_solution(
@@ -38,11 +39,11 @@ def compute_solution(flux):
     W1 = primitive_to_conservative(r1, u1, v1, p1, g)
 
     # Solver inputs
-    n_t = 400
-    t_final = .01
+    n_t = 5
+    t_final = 0.08459275
     dt = t_final / n_t
 
-    nx = 100
+    nx = 10
     ny = 20
 
     # Create mesh
@@ -85,6 +86,7 @@ def compute_solution(flux):
     fit_shock = np.polyfit(np.linspace(dt, t_final, n_t), x_shock, 1)
     shock_speed = fit_shock[0]
     print(f'The shock speed is {shock_speed} m/s.')
+    breakpoint()
 
     # Final primitives
     V_list = []
@@ -139,6 +141,7 @@ def compute_solution(flux):
             ax.set_ylabel(ylabels[idx], fontsize=10)
             ax.tick_params(labelsize=10)
             ax.grid(linestyle='--')
+            #ax.set_xlim([-4, 4])
     for idx in range(3):
         axes[-1, idx].set_xlabel('x (m)', fontsize=10)
     # Save
