@@ -10,8 +10,8 @@ class Mesh:
     for the actual computation is the dual mesh.
     '''
     # Domain
-    xL = -9
-    xR = 9
+    xL = -5
+    xR = 5
     yL = -1
     yR = 1
 
@@ -242,7 +242,6 @@ class Mesh:
 
             # Add final volume point
             self.face_points[i_face, 2] = indices[-1]
-        breakpoint()
 
     def get_face_point_coords(self, i_face):
         '''
@@ -259,4 +258,13 @@ class Mesh:
             coords[0] = self.vol_points[self.face_points[i_face, 0]]
             coords[1] = self.edge_points[self.face_points[i_face, 1]]
             coords[2] = self.vol_points[self.face_points[i_face, 2]]
+        return coords
+
+    def get_plot_points_primal_cell(self, cell_ID):
+        '''
+        Get coordinates of points to plot for a primal cell.
+        '''
+        coords = np.empty((4, 2))
+        coords[:3] = self.xy[self.primal_cell_to_nodes[cell_ID]]
+        coords[3] = self.xy[self.primal_cell_to_nodes[cell_ID, 0]]
         return coords

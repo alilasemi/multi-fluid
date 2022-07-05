@@ -11,19 +11,18 @@ from mesh import Mesh
 # Inputs
 r4 = 1    # left
 p4 = 1e5  # left
-u4 = 1000#100  # left
+u4 = 100  # left
 v4 = 0    # left
 phi4 = -1 # left
 r1 = .125 # right
-p1 = 1e5#1e4  # right
-u1 = 1000#50   # right
+p1 = 1e4  # right
+u1 = 50   # right
 v1 = 0    # right
 phi1 = 1  # right
 g = 1.4
 include_phi_source = False
 
-dt = 0.08459275 / 5
-t_list = np.linspace(dt, 3*dt, 3)#[2.5e-5, .004, .008]#[.002, .004, .006, .008]
+t_list = [.0001, .004, .008]#[.002, .004, .006, .008]
 
 def main():
     exact_solution(
@@ -39,12 +38,12 @@ def compute_solution(flux):
     W1 = primitive_to_conservative(r1, u1, v1, p1, g)
 
     # Solver inputs
-    n_t = 5
-    t_final = 0.08459275
+    n_t = 180
+    t_final = .009
     dt = t_final / n_t
 
-    nx = 10
-    ny = 20
+    nx = 40
+    ny = 10
 
     # Create mesh
     mesh = Mesh(nx, ny)
@@ -71,22 +70,26 @@ def compute_solution(flux):
         U = update(i, U, U_ghost, gradU, dt, mesh, flux.compute_flux)
         phi = update_phi(i, U, U_ghost, gradU, phi, dt, mesh, flux_phi.compute_flux)
         t = (i + 1) * dt
-        if t in t_list:
+        if np.any(np.isclose(t_list, t)):
             U_list.append(U)
             phi_list.append(phi)
         # Find shock
         for j in range(nx):
             # Jump in x-velocity
-            delta_u = U[6*nx + nx - 1 - j, 1] / U[6*nx + nx - 1 - j, 0] - u4
+            # TODO Cleaner indices
+            line = ny // 2
+            delta_u = U[line*nx + nx - 1 - j, 1] / U[line*nx + nx - 1 - j, 0] - u4
             if delta_u > .01 * u4:
                 x_shock[i] = mesh.xy[nx - 1 - j, 0]
                 break
 
     # Fit a line to the shock location
-    fit_shock = np.polyfit(np.linspace(dt, t_final, n_t), x_shock, 1)
-    shock_speed = fit_shock[0]
-    print(f'The shock speed is {shock_speed} m/s.')
-    breakpoint()
+    try:
+        fit_shock = np.polyfit(np.linspace(dt, t_final, n_t), x_shock, 1)
+        shock_speed = fit_shock[0]
+        print(f'The shock speed is {shock_speed} m/s.')
+    except np.linalg.LinAlgError:
+        print('-- Shock speed calculation failed! --')
 
     # Final primitives
     V_list = []
@@ -141,43 +144,72 @@ def compute_solution(flux):
             ax.set_ylabel(ylabels[idx], fontsize=10)
             ax.tick_params(labelsize=10)
             ax.grid(linestyle='--')
-            #ax.set_xlim([-4, 4])
+            ax.set_xlim([mesh.xL, mesh.xR])
     for idx in range(3):
         axes[-1, idx].set_xlabel('x (m)', fontsize=10)
     # Save
     plt.tight_layout()
     plt.savefig(f'result_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
 
-    # Density, velocity, and pressure contour plots
-    fig, axes = plt.subplots(len(t_list), 3, figsize=(6.5, 8))
+    # Mesh plots
+    fig, axes = plt.subplots(len(t_list), 1, figsize=(6.5, 8))
     for i in range(len(t_list)):
-        V = V_list[i]
-        t = t_list[i]
+        phi = phi_list[i]
 
-        r = V[:, 0]
-        u = V[:, 1]
-        v = V[:, 2]
-        p = V[:, 3]
+        ax = axes[i]
+        ax.set_xlim([mesh.xL, mesh.xR])
+        ax.set_ylim([mesh.yL, mesh.yR])
+        # Loop over primal cells
+        for cell_ID in range(mesh.n_primal_cells):
+            points = mesh.get_plot_points_primal_cell(cell_ID)
+            ax.plot(points[:, 0], points[:, 1], 'k', lw=.5)
+        # Loop over dual faces
+        for face_ID in range(mesh.n_faces):
+            points = mesh.get_face_point_coords(face_ID)
+            # Get dual mesh neighbors
+            i, j = mesh.edge[face_ID]
+            # Check if this is a surrogate boundary
+            is_surrogate = phi[i] * phi[j] < 0
+            if is_surrogate:
+                options = {'color' : 'k', 'lw' : 2}
+            else:
+                options = {'color' : 'k', 'ls' : '--', 'lw' : 1}
+            ax.plot(points[:, 0], points[:, 1], **options)
 
-        # Plotting rho, u, and p
-        f = [r, u, p]
-        f_exact = [r_exact, u_exact, p_exact]
-        time = f'(t={t} \\textrm{{ s}})'
-        ylabels = [f'$\\rho{time}$ (kg/m$^3$)', f'$u{time}$ (m/s)', f'$p{time}$ (N/m$^2$)']
-        # Loop over rho, u, p
-        for idx in range(3):
-            ax = axes[i, idx]
-            contourf = ax.tricontourf(mesh.xy[:, 0], mesh.xy[:, 1], f[idx])
-            plt.colorbar(mappable=contourf, ax=ax)
-            ax.set_title(ylabels[idx], fontsize=10)
-            ax.tick_params(labelsize=10)
-    for idx in range(3):
-        axes[-1, idx].set_xlabel('x (m)', fontsize=10)
-    for idx in range(len(t_list)):
-        axes[idx, 0].set_ylabel('y (m)', fontsize=10)
     # Save
     plt.tight_layout()
-    plt.savefig(f'contour_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
+    plt.savefig(f'mesh_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
+
+#    # Density, velocity, and pressure contour plots
+#    fig, axes = plt.subplots(len(t_list), 3, figsize=(6.5, 8))
+#    for i in range(len(t_list)):
+#        V = V_list[i]
+#        t = t_list[i]
+#
+#        r = V[:, 0]
+#        u = V[:, 1]
+#        v = V[:, 2]
+#        p = V[:, 3]
+#
+#        # Plotting rho, u, and p
+#        f = [r, u, p]
+#        f_exact = [r_exact, u_exact, p_exact]
+#        time = f'(t={t} \\textrm{{ s}})'
+#        ylabels = [f'$\\rho{time}$ (kg/m$^3$)', f'$u{time}$ (m/s)', f'$p{time}$ (N/m$^2$)']
+#        # Loop over rho, u, p
+#        for idx in range(3):
+#            ax = axes[i, idx]
+#            contourf = ax.tricontourf(mesh.xy[:, 0], mesh.xy[:, 1], f[idx])
+#            plt.colorbar(mappable=contourf, ax=ax)
+#            ax.set_title(ylabels[idx], fontsize=10)
+#            ax.tick_params(labelsize=10)
+#    for idx in range(3):
+#        axes[-1, idx].set_xlabel('x (m)', fontsize=10)
+#    for idx in range(len(t_list)):
+#        axes[idx, 0].set_ylabel('y (m)', fontsize=10)
+#    # Save
+#    plt.tight_layout()
+#    plt.savefig(f'contour_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
 
     print('Plots written to file.')
 
