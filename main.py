@@ -5,11 +5,12 @@ import sympy as sp
 import pathlib
 import pickle
 
-from problem import RiemannProblem, conservative_to_primitive
+from problem import RiemannProblem, AdvectedContact, conservative_to_primitive
 from mesh import Mesh
 
 
 # Solver inputs
+Problem = AdvectedContact
 nx = 100
 ny = 10
 n_t = 200
@@ -28,7 +29,7 @@ def compute_solution():
     mesh = Mesh(nx, ny)
 
     # Initial solution
-    problem = RiemannProblem(mesh.xy, t_list)
+    problem = Problem(mesh.xy, t_list)
     U, phi = problem.get_initial_conditions()
 
     # Set flux of flow variables to be Roe

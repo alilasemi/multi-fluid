@@ -127,6 +127,22 @@ class RiemannProblem(Problem):
                 print(f'ERROR: Invalid BC type given! bc = {bc}')
 
 
+class AdvectedContact(RiemannProblem):
+    '''
+    Class for a contact wave advected at a constant velocity. This is based off
+    of a special case of a Riemann problem.
+    '''
+    # Left state (rho, p, u, v, phi)
+    state_4 = np.array([
+            1, 300, 0, 1e5, -1
+    ])
+
+    # Right state (rho, p, u, v, phi)
+    state_1 = np.array([
+            .125, 300, 0, 1e5, 1
+    ])
+
+
 def primitive_to_conservative(r, u, v, p, g):
     W = np.empty(4)
     W[0] = r
