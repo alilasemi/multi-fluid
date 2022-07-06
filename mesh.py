@@ -256,18 +256,14 @@ class Mesh:
         for i_face in range(self.n_faces):
             # Get dual mesh neighbors
             i, j = self.edge[i_face]
-            # Search for these nodes on the primal mesh
-            # TODO: This loop might make this all pretty slow
-            indices = []
-            for idx in range(self.n_primal_cells):
-                # If both nodes i and j are part of this primal cell
-                if i in self.primal_cell_to_nodes[idx] and j in self.primal_cell_to_nodes[idx]:
-                    # Store
-                    indices.append(idx)
-                    if len(indices) == 2: break
+            # Get primal cells of each node
+            i_primals = self.nodes_to_primal_cells[i]
+            j_primals = self.nodes_to_primal_cells[j]
+            # The intersection gives the primal cells of this face
+            indices = np.intersect1d(i_primals, j_primals)
 
             # If this is a boundary face
-            if len(indices) == 1:
+            if indices.size == 1:
                 # Start with an empty volume point
                 self.face_points[i_face, 0] = -1
             # If this is an interior face
