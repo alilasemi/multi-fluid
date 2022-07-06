@@ -6,6 +6,7 @@ import pathlib
 import pickle
 
 from exact_solution import exact_solution
+from initial_condition import RiemannProblem
 from mesh import Mesh
 
 # Inputs
@@ -22,7 +23,7 @@ phi1 = 1  # right
 g = 1.4
 
 # Solver inputs
-nx = 200
+nx = 100
 ny = 10
 n_t = 200
 t_final = .01
@@ -41,22 +42,12 @@ def compute_solution(flux):
     # Set the flux of phi to be upwind
     flux_phi = Upwind()
 
-    # Get initial conditions as conservatives
-    W4 = primitive_to_conservative(r4, u4, v4, p4, g)
-    W1 = primitive_to_conservative(r1, u1, v1, p1, g)
-
     # Create mesh
     mesh = Mesh(nx, ny)
+
     # Initial solution
-    U = np.empty((mesh.n, 4))
-    U[mesh.xy[:, 0] <= 0] = W4
-    U[mesh.xy[:, 0] > 0] = W1
-    # Phi set to be zero at the initial contact (x = 0)
-    phi = mesh.xy[:, 0].copy()
-    #phi = mesh.xy[:, 0]**2
-    #phi = 50 + (1 + np.tanh((mesh.xy[:, 0]+5)))/2 * (-50 + mesh.xy[:, 0]**2 + (1 + np.tanh((mesh.xy[:, 0]-5)))/2 * (-mesh.xy[:, 0]**2 + 50))
-    phi /= np.max(phi)
-    #phi = np.zeros_like(mesh.xy[:, 0])
+    problem = RiemannProblem(mesh.xy)
+    U, phi = problem.get_initial_conditions()
 
     # Loop over time
     U_list = []
@@ -581,14 +572,6 @@ class Roe:
         Q_inv_func  = cache.build.compute_Q_inv.compute_Q_inv
         Q_func      = cache.build.compute_Q.compute_Q
         return A_RL_func, Lambda_func, Q_inv_func, Q_func
-
-def primitive_to_conservative(r, u, v, p, g):
-    W = np.empty(4)
-    W[0] = r
-    W[1] = r * u
-    W[2] = r * v
-    W[3] = p / (g - 1) + .5 * r * (u**2 + v**2)
-    return W
 
 def conservative_to_primitive(r, ru, rv, re, g):
     V = np.empty(4)
