@@ -5,22 +5,9 @@ import sympy as sp
 import pathlib
 import pickle
 
-from exact_solution import exact_solution
-from initial_condition import RiemannProblem
+from problem import RiemannProblem, conservative_to_primitive
 from mesh import Mesh
 
-# Inputs
-r4 = 1    # left
-p4 = 1e5  # left
-u4 = 100  # left
-v4 = 0    # left
-phi4 = -1 # left
-r1 = .125 # right
-p1 = 1e4  # right
-u1 = 50   # right
-v1 = 0    # right
-phi1 = 1  # right
-g = 1.4
 
 # Solver inputs
 nx = 100
@@ -34,20 +21,20 @@ filetype = 'pdf'
 t_list = [dt, .004, .008]
 
 def main():
-    exact_solution(
-            r4, p4, u4, v4, r1, p1, u1, v1, g, t_list)
-    compute_solution(Roe())
+    compute_solution()
 
-def compute_solution(flux):
-    # Set the flux of phi to be upwind
-    flux_phi = Upwind()
-
+def compute_solution():
     # Create mesh
     mesh = Mesh(nx, ny)
 
     # Initial solution
-    problem = RiemannProblem(mesh.xy)
+    problem = RiemannProblem(mesh.xy, t_list)
     U, phi = problem.get_initial_conditions()
+
+    # Set flux of flow variables to be Roe
+    flux = Roe(problem.g)
+    # Set the flux of phi to be upwind
+    flux_phi = Upwind()
 
     # Loop over time
     U_list = []
@@ -60,8 +47,8 @@ def compute_solution(flux):
         # Update mesh
         #mesh = update_mesh(i, mesh)
         # Update solution
-        U = update(i, U, U_ghost, gradU, dt, mesh, flux.compute_flux)
-        phi = update_phi(i, U, U_ghost, gradU, phi, dt, mesh, flux_phi.compute_flux)
+        U = update(i, U, U_ghost, gradU, dt, mesh, problem, flux.compute_flux)
+        phi = update_phi(i, U, U_ghost, gradU, phi, dt, mesh, problem, flux_phi.compute_flux)
         t = (i + 1) * dt
         if np.any(np.isclose(t_list, t)):
             U_list.append(U)
@@ -71,6 +58,7 @@ def compute_solution(flux):
             # Jump in x-velocity
             # TODO Cleaner indices
             line = ny // 2
+            u4 = problem.state_4[1]
             delta_u = U[line*nx + nx - 1 - j, 1] / U[line*nx + nx - 1 - j, 0] - u4
             if delta_u > .01 * u4:
                 x_shock[i] = mesh.xy[nx - 1 - j, 0]
@@ -90,7 +78,7 @@ def compute_solution(flux):
         V = np.empty_like(U)
         for i in range(mesh.n):
             V[i] = conservative_to_primitive(
-                    U[i, 0], U[i, 1], U[i, 2], U[i, 3], g)
+                    U[i, 0], U[i, 1], U[i, 2], U[i, 3], problem.g)
         V_list.append(V)
 
     # Plot
@@ -239,7 +227,7 @@ def compute_gradient(U, mesh):
         gradU[i] = c[:-1].T
     return gradU
 
-def update(i_iter, U, U_ghost, gradU, dt, mesh, flux_function):
+def update(i_iter, U, U_ghost, gradU, dt, mesh, problem, flux_function):
     U_new = U.copy()
     # L and R cell IDs
     L = mesh.edge[:, 0]
@@ -286,41 +274,8 @@ def update(i_iter, U, U_ghost, gradU, dt, mesh, flux_function):
     # Evalute interior fluxes
     F = flux_function(U_L, U_R, mesh.edge_area_normal)
 
-    # Compute boundary fluxes
-    for i in range(mesh.bc_type.shape[0]):
-        cell_ID, bc = mesh.bc_type[i]
-        # Get primitives
-        V = conservative_to_primitive(*U[cell_ID], g)
-        # Compute wall ghost state
-        if bc == 1:
-            # The density and pressure are kept the same in the ghost state
-            r = V[0]
-            p = V[3]
-            # The x-direction velocity is not changed since the wall is
-            # horizontal
-            u = V[1]
-            # The y-direction velocity is flipped in sign, since the wall is
-            # horizontal
-            v = -V[2]
-        # Compute farfield ghost state
-        if bc == 2:
-            #TODO
-            # If it's the inflow
-            if mesh.bc_area_normal[i, 0] < 0:
-                # Set state to the left state
-                r = r4
-                p = p4
-                u = u4
-                v = v4
-            # If it's the outflow
-            if mesh.bc_area_normal[i, 0] > 0:
-                # Set state to the right state
-                p = p1
-                r = r1
-                u = u1
-                v = v1
-        # Compute ghost state
-        U_ghost[i] = primitive_to_conservative(r, u, v, p, g)
+    # Compute ghost state
+    problem.compute_ghost_state(U, U_ghost, mesh.bc_type)
     # Evalute boundary fluxes
     F_bc = flux_function(U[mesh.bc_type[:, 0]], U_ghost, mesh.bc_area_normal)
 
@@ -334,7 +289,7 @@ def update(i_iter, U, U_ghost, gradU, dt, mesh, flux_function):
     np.add.at(U_new, cellL_ID, -dt / mesh.area[cellL_ID].reshape(-1, 1) * F_bc)
     return U_new
 
-def update_phi(i_iter, U, U_ghost, gradU, phi, dt, mesh, flux_function):
+def update_phi(i_iter, U, U_ghost, gradU, phi, dt, mesh, problem, flux_function):
     phi_new = phi.copy()
     # Evaluate solution at faces on left and right
     U_L = U[mesh.edge[:, 0]]
@@ -344,25 +299,9 @@ def update_phi(i_iter, U, U_ghost, gradU, phi, dt, mesh, flux_function):
     # Evalute interior fluxes
     F = flux_function(U_L, U_R, phi_L, phi_R, mesh.edge_area_normal)
 
-    # Compute boundary fluxes
+    # Compute ghost phi
     phi_ghost = np.empty((mesh.bc_type.shape[0]))
-    for i in range(mesh.bc_type.shape[0]):
-        cell_ID, bc = mesh.bc_type[i]
-        # Compute wall ghost state
-        if bc == 1:
-            # The density and pressure are kept the same in the ghost state, so
-            # seems reasonable to keep phi the same as well since it's a scalar
-            phi_ghost[i] = phi[cell_ID]
-        # Compute farfield ghost state
-        if bc == 2:
-            # If it's the inflow
-            if mesh.bc_area_normal[i, 0] < 0:
-                # Set state to the left state
-                phi_ghost[i] = phi4
-            # If it's the outflow
-            if mesh.bc_area_normal[i, 0] > 0:
-                # Set state to the right state
-                phi_ghost[i] = phi1
+    problem.compute_ghost_phi(phi, phi_ghost, mesh.bc_type)
     # Evalute boundary fluxes
     F_bc = flux_function(U[mesh.bc_type[:, 0]], U_ghost,
             phi[mesh.bc_type[:, 0]], phi_ghost, mesh.bc_area_normal)
@@ -431,12 +370,14 @@ class Upwind:
 class Roe:
     name = 'roe'
 
-    def __init__(self):
+    def __init__(self, g):
+        self.g = g
         # Diagonalize A_RL
         self.A_RL_func, self.Lambda_func, self.Q_inv_func, self.Q_func = \
                 self.get_diagonalization()
 
     def compute_flux(self, U_L, U_R, area_normal):
+        g = self.g
         n_faces = U_L.shape[0]
         # Unit normals
         length = np.linalg.norm(area_normal, axis=1, keepdims=True)
@@ -474,7 +415,7 @@ class Roe:
         abs_A_RL = A_RL_p - A_RL_m
         # Compute flux
         F = length * (.5*np.einsum('ijk, ik -> ij',
-            convective_fluxes(U_L) + convective_fluxes(U_R), unit_normals)
+            convective_fluxes(U_L, g) + convective_fluxes(U_R, g), unit_normals)
             - .5 * (abs_A_RL @ ((U_R - U_L)[:, :, np.newaxis]))[:, :, 0])
         return F
 
@@ -573,34 +514,7 @@ class Roe:
         Q_func      = cache.build.compute_Q.compute_Q
         return A_RL_func, Lambda_func, Q_inv_func, Q_func
 
-def conservative_to_primitive(r, ru, rv, re, g):
-    V = np.empty(4)
-    V[0] = r
-    V[1] = ru / r
-    V[2] = rv / r
-    V[3] = (re - .5 * (ru**2 + rv**2) / r) * (g - 1)
-    return V
-
-def convective_flux(U):
-    # Unpack
-    r = U[0]
-    ru = U[1]
-    rv = U[2]
-    re = U[3]
-    p = (re - .5 * (ru**2 + rv**2) / r) * (g - 1)
-    # Compute flux
-    F = np.empty(U.shape + (2,))
-    F[0, 0] = ru
-    F[1, 0] = ru**2 / r + p
-    F[2, 0] = ru*rv / r
-    F[3, 0] = (re + p) * ru / r
-    F[0, 1] = rv
-    F[1, 1] = ru*rv / r
-    F[2, 1] = rv**2 / r + p
-    F[3, 1] = (re + p) * rv / r
-    return F
-
-def convective_fluxes(U):
+def convective_fluxes(U, g):
     # Unpack
     r =  U[:, 0]
     ru = U[:, 1]

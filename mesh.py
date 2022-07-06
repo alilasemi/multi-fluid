@@ -162,10 +162,11 @@ class Mesh:
 
                 # If it's a left/right BC
                 if i == 0 or i == nx - 1:
-                    self.bc_type[BC_ID] = [cell_ID, 2]
+                    self.bc_type[BC_ID] = [cell_ID, 3]
                     self.bc_area_normal[BC_ID] = [dy, 0]
                     # Inflow is negative
                     if i == 0:
+                        self.bc_type[BC_ID] = [cell_ID, 2]
                         self.bc_area_normal[BC_ID] *= -1
                     # If it's a corner, cut the area in half
                     if j == 0 or j == ny - 1:
