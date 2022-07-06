@@ -22,12 +22,13 @@ phi1 = 1  # right
 g = 1.4
 
 # Solver inputs
-nx = 100
+nx = 200
 ny = 10
 n_t = 200
 t_final = .01
 dt = t_final / n_t
 include_phi_source = False
+filetype = 'pdf'
 
 t_list = [dt, .004, .008]
 
@@ -167,7 +168,7 @@ def compute_solution(flux):
             axes[-1, idx].set_xlabel('x (m)', fontsize=10)
     # Save
     plt.tight_layout()
-    plt.savefig(f'result_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
+    plt.savefig(f'result_{mesh.nx}x{mesh.ny}.{filetype}', bbox_inches='tight')
 
     # Mesh plots
     fig, axes = plt.subplots(len(t_list), 1, figsize=(6.5, 8))
