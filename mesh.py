@@ -23,9 +23,6 @@ class Mesh:
         self.n_faces = int( (nx - 1)*ny + (ny - 1)*nx + (nx - 1)*(ny - 1) )
         # Number of primal mesh cells
         self.n_primal_cells = 2 * (nx - 1) * (ny - 1)
-        # Grid spacing
-        dx = (self.xR - self.xL) / (nx - 1)
-        dy = (self.yR - self.yL) / (ny - 1)
         # Compute nodes
         x = np.linspace(self.xL, self.xR, nx)
         y = np.linspace(self.yL, self.yR, ny)
@@ -33,12 +30,30 @@ class Mesh:
         self.xy = np.empty((self.n, 2))
         self.xy[:, 0] = grid[0].flatten()
         self.xy[:, 1] = grid[1].flatten()
-        # Compute areas. The hexagon is split into triangles.
+
+        self.compute_areas()
+        self.create_dual_faces()
+        self.create_primal_cells()
+        self.create_face_points()
+
+    def compute_areas(self):
+        '''
+        Compute the area of each cell.
+        '''
+        # Unpack
+        nx = self.nx
+        ny = self.ny
+        # Grid spacing
+        dx = (self.xR - self.xL) / (nx - 1)
+        dy = (self.yR - self.yL) / (ny - 1)
+        self.dx = dx
+        self.dy = dy
         def get_area(x, y):
             '''
             Get area of a triangle defined by counterclockwise points.
             '''
             return 0.5*( (x[0]*(y[1]-y[2])) + (x[1]*(y[2]-y[0])) + (x[2]*(y[0]-y[1])) )
+        # These are the various triangles that make up the hexahedral dual mesh
         tri0 = get_area([0, dx/3, 0], [0, 2*dy/3, dy/2])
         tri1 = get_area([0, 2*dx/3, dx/3], [0, dy/3, 2*dy/3])
         tri2 = tri0
@@ -64,7 +79,17 @@ class Mesh:
         self.area[self.corner_SE] = tri3 + tri4
         self.area[self.corner_NW] = tri3 + tri4
         self.area[self.corner_SW] = tri0 + tri1 + tri2
-        # -- Faces -- #
+
+    def create_dual_faces(self):
+        '''
+        Create the interior and boundary face information for the dual mesh.
+        '''
+        # Unpack
+        nx = self.nx
+        ny = self.ny
+        dx = self.dx
+        dy = self.dy
+        # Allocate space
         self.edge_points = np.empty((self.n_faces, 2))
         self.vol_points = np.empty((self.n_primal_cells, 2))
         self.stencil = np.empty(self.n, dtype=object)
@@ -158,6 +183,20 @@ class Mesh:
                         self.bc_area_normal[BC_ID] /= 2
                     BC_ID += 1
 
+        # Loop over faces
+        for face_ID in range(self.n_faces):
+            # compute the edge point as being halfway between the two points
+            # defining the edge
+            self.edge_points[face_ID] = np.mean(self.xy[self.edge[face_ID]],
+                    axis=0)
+
+    def create_primal_cells(self):
+        '''
+        Create the nodes and neighbors of each primal cell.
+        '''
+        # Unpack
+        nx = self.nx
+        ny = self.ny
         # Loop over primal cells
         self.primal_cell_to_nodes = np.empty((self.n_primal_cells, 3), dtype=int)
         self.primal_cell_neighbors = np.empty((self.n_primal_cells, 3), dtype=int)
@@ -191,29 +230,27 @@ class Mesh:
             self.vol_points[idx + 1] = np.mean(
                     self.xy[self.primal_cell_to_nodes[idx + 1]], axis=0)
 
-        # Loop over nodes
-        self.edge_points = np.empty((self.n_faces, 2))
-        edge_dict = {i : {} for i in range(self.n)}
+        # Loop over primal cells
+        self.nodes_to_primal_cells = np.empty(self.n, dtype=object)
+        for cell_ID in range(self.n_primal_cells):
+            # Loop over nodes of this primal cell
+            for i in self.primal_cell_to_nodes[cell_ID]:
+                # If this node hasn't been encountered yet, create the list for
+                # it
+                if self.nodes_to_primal_cells[i] is None:
+                    self.nodes_to_primal_cells[i] = [cell_ID]
+                # Otherwise, just append
+                else:
+                    self.nodes_to_primal_cells[i].append(cell_ID)
+        # Loop back through and convert all lists to Numpy arrays
         for i in range(self.n):
-            # For each neighbor, add edge point to dict
-            # TODO: This assumes stencil = neighbors
-            for j in self.stencil[i]:
-                if i != j:
-                    edge_dict[i][j] = .5 * (self.xy[i] + self.xy[j])
-                    # Also copy to the inverse mapping
-                    edge_dict[j][i] = edge_dict[i][j].copy()
-        # Loop over this newly created dict
-        i_edge = 0
-        for i in edge_dict.keys():
-            # Loop over neighbors
-            for j in edge_dict[i].keys():
-                # Store point and i_edge
-                self.edge_points[i_edge] = edge_dict[i][j]
-                edge_dict[i][j] = i_edge
-                i_edge += 1
-                # Remove duplicate face
-                del edge_dict[j][i]
+            self.nodes_to_primal_cells[i] = np.array(
+                    self.nodes_to_primal_cells[i])
 
+    def create_face_points(self):
+        '''
+        Create the points on each dual mesh face.
+        '''
         # Loop over faces
         self.face_points = np.empty((self.n_faces, 3), dtype=int)
         for i_face in range(self.n_faces):
@@ -239,10 +276,7 @@ class Mesh:
                 self.face_points[i_face, 0] = indices[0]
 
             # Add edge point
-            try:
-                self.face_points[i_face, 1] = edge_dict[i][j]
-            except:
-                self.face_points[i_face, 1] = edge_dict[j][i]
+            self.face_points[i_face, 1] = i_face
 
             # Add final volume point
             self.face_points[i_face, 2] = indices[-1]

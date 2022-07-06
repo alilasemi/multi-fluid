@@ -20,9 +20,16 @@ u1 = 50   # right
 v1 = 0    # right
 phi1 = 1  # right
 g = 1.4
+
+# Solver inputs
+nx = 100
+ny = 10
+n_t = 200
+t_final = .01
+dt = t_final / n_t
 include_phi_source = False
 
-t_list = [5e-5, .004, .008]#[.002, .004, .006, .008]
+t_list = [dt, .004, .008]
 
 def main():
     exact_solution(
@@ -36,14 +43,6 @@ def compute_solution(flux):
     # Get initial conditions as conservatives
     W4 = primitive_to_conservative(r4, u4, v4, p4, g)
     W1 = primitive_to_conservative(r1, u1, v1, p1, g)
-
-    # Solver inputs
-    n_t = 200
-    t_final = .01
-    dt = t_final / n_t
-
-    nx = 5
-    ny = 5
 
     # Create mesh
     mesh = Mesh(nx, ny)
