@@ -147,7 +147,7 @@ def compute_solution():
             axes[-1, idx].set_xlabel('x (m)', fontsize=10)
     # Save
     plt.tight_layout()
-    plt.savefig(f'result_{mesh.nx}x{mesh.ny}.{filetype}', bbox_inches='tight')
+    plt.savefig(f'figs/result_{mesh.nx}x{mesh.ny}.{filetype}', bbox_inches='tight')
 
     # Mesh plots
     fig, axes = plt.subplots(len(t_list), 1, figsize=(6.5, 8))
@@ -176,7 +176,7 @@ def compute_solution():
 
     # Save
     plt.tight_layout()
-    plt.savefig(f'mesh_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
+    plt.savefig(f'figs/mesh_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
 
 #    # Density, velocity, and pressure contour plots
 #    fig, axes = plt.subplots(len(t_list), 3, figsize=(6.5, 8))

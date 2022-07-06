@@ -58,6 +58,11 @@ def exact_solution(
         # Flow inside expansion
         u_exp = (2/(g+1)) * (x/t + ((g-1)/2) * u4 + c4)
         c_exp = (2/(g+1)) * (x/t + ((g-1)/2) * u4 + c4) - x/t
+        # Clip the speed of sound to be positive. This is not entirely necessary
+        # (the spurious negative speed of sound is only outside the expansion,
+        # so in the expansion everything is okay) but not doing this makes Numpy
+        # give warnings when computing pressure.
+        c_exp[c_exp < 0] = 1e-16
         p_exp = p4 * (c_exp/c4)**(2*g/(g-1))
         r_exp = compute_r(g, p_exp, c_exp)
 
