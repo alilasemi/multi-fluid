@@ -5,18 +5,29 @@ import sympy as sp
 import pathlib
 import pickle
 
-from problem import RiemannProblem, AdvectedContact, conservative_to_primitive
+from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
+        conservative_to_primitive)
 from mesh import Mesh
 
 
 # Solver inputs
-Problem = AdvectedContact
-nx = 100
-ny = 10
-n_t = 200
+Problem = AdvectedBubble
+nx = 40
+ny = 40
+n_t = 400
 t_final = .01
 dt = t_final / n_t
 include_phi_source = False
+
+# Domain
+xL = -1
+xR = 1
+yL = -1
+yR = 1
+
+plot_mesh = False
+plot_contour = True
+only_rho = True
 filetype = 'pdf'
 
 t_list = [dt, .004, .008]
@@ -26,7 +37,7 @@ def main():
 
 def compute_solution():
     # Create mesh
-    mesh = Mesh(nx, ny)
+    mesh = Mesh(nx, ny, xL, xR, yL, yR)
 
     # Initial solution
     problem = Problem(mesh.xy, t_list)
@@ -55,15 +66,16 @@ def compute_solution():
             U_list.append(U)
             phi_list.append(phi)
         # Find shock
-        for j in range(nx):
-            # Jump in x-velocity
-            # TODO Cleaner indices
-            line = ny // 2
-            u4 = problem.state_4[1]
-            delta_u = U[line*nx + nx - 1 - j, 1] / U[line*nx + nx - 1 - j, 0] - u4
-            if delta_u > .01 * u4:
-                x_shock[i] = mesh.xy[nx - 1 - j, 0]
-                break
+        if Problem == RiemannProblem:
+            for j in range(nx):
+                # Jump in x-velocity
+                # TODO Cleaner indices
+                line = ny // 2
+                u4 = problem.state_4[1]
+                delta_u = U[line*nx + nx - 1 - j, 1] / U[line*nx + nx - 1 - j, 0] - u4
+                if delta_u > .01 * u4:
+                    x_shock[i] = mesh.xy[nx - 1 - j, 0]
+                    break
 
     # Fit a line to the shock location
     try:
@@ -87,7 +99,6 @@ def compute_solution():
     rc('text', usetex=True)
 
     # Density, velocity, and pressure profiles
-    only_rho = True
     if only_rho:
         fig, axes = plt.subplots(1, len(t_list), figsize=(10, 3))
         num_vars = 1
@@ -151,64 +162,81 @@ def compute_solution():
     plt.savefig(f'figs/result_{mesh.nx}x{mesh.ny}.{filetype}', bbox_inches='tight')
 
     # Mesh plots
-    fig, axes = plt.subplots(len(t_list), 1, figsize=(6.5, 8))
-    for i in range(len(t_list)):
-        phi = phi_list[i]
+    if plot_mesh:
+        fig, axes = plt.subplots(len(t_list), 1, figsize=(6.5, 8))
+        for i in range(len(t_list)):
+            phi = phi_list[i]
 
-        ax = axes[i]
-        ax.set_xlim([mesh.xL, mesh.xR])
-        ax.set_ylim([mesh.yL, mesh.yR])
-        # Loop over primal cells
-        for cell_ID in range(mesh.n_primal_cells):
-            points = mesh.get_plot_points_primal_cell(cell_ID)
-            ax.plot(points[:, 0], points[:, 1], 'k', lw=.5)
-        # Loop over dual faces
-        for face_ID in range(mesh.n_faces):
-            points = mesh.get_face_point_coords(face_ID)
-            # Get dual mesh neighbors
-            i, j = mesh.edge[face_ID]
-            # Check if this is a surrogate boundary
-            is_surrogate = phi[i] * phi[j] < 0
-            if is_surrogate:
-                options = {'color' : 'k', 'lw' : 2}
-            else:
-                options = {'color' : 'k', 'ls' : '--', 'lw' : 1}
-            ax.plot(points[:, 0], points[:, 1], **options)
+            ax = axes[i]
+            ax.set_xlim([mesh.xL, mesh.xR])
+            ax.set_ylim([mesh.yL, mesh.yR])
+            # Loop over primal cells
+            for cell_ID in range(mesh.n_primal_cells):
+                points = mesh.get_plot_points_primal_cell(cell_ID)
+                ax.plot(points[:, 0], points[:, 1], 'k', lw=.5)
+            # Loop over dual faces
+            for face_ID in range(mesh.n_faces):
+                points = mesh.get_face_point_coords(face_ID)
+                # Get dual mesh neighbors
+                i, j = mesh.edge[face_ID]
+                # Check if this is a surrogate boundary
+                is_surrogate = phi[i] * phi[j] < 0
+                if is_surrogate:
+                    options = {'color' : 'k', 'lw' : 2}
+                else:
+                    options = {'color' : 'k', 'ls' : '--', 'lw' : 1}
+                ax.plot(points[:, 0], points[:, 1], **options)
 
-    # Save
-    plt.tight_layout()
-    plt.savefig(f'figs/mesh_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
+        # Save
+        plt.tight_layout()
+        plt.savefig(f'figs/mesh_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
 
-#    # Density, velocity, and pressure contour plots
-#    fig, axes = plt.subplots(len(t_list), 3, figsize=(6.5, 8))
-#    for i in range(len(t_list)):
-#        V = V_list[i]
-#        t = t_list[i]
-#
-#        r = V[:, 0]
-#        u = V[:, 1]
-#        v = V[:, 2]
-#        p = V[:, 3]
-#
-#        # Plotting rho, u, and p
-#        f = [r, u, p]
-#        f_exact = [r_exact, u_exact, p_exact]
-#        time = f'(t={t} \\textrm{{ s}})'
-#        ylabels = [f'$\\rho{time}$ (kg/m$^3$)', f'$u{time}$ (m/s)', f'$p{time}$ (N/m$^2$)']
-#        # Loop over rho, u, p
-#        for idx in range(3):
-#            ax = axes[i, idx]
-#            contourf = ax.tricontourf(mesh.xy[:, 0], mesh.xy[:, 1], f[idx])
-#            plt.colorbar(mappable=contourf, ax=ax)
-#            ax.set_title(ylabels[idx], fontsize=10)
-#            ax.tick_params(labelsize=10)
-#    for idx in range(3):
-#        axes[-1, idx].set_xlabel('x (m)', fontsize=10)
-#    for idx in range(len(t_list)):
-#        axes[idx, 0].set_ylabel('y (m)', fontsize=10)
-#    # Save
-#    plt.tight_layout()
-#    plt.savefig(f'contour_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
+    # Density, velocity, and pressure contour plots
+    if plot_contour:
+        if only_rho:
+            num_vars = 1
+        else: num_vars = 3
+        fig, axes = plt.subplots(len(t_list), num_vars, figsize=(6.5, 8), squeeze=False)
+        for i_iter in range(len(t_list)):
+            V = V_list[i_iter]
+            phi = phi_list[i_iter]
+            t = t_list[i_iter]
+
+            r = V[:, 0]
+            u = V[:, 1]
+            v = V[:, 2]
+            p = V[:, 3]
+
+            # Plotting rho, u, and p
+            f = [r, u, p]
+            f_exact = [r_exact, u_exact, p_exact]
+            time = f'(t={t} \\textrm{{ s}})'
+            ylabels = [f'$\\rho{time}$ (kg/m$^3$)', f'$u{time}$ (m/s)', f'$p{time}$ (N/m$^2$)']
+            # Loop over variables
+            for idx in range(num_vars):
+                ax = axes[i_iter, idx]
+                contourf = ax.tricontourf(mesh.xy[:, 0], mesh.xy[:, 1], f[idx])
+                plt.colorbar(mappable=contourf, ax=ax)
+                ax.set_title(ylabels[idx], fontsize=10)
+                ax.tick_params(labelsize=10)
+
+                # Loop over dual faces
+                for face_ID in range(mesh.n_faces):
+                    points = mesh.get_face_point_coords(face_ID)
+                    # Get dual mesh neighbors
+                    i, j = mesh.edge[face_ID]
+                    # Check if this is a surrogate boundary
+                    is_surrogate = phi[i] * phi[j] < 0
+                    if is_surrogate:
+                        ax.plot(points[:, 0], points[:, 1], 'k', lw=2)
+
+        for idx in range(num_vars):
+            axes[-1, idx].set_xlabel('x (m)', fontsize=10)
+        for idx in range(len(t_list)):
+            axes[idx, 0].set_ylabel('y (m)', fontsize=10)
+        # Save
+        plt.tight_layout()
+        plt.savefig(f'figs/contour_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
 
     print(f'Plots written to files ({mesh.nx}x{mesh.ny}).')
 

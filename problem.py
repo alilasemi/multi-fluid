@@ -7,8 +7,9 @@ class Problem:
     '''
     Parent class for all problem definitions.
     '''
-    def __init__(self, xy):
+    def __init__(self, xy, t_list):
         self.xy = xy
+        self.t_list = t_list
         self.n = xy.shape[0]
 
 
@@ -20,12 +21,12 @@ class RiemannProblem(Problem):
     # In a Riemann problem, the left state is usually referred to as state 4,
     # and the right state is usually state 1. This naming is used below.
 
-    # Left state (rho, p, u, v, phi)
+    # Left state (rho, u, v, p, phi)
     state_4 = np.array([
             1, 100, 0, 1e5, -1
     ])
 
-    # Right state (rho, p, u, v, phi)
+    # Right state (rho, u, v, p, phi)
     state_1 = np.array([
             .125, 50, 0, 1e4, 1
     ])
@@ -34,7 +35,7 @@ class RiemannProblem(Problem):
     g = 1.4
 
     def __init__(self, xy, t_list):
-        super().__init__(xy)
+        super().__init__(xy, t_list)
         # Unpack
         r4, u4, v4, p4, phi4 = self.state_4
         r1, u1, v1, p1, phi1 = self.state_1
@@ -132,15 +133,100 @@ class AdvectedContact(RiemannProblem):
     Class for a contact wave advected at a constant velocity. This is based off
     of a special case of a Riemann problem.
     '''
-    # Left state (rho, p, u, v, phi)
+    # Left state (rho, u, v, p, phi)
     state_4 = np.array([
             1, 300, 0, 1e5, -1
     ])
 
-    # Right state (rho, p, u, v, phi)
+    # Right state (rho, u, v, p, phi)
     state_1 = np.array([
             .125, 300, 0, 1e5, 1
     ])
+
+class AdvectedBubble(Problem):
+    '''
+    Class for a bubble advecting at constant velocity.
+    '''
+
+    # bubble state (rho, u, v, p, phi)
+    bubble = np.array([
+            .125, 50, 0, 1e5, -1
+    ])
+
+    # Ambient state (rho, u, v, p, phi)
+    ambient = np.array([
+            1, 50, 0, 1e5, 1
+    ])
+
+    # Radius of bubble
+    radius = .25
+
+    # Ratio of specific heats
+    g = 1.4
+
+    def get_initial_conditions(self):
+        # Unpack
+        r0, u0, v0, p0, phi0 = self.ambient
+        r1, u1, v1, p1, phi1 = self.bubble
+        g = self.g
+
+        # Get initial conditions as conservatives
+        W0 = primitive_to_conservative(r0, u0, v0, p0, g)
+        W1 = primitive_to_conservative(r1, u1, v1, p1, g)
+
+        # Set bubble in the center of the domain
+        U = W0 * np.ones((self.n, 4))
+        indices = np.nonzero(self.xy[:, 0]**2 + self.xy[:, 1]**2 <
+                self.radius**2)
+        U[indices] = W1
+        # Phi is set to be zero at the initial bubble
+        phi = self.xy[:, 0]**2 + self.xy[:, 1]**2 - self.radius**2
+        phi /= np.max(phi)
+        return U, phi
+
+    def compute_ghost_state(self, U, U_ghost, bc_type):
+        # Unpack
+        r0, u0, v0, p0, _ = self.ambient
+        r1, u1, v1, p1, _ = self.bubble
+        g = self.g
+        # Loop over each boundary cell
+        for i in range(U_ghost.shape[0]):
+            # Get the type of this boundary
+            cell_ID, bc = bc_type[i]
+            # Get primitives
+            V = conservative_to_primitive(*U[cell_ID], g)
+            # Compute wall ghost state, regardless of if it's marked as a wall,
+            # inflow or outflow
+            if bc in [1, 2, 3]:
+                # The density and pressure are kept the same in the ghost state
+                r = V[0]
+                p = V[3]
+                # The x-direction velocity is not changed since the wall is
+                # horizontal
+                u = V[1]
+                # The y-direction velocity is flipped in sign, since the wall is
+                # horizontal
+                v = -V[2]
+            else:
+                print(f'ERROR: Invalid BC type given! bc = {bc}')
+            # Compute ghost state
+            U_ghost[i] = primitive_to_conservative(r, u, v, p, g)
+
+    def compute_ghost_phi(self, phi, phi_ghost, bc_type):
+        # Unpack
+        *_, phi0 = self.ambient
+        *_, phi1 = self.bubble
+        # Loop over each boundary cell
+        for i in range(phi_ghost.shape[0]):
+            cell_ID, bc = bc_type[i]
+            # Compute wall ghost state, regardless of if it's marked as a wall,
+            # inflow or outflow
+            if bc in [1, 2, 3]:
+                # Just use the initial value as the boundary value
+                phi_ghost[i] = (self.xy[cell_ID, 0]**2 + self.xy[cell_ID, 1]**2
+                        - self.radius**2)
+            else:
+                print(f'ERROR: Invalid BC type given! bc = {bc}')
 
 
 def primitive_to_conservative(r, u, v, p, g):

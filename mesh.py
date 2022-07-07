@@ -9,15 +9,13 @@ class Mesh:
     diagonals of the triangles go from bottom-left to top-right. The mesh used
     for the actual computation is the dual mesh.
     '''
-    # Domain
-    xL = -10
-    xR = 10
-    yL = -1
-    yR = 1
-
-    def __init__(self, nx, ny):
+    def __init__(self, nx, ny, xL, xR, yL, yR):
         self.nx = nx
         self.ny = ny
+        self.xL = xL
+        self.xR = xR
+        self.yL = yL
+        self.yR = yR
         self.n = nx * ny
         # Number of faces (formula given in assignment)
         self.n_faces = int( (nx - 1)*ny + (ny - 1)*nx + (nx - 1)*(ny - 1) )
@@ -35,6 +33,7 @@ class Mesh:
         self.create_dual_faces()
         self.create_primal_cells()
         self.create_face_points()
+        self.compute_jacobians()
 
     def compute_areas(self):
         '''
@@ -269,7 +268,7 @@ class Mesh:
                 self.face_points[i_face, 0] = -1
             # If this is an interior face
             else:
-                # Start with whichever side came up first in the search
+                # Start with whichever side came up first in the intersect
                 self.face_points[i_face, 0] = indices[0]
 
             # Add edge point
@@ -277,6 +276,33 @@ class Mesh:
 
             # Add final volume point
             self.face_points[i_face, 2] = indices[-1]
+
+    def compute_jacobians(self):
+        # Loop over faces
+        for face_ID in range(self.n_faces):
+            # Get dual mesh neighbors
+            i, j = self.edge[face_ID]
+            # Coordinates of the three points on the face
+            face_point_coords = self.get_face_point_coords(face_ID)
+            # TODO
+            # Skip boundaries for now...
+            if face_point_coords.shape[0] == 2: continue
+            # The six points defining a second order triangle element
+            points = np.empty((6, 2))
+            # Point 0 is the left node
+            points[0] = self.xy[i]
+            # TODO I don't think there is any guarantee which side is right vs left...
+            # Point 2 is the right primal mesh centroid
+            points[2] = face_point_coords[2]
+            # Point 1 is halfway between 0 and 2
+            points[1] = .5 * (points[0] + points[2])
+            # Point 5 is the left primal mesh centroid
+            points[5] = face_point_coords[0]
+            # Point 3 is halfway between 0 and 5
+            points[3] = .5 * (points[0] + points[5])
+            # Point 4 is the edge point
+            points[4] = face_point_coords[1]
+            breakpoint()
 
     def get_face_point_coords(self, i_face):
         '''
