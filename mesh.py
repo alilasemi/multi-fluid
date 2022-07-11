@@ -302,7 +302,6 @@ class Mesh:
             points[3] = .5 * (points[0] + points[5])
             # Point 4 is the edge point
             points[4] = face_point_coords[1]
-            breakpoint()
 
     def get_face_point_coords(self, i_face):
         '''
@@ -329,3 +328,55 @@ class Mesh:
         coords[:3] = self.xy[self.primal_cell_to_nodes[cell_ID]]
         coords[3] = self.xy[self.primal_cell_to_nodes[cell_ID, 0]]
         return coords
+
+    def update(self, data):
+        '''
+        Update the dual mesh to fit the interface better.
+        '''
+        t = data.t
+        max_iter = 10
+        for iter in range(max_iter):
+            print(f'mesh iteration = {1 + iter}/{max_iter}', end='\r')
+            # TODO: This is with a hardcoded phi. This is because I want to neglect
+            # error in phi for now.
+            u = 50
+            radius = .25
+            def get_phi(x, y):
+                phi = (x - u * t)**2 + y**2 - radius**2
+                phi /= self.xL**2 + self.xR**2 - radius**2
+                return phi
+            def get_grad_phi(x, y):
+                gphi = np.array([
+                    2 * (x - u * t),
+                    2 * y])
+                gphi /= self.xL**2 + self.xR**2 - radius**2
+                return gphi
+
+            for face_ID in range(self.n_faces):
+                # Get dual mesh neighbors
+                i, j = self.edge[face_ID]
+                # Check for interface
+                xi, yi = self.xy[i]
+                xj, yj = self.xy[j]
+                if get_phi(xi, yi) * get_phi(xj, yj) < 0:
+                    # If it's an interface, move the edge point towards phi = 0
+                    x, y = self.edge_points[face_ID]
+                    phi = get_phi(x, y)
+                    gphi = get_grad_phi(x, y)
+                    if np.abs(gphi[0]) > 1e-5:
+                        self.edge_points[face_ID, 0] -= .3 * phi / gphi[0]
+                    if np.abs(gphi[1]) > 1e-5:
+                        self.edge_points[face_ID, 1] -= .3 * phi / gphi[1]
+
+            phi_nodes = get_phi(self.xy[:, 0], self.xy[:, 1])
+            for cell_ID in range(self.n_primal_cells):
+                nodes = self.primal_cell_to_nodes[cell_ID]
+                phi = phi_nodes[nodes]
+                products = np.array([phi[0] * phi[1], phi[1] * phi[2], phi[2] * phi[0]])
+                if np.any(products < 0):
+                    x, y = self.vol_points[cell_ID]
+                    phi = get_phi(x, y)
+                    gphi = get_grad_phi(x, y)
+                    self.vol_points[cell_ID, 0] -= .3 * phi / gphi[0]
+                    self.vol_points[cell_ID, 1] -= .3 * phi / gphi[1]
+        print()

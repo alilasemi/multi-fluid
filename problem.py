@@ -11,6 +11,7 @@ class Problem:
         self.xy = xy
         self.t_list = t_list
         self.n = xy.shape[0]
+        self.exact = False
 
 
 class RiemannProblem(Problem):
@@ -33,6 +34,9 @@ class RiemannProblem(Problem):
 
     # Ratio of specific heats
     g = 1.4
+
+    # The exact solution is defined
+    exact = True
 
     def __init__(self, xy, t_list):
         super().__init__(xy, t_list)
