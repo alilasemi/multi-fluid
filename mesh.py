@@ -1,6 +1,7 @@
 import numpy as np
 
-from lagrange import LagrangeTriangleP1, LagrangeTriangleP2
+from lagrange import (LagrangeSegmentP1, LagrangeSegmentP2, LagrangeTriangleP1,
+        LagrangeTriangleP2)
 
 
 class Mesh:
@@ -38,6 +39,7 @@ class Mesh:
         self.create_primal_cells()
         self.create_face_points()
         self.compute_cell_areas()
+        self.compute_face_area_normals()
 
     def create_dual_faces(self):
         '''
@@ -392,7 +394,7 @@ class Mesh:
                 points[4] = face_point_coords[1]
                 # Create a Lagrange triangle
                 tri = LagrangeTriangleP2(points)
-                # Add contribution to self.area
+                # Add contribution to area
                 self.area[j] += tri.area
 
             # If it's a boundary face, use first order elements
@@ -408,7 +410,7 @@ class Mesh:
                 points[2] = face_point_coords[0]
                 # Create a Lagrange triangle
                 tri = LagrangeTriangleP1(points)
-                # Add contribution to self.area
+                # Add contribution to area
                 self.area[i] += np.abs(tri.area)
 
                 # -- Triangle on side of node j -- #
@@ -426,3 +428,35 @@ class Mesh:
                 # TODO: The np.abs is added since I do not guarantee the
                 # direction of boundary faces being outwards pointing normals.
                 # Is this going to be a problem?
+
+    def compute_face_area_normals(self):
+        '''
+        Compute the area-weighted normals of each dual face.
+        '''
+        area_normals = np.empty((self.n, 2))
+        # Loop over faces
+        for face_ID in range(self.n_faces):
+            # Get dual mesh neighbors
+            i, j = self.edge[face_ID]
+            # Coordinates of the three points on the face
+            face_point_coords = self.get_face_point_coords(face_ID)
+            x = face_point_coords[:, 0]
+            y = face_point_coords[:, 1]
+
+            # If it's an interior face, use second order elements
+            if face_point_coords.shape[0] == 3:
+                # Create a Lagrange segment
+                x_seg = LagrangeSegmentP2(x)
+                y_seg = LagrangeSegmentP2(y)
+                breakpoint()
+                # Add contribution to self.area
+                #self.area[i] += tri.area
+
+            # If it's a boundary face, use first order elements
+            if face_point_coords.shape[0] == 2:
+                # Create a Lagrange segment
+                x_seg = LagrangeSegmentP1(x[:2])
+                y_seg = LagrangeSegmentP1(y[:2])
+                breakpoint()
+                # Add contribution to self.area
+                #self.area[i] += tri.area
