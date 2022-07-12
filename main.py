@@ -15,7 +15,7 @@ ny = 5
 n_t = 1
 t_final = 1e2 * .01 / 400
 dt = t_final / n_t
-adaptive = True
+adaptive = False
 
 # Domain
 xL = -1
@@ -51,17 +51,17 @@ def compute_solution():
     x_shock = np.empty(n_t)
     for i in range(n_t):
         data.new_iteration()
-        data.gradU = compute_gradient(U, mesh)
+        data.gradU = compute_gradient(data.U, mesh)
         # Update mesh
         if adaptive:
             mesh.update(data)
         # Update solution
-        U = update(dt, data, mesh, problem)
-        phi = update_phi(dt, data, mesh, problem)
+        data.U = update(dt, data, mesh, problem)
+        data.phi = update_phi(dt, data, mesh, problem)
         data.t = (i + 1) * dt
         if np.any(np.isclose(t_list, data.t)):
-            U_list.append(U)
-            phi_list.append(phi)
+            U_list.append(data.U)
+            phi_list.append(data.phi)
         # Find shock
         if Problem == RiemannProblem:
             for j in range(nx):
@@ -69,7 +69,7 @@ def compute_solution():
                 # TODO Cleaner indices
                 line = ny // 2
                 u4 = problem.state_4[1]
-                delta_u = U[line*nx + nx - 1 - j, 1] / U[line*nx + nx - 1 - j, 0] - u4
+                delta_u = data.U[line*nx + nx - 1 - j, 1] / data.U[line*nx + nx - 1 - j, 0] - u4
                 if delta_u > .01 * u4:
                     x_shock[i] = mesh.xy[nx - 1 - j, 0]
                     break

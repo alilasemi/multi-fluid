@@ -1,6 +1,6 @@
 import numpy as np
 
-from lagrange import LagrangeTriangle
+from lagrange import LagrangeTriangleP1, LagrangeTriangleP2
 
 
 class Mesh:
@@ -19,6 +19,9 @@ class Mesh:
         self.yL = yL
         self.yR = yR
         self.n = nx * ny
+        # Grid spacing
+        self.dx = (xR - xL) / (nx - 1)
+        self.dy = (yR - yL) / (ny - 1)
         # Number of faces (formula given in assignment)
         self.n_faces = int( (nx - 1)*ny + (ny - 1)*nx + (nx - 1)*(ny - 1) )
         # Number of primal mesh cells
@@ -31,55 +34,10 @@ class Mesh:
         self.xy[:, 0] = grid[0].flatten()
         self.xy[:, 1] = grid[1].flatten()
 
-        self.compute_areas()
         self.create_dual_faces()
         self.create_primal_cells()
         self.create_face_points()
-        self.compute_jacobians()
-
-    def compute_areas(self):
-        '''
-        Compute the area of each cell.
-        '''
-        # Unpack
-        nx = self.nx
-        ny = self.ny
-        # Grid spacing
-        dx = (self.xR - self.xL) / (nx - 1)
-        dy = (self.yR - self.yL) / (ny - 1)
-        self.dx = dx
-        self.dy = dy
-        def get_area(x, y):
-            '''
-            Get area of a triangle defined by counterclockwise points.
-            '''
-            return 0.5*( (x[0]*(y[1]-y[2])) + (x[1]*(y[2]-y[0])) + (x[2]*(y[0]-y[1])) )
-        # These are the various triangles that make up the hexahedral dual mesh
-        tri0 = get_area([0, dx/3, 0], [0, 2*dy/3, dy/2])
-        tri1 = get_area([0, 2*dx/3, dx/3], [0, dy/3, 2*dy/3])
-        tri2 = tri0
-        tri3 = get_area([0, dx/3, dx/2], [0, -dy/3, 0])
-        tri4 = tri3
-        self.area = 2 * (tri0 + tri1 + tri2 + tri3 + tri4) * np.ones(nx * ny)
-        # Find boundaries and set their area
-        boundary_area = tri0 + tri1 + tri2 + tri3 + tri4
-        idx_xR = np.where(np.isclose(self.xy[:, 0], self.xR))[0]
-        idx_xL = np.where(np.isclose(self.xy[:, 0], self.xL))[0]
-        idx_yR = np.where(np.isclose(self.xy[:, 1], self.yR))[0]
-        idx_yL = np.where(np.isclose(self.xy[:, 1], self.yL))[0]
-        self.area[idx_xR] = boundary_area
-        self.area[idx_xL] = boundary_area
-        self.area[idx_yR] = boundary_area
-        self.area[idx_yL] = boundary_area
-        # Find corners and set their area
-        self.corner_NE = np.intersect1d(idx_xR, idx_yR)[0]
-        self.corner_SE = np.intersect1d(idx_xR, idx_yL)[0]
-        self.corner_NW = np.intersect1d(idx_xL, idx_yR)[0]
-        self.corner_SW = np.intersect1d(idx_xL, idx_yL)[0]
-        self.area[self.corner_NE] = tri0 + tri1 + tri2
-        self.area[self.corner_SE] = tri3 + tri4
-        self.area[self.corner_NW] = tri3 + tri4
-        self.area[self.corner_SW] = tri0 + tri1 + tri2
+        self.compute_cell_areas()
 
     def create_dual_faces(self):
         '''
@@ -307,35 +265,6 @@ class Mesh:
                 # Add final volume point
                 self.face_points[face_ID, 2] = indices[-1]
 
-    def compute_jacobians(self):
-        # Loop over faces
-        for face_ID in range(self.n_faces):
-            # Get dual mesh neighbors
-            i, j = self.edge[face_ID]
-            # Coordinates of the three points on the face
-            face_point_coords = self.get_face_point_coords(face_ID)
-            # TODO
-            # Skip boundaries for now...
-            if face_point_coords.shape[0] == 2: continue
-            # The six points defining a second order triangle element
-            points = np.empty((6, 2))
-            # Point 0 is the left node
-            points[0] = self.xy[i]
-            # Point 2 is the right primal mesh centroid
-            points[2] = face_point_coords[2]
-            # Point 1 is halfway between 0 and 2
-            points[1] = .5 * (points[0] + points[2])
-            # Point 5 is the left primal mesh centroid
-            points[5] = face_point_coords[0]
-            # Point 3 is halfway between 0 and 5
-            points[3] = .5 * (points[0] + points[5])
-            # Point 4 is the edge point
-            points[4] = face_point_coords[1]
-
-            # Create a Lagrange triangle
-            tri = LagrangeTriangle(points)
-            breakpoint()
-
     def get_face_point_coords(self, i_face):
         '''
         Get coordinates of points on a given dual mesh face.
@@ -343,8 +272,8 @@ class Mesh:
         # If it's a boundary face
         if self.face_points[i_face, 2] == -1:
             coords = np.empty((2, 2))
-            coords[0] = self.edge_points[self.face_points[i_face, 1]]
-            coords[1] = self.vol_points[self.face_points[i_face, 2]]
+            coords[0] = self.vol_points[self.face_points[i_face, 0]]
+            coords[1] = self.edge_points[self.face_points[i_face, 1]]
         # If it's an interior face
         else:
             coords = np.empty((3, 2))
@@ -413,3 +342,87 @@ class Mesh:
                     self.vol_points[cell_ID, 0] -= .3 * phi / gphi[0]
                     self.vol_points[cell_ID, 1] -= .3 * phi / gphi[1]
         print()
+
+    def compute_cell_areas(self):
+        '''
+        Compute the area of each dual cell.
+        '''
+        self.area = np.zeros(self.n)
+        # Loop over faces
+        for face_ID in range(self.n_faces):
+            # Get dual mesh neighbors
+            i, j = self.edge[face_ID]
+            # Coordinates of the three points on the face
+            face_point_coords = self.get_face_point_coords(face_ID)
+
+            # If it's an interior face, use second order elements
+            if face_point_coords.shape[0] == 3:
+                # The six points defining a second order triangle element
+                points = np.empty((6, 2))
+                # -- Triangle on side of node i -- #
+                # Point 0 is the left node
+                points[0] = self.xy[i]
+                # Point 2 is the right primal mesh centroid
+                points[2] = face_point_coords[2]
+                # Point 1 is halfway between 0 and 2
+                points[1] = .5 * (points[0] + points[2])
+                # Point 5 is the left primal mesh centroid
+                points[5] = face_point_coords[0]
+                # Point 3 is halfway between 0 and 5
+                points[3] = .5 * (points[0] + points[5])
+                # Point 4 is the edge point
+                points[4] = face_point_coords[1]
+                # Create a Lagrange triangle
+                tri = LagrangeTriangleP2(points)
+                # Add contribution to self.area
+                self.area[i] += tri.area
+
+                # -- Triangle on side of node j -- #
+                # Point 0 is the right node
+                points[0] = self.xy[j]
+                # Point 2 is the left primal mesh centroid
+                points[2] = face_point_coords[0]
+                # Point 1 is halfway between 0 and 2
+                points[1] = .5 * (points[0] + points[2])
+                # Point 5 is the right primal mesh centroid
+                points[5] = face_point_coords[2]
+                # Point 3 is halfway between 0 and 5
+                points[3] = .5 * (points[0] + points[5])
+                # Point 4 is the edge point
+                points[4] = face_point_coords[1]
+                # Create a Lagrange triangle
+                tri = LagrangeTriangleP2(points)
+                # Add contribution to self.area
+                self.area[j] += tri.area
+
+            # If it's a boundary face, use first order elements
+            if face_point_coords.shape[0] == 2:
+                # The three points defining a first order triangle element
+                points = np.empty((3, 2))
+                # -- Triangle on side of node i -- #
+                # Point 0 is the left node
+                points[0] = self.xy[i]
+                # Point 1 is the edge point
+                points[1] = face_point_coords[1]
+                # Point 2 is the primal mesh centroid
+                points[2] = face_point_coords[0]
+                # Create a Lagrange triangle
+                tri = LagrangeTriangleP1(points)
+                # Add contribution to self.area
+                self.area[i] += np.abs(tri.area)
+
+                # -- Triangle on side of node j -- #
+                # Point 0 is the left node
+                points[0] = self.xy[j]
+                # Point 1 is the primal mesh centroid
+                points[1] = face_point_coords[0]
+                # Point 2 is the edge point
+                points[2] = face_point_coords[1]
+                # Create a Lagrange triangle
+                tri = LagrangeTriangleP1(points)
+                # Add contribution to self.area
+                self.area[j] += np.abs(tri.area)
+
+                # TODO: The np.abs is added since I do not guarantee the
+                # direction of boundary faces being outwards pointing normals.
+                # Is this going to be a problem?

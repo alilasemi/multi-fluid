@@ -7,11 +7,11 @@ class Problem:
     '''
     Parent class for all problem definitions.
     '''
+    exact = False
     def __init__(self, xy, t_list):
         self.xy = xy
         self.t_list = t_list
         self.n = xy.shape[0]
-        self.exact = False
 
 
 class RiemannProblem(Problem):
