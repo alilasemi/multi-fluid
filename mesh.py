@@ -250,32 +250,60 @@ class Mesh:
     def create_face_points(self):
         '''
         Create the points on each dual mesh face.
+
+        Dual mesh faces are defined between nodes i and j. In the interior, a
+        face extends from the "left" primal cell centroid to the i-j midpoint,
+        then finally to the "right" primal cell centroid. This looks like:
+
+            "left" primal ->  L   j  <- node j
+                               \ /
+                                O  <- edge point
+                               / \
+                   node i ->  i   R  <- "right" primal
+
+        The i-j midpoint is called an edge point, and there are as many edge
+        points as dual faces. The L and R primal centroids are called the left
+        and right volume point, and each interior face has two volume points
+        while boundary faces have one. The ordering is important - which primal
+        is L vs. R is chosen to preserve the counterclockwise node ordering of
+        the primal cells.
         '''
         # Loop over faces
         self.face_points = np.empty((self.n_faces, 3), dtype=int)
-        for i_face in range(self.n_faces):
+        for face_ID in range(self.n_faces):
             # Get dual mesh neighbors
-            i, j = self.edge[i_face]
+            i, j = self.edge[face_ID]
             # Get primal cells of each node
             i_primals = self.nodes_to_primal_cells[i]
             j_primals = self.nodes_to_primal_cells[j]
             # The intersection gives the primal cells of this face
             indices = np.intersect1d(i_primals, j_primals)
+            # Check the ordering. This is done by checking the node order of the
+            # intersected cells. The primal cells have nodes ordered in
+            # counterclockwise order, so indices[0] must contain nodes i, j in
+            # this order. This only matters for interior faces (boundary faces
+            # always have one primal cell, and this is the "left" cell).
+            if len(indices) == 2:
+                nodes = self.primal_cell_to_nodes[indices[0]]
+                if not (np.all(nodes[[0, 1]] == [i, j])
+                        or np.all(nodes[[1, 2]] == [i, j])
+                        or np.all(nodes[[2, 0]] == [i, j])):
+                    indices = indices[::-1]
+
+            # Start with the first volume point on the "left"
+            self.face_points[face_ID, 0] = indices[0]
+
+            # Add edge point
+            self.face_points[face_ID, 1] = face_ID
 
             # If this is a boundary face
             if indices.size == 1:
-                # Start with an empty volume point
-                self.face_points[i_face, 0] = -1
+                # Add an empty volume point
+                self.face_points[face_ID, 2] = -1
             # If this is an interior face
             else:
-                # Start with whichever side came up first in the intersect
-                self.face_points[i_face, 0] = indices[0]
-
-            # Add edge point
-            self.face_points[i_face, 1] = i_face
-
-            # Add final volume point
-            self.face_points[i_face, 2] = indices[-1]
+                # Add final volume point
+                self.face_points[face_ID, 2] = indices[-1]
 
     def compute_jacobians(self):
         # Loop over faces
@@ -305,7 +333,7 @@ class Mesh:
 
     def get_face_point_coords(self, i_face):
         '''
-        Get coordinates of points on a given face.
+        Get coordinates of points on a given dual mesh face.
         '''
         # If it's a boundary face
         if self.face_points[i_face, 0] == -1:
