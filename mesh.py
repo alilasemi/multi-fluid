@@ -1,5 +1,7 @@
 import numpy as np
 
+from lagrange import LagrangeTriangle
+
 
 class Mesh:
     '''
@@ -319,7 +321,6 @@ class Mesh:
             points = np.empty((6, 2))
             # Point 0 is the left node
             points[0] = self.xy[i]
-            # TODO I don't think there is any guarantee which side is right vs left...
             # Point 2 is the right primal mesh centroid
             points[2] = face_point_coords[2]
             # Point 1 is halfway between 0 and 2
@@ -331,12 +332,16 @@ class Mesh:
             # Point 4 is the edge point
             points[4] = face_point_coords[1]
 
+            # Create a Lagrange triangle
+            tri = LagrangeTriangle(points)
+            breakpoint()
+
     def get_face_point_coords(self, i_face):
         '''
         Get coordinates of points on a given dual mesh face.
         '''
         # If it's a boundary face
-        if self.face_points[i_face, 0] == -1:
+        if self.face_points[i_face, 2] == -1:
             coords = np.empty((2, 2))
             coords[0] = self.edge_points[self.face_points[i_face, 1]]
             coords[1] = self.vol_points[self.face_points[i_face, 2]]
