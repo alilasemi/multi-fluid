@@ -81,6 +81,11 @@ class Mesh:
                     self.edge_area_normal[face_ID] = rotation90 @ np.array([2*dx/3, dy/3])
                     # If this is a left/right boundary, cut it in half
                     if i == 0 or i == nx - 1: self.edge_area_normal[face_ID] /= 2
+                    # If this is a left boundary, flip the order to preserve
+                    # outward normals
+                    if i == 0:
+                        self.edge[face_ID] = self.edge[face_ID][::-1]
+                        self.edge_area_normal[face_ID] *= -1
                     face_ID += 1
 
                 # Make face to the right
@@ -91,6 +96,11 @@ class Mesh:
                     self.edge_area_normal[face_ID] = rotation90 @ np.array([-dx/3, -2*dy/3])
                     # If this is a top/bottom boundary, cut it in half
                     if j == 0 or j == ny - 1: self.edge_area_normal[face_ID] /= 2
+                    # If this is a top boundary, flip the order to preserve
+                    # outward normals
+                    if j == ny - 1:
+                        self.edge[face_ID] = self.edge[face_ID][::-1]
+                        self.edge_area_normal[face_ID] *= -1
                     face_ID += 1
 
                 # Make face diagonally above and to the right
@@ -433,7 +443,8 @@ class Mesh:
         '''
         Compute the area-weighted normals of each dual face.
         '''
-        area_normals = np.empty((self.n, 2))
+        self.area_normals_p2 = np.empty((self.n_faces, 2, 2))
+        self.quad_pts_phys = np.empty((self.n_faces, 2, 2))
         # Loop over faces
         for face_ID in range(self.n_faces):
             # Get dual mesh neighbors
@@ -448,15 +459,22 @@ class Mesh:
                 # Create a Lagrange segment
                 x_seg = LagrangeSegmentP2(x)
                 y_seg = LagrangeSegmentP2(y)
-                breakpoint()
-                # Add contribution to self.area
-                #self.area[i] += tri.area
 
             # If it's a boundary face, use first order elements
             if face_point_coords.shape[0] == 2:
                 # Create a Lagrange segment
                 x_seg = LagrangeSegmentP1(x[:2])
                 y_seg = LagrangeSegmentP1(y[:2])
-                breakpoint()
-                # Add contribution to self.area
-                #self.area[i] += tri.area
+
+            # Evaluate location of quadrature points in physical space
+            self.quad_pts_phys[face_ID, :, 0] = np.matmul(
+                    x_seg.get_basis_values(x_seg.quad_pts), x_seg.coords)
+            self.quad_pts_phys[face_ID, :, 1] = np.matmul(
+                    y_seg.get_basis_values(y_seg.quad_pts), y_seg.coords)
+
+            # Now have d x / d xi and d y / d eta, and this represents the
+            # length-weighted vectors along the face. Rotate by 90 degrees
+            # to get the normal vector. This is done by the transformation
+            # [x, y] -> [-y, x].
+            self.area_normals_p2[face_ID, :, 0] = -y_seg.jac
+            self.area_normals_p2[face_ID, :, 1] =  x_seg.jac

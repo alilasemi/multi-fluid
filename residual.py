@@ -11,17 +11,6 @@ def get_residual(data, mesh, problem):
     gradU = data.gradU
 
     residual = np.zeros_like(U)
-    # L and R cell IDs
-    L = mesh.edge[:, 0]
-    R = mesh.edge[:, 1]
-    # Evaluate solution at faces on left and right
-    # -- First order component -- #
-    U_L = U[mesh.edge[:, 0]]
-    U_R = U[mesh.edge[:, 1]]
-
-    # -- Second order component -- #
-    # Get edge midpoints
-    edge_midpoint = .5 * (mesh.xy[L] + mesh.xy[R])
 
     # Compute the limiter value
     # This uses the multidimensional Barth-Jesperson limiter from:
@@ -50,22 +39,49 @@ def get_residual(data, mesh, problem):
         # Take the minimum across each face point
         limiter[:, k] = damping * np.min(limiter_j, axis=1)
 
-    U_L += limiter[L] * np.einsum('ijk, ik -> ij', gradU[L], edge_midpoint - mesh.xy[L])
-    U_R += limiter[R] * np.einsum('ijk, ik -> ij', gradU[R], edge_midpoint - mesh.xy[R])
+    # Loop over faces
+    for face_ID in range(mesh.n_faces):
+        # Left and right cell IDs
+        L = mesh.edge[face_ID, 0]
+        R = mesh.edge[face_ID, 1]
 
-    # Evalute interior fluxes
-    F = data.flux.compute_flux(U_L, U_R, mesh.edge_area_normal)
+        # Evaluate solution at faces on left and right, for both quadrature
+        # points
+        # -- First order component -- #
+        # TODO: This nq thing is a hack
+        nq = 1
+        U_L = np.empty((nq, 4))
+        U_R = np.empty_like(U_L)
+        F = np.empty_like(U_L)
+        U_L[:] = U[L].copy()
+        U_R[:] = U[R].copy()
+
+        # -- Second order component -- #
+        for i in range(nq):
+            if nq == 2:
+                # Get quadrature point in physical space
+                quad_pt = mesh.quad_pts_phys[face_ID, i]
+            else:
+                # Use the midpoint
+                quad_pt = mesh.edge_points[face_ID]
+            U_L[i] += limiter[L] * np.einsum('jk, k -> j', gradU[L], quad_pt - mesh.xy[L])
+            U_R[i] += limiter[R] * np.einsum('jk, k -> j', gradU[R], quad_pt - mesh.xy[R])
+
+        # Evalute interior fluxes
+        # TODO: Serialize fluxes to get rid of the reshapes
+        F = data.flux.compute_flux(U_L, U_R, mesh.area_normals_p2[face_ID])
+        # TODO: Unhardcode these quadrature weights (.5, .5)
+        F = np.mean(F, axis=0)
+
+        # Update residual of cells on the left and right
+        residual[L] += -1 / mesh.area[L] * F
+        residual[R] +=  1 / mesh.area[R] * F
 
     # Compute ghost state
     problem.compute_ghost_state(U, U_ghost, mesh.bc_type)
     # Evalute boundary fluxes
     F_bc = data.flux.compute_flux(U[mesh.bc_type[:, 0]], U_ghost, mesh.bc_area_normal)
 
-    # Update cells on the left and right sides, for interior faces
-    cellL_ID = mesh.edge[:, 0]
-    cellR_ID = mesh.edge[:, 1]
-    np.add.at(residual, cellL_ID, -1 / mesh.area[cellL_ID].reshape(-1, 1) * F)
-    np.add.at(residual, cellR_ID,  1 / mesh.area[cellR_ID].reshape(-1, 1) * F)
     # Incorporate boundary faces
     cellL_ID = mesh.bc_type[:, 0]
     np.add.at(residual, cellL_ID, -1 / mesh.area[cellL_ID].reshape(-1, 1) * F_bc)

@@ -105,7 +105,7 @@ class LagrangeSegmentP1(LagrangeSegment):
         --------
         basis_val - array of basis values evaluated at x (n, nb)
         '''
-        n = xy.shape[0]
+        n = x.shape[0]
         basis_val = np.empty((n, self.nb))
         # Evaluate Lagrange basis functions
         basis_val[:, 0] = 1 - x

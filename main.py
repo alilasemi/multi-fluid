@@ -10,10 +10,10 @@ from residual import get_residual, get_residual_phi, Roe, Upwind
 
 # Solver inputs
 Problem = AdvectedBubble
-nx = 5
-ny = 5
-n_t = 1
-t_final = 1e2 * .01 / 400
+nx = 20
+ny = 20
+n_t = 200
+t_final = .01#1e2 * .01 / 400
 dt = t_final / n_t
 adaptive = False
 
@@ -23,12 +23,13 @@ xR = 1
 yL = -1
 yR = 1
 
-plot_mesh = True
+plot_mesh = False#True
 plot_contour = True
-only_rho = True
+only_rho = False#True
 filetype = 'pdf'
 
-t_list = [dt]#[dt, .004, .008]
+t_list = [dt, .004, .008]
+#t_list = [dt]
 
 def main():
     compute_solution()
