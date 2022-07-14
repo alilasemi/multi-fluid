@@ -1,5 +1,5 @@
 #TODO: Unhack these
-python='/home/ali/software/anaconda3/bin/python'
+python='${HOME}/software/anaconda3/bin/python'
 # Compiler
 CXX = g++
 
@@ -10,10 +10,10 @@ build_dir = $(src_dir)/build
 src = $(wildcard $(src_dir)/*.cpp)
 lib = $(src:$(src_dir)/%.cpp=$(build_dir)/%.so)
 # Paths to includes
-include_paths =
+include_paths = eigen/
 # Compiler flags
 optimization = -O3
-flags = $(foreach dir, $(include_paths), -I$(dir)) -std=c++11 $(optimization) \
+flags = $(foreach dir, $(include_paths), -I$(dir)) -std=c++17 $(optimization) \
 		-Wall -shared -fPIC $(shell $(python) -m pybind11 --includes)
 # Libraries and locations
 ldlibs =
@@ -21,7 +21,7 @@ ldlibs =
 empty =
 
 .PHONY: all
-all: directories $(lib)
+all: directories $(lib) $(build_dir)/interior_face_residual.so
 
 # This is purely for testing purposes
 .PHONY: print
@@ -37,4 +37,7 @@ clean:
 	rm -rf $(src_dir) $(build_dir)
 
 $(build_dir)/%.so: $(src_dir)/%.cpp
+	$(CXX) $(flags) -o $@ $^
+
+$(build_dir)/interior_face_residual.so: interior_face_residual.cpp
 	$(CXX) $(flags) -o $@ $^

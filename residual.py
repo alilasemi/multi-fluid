@@ -49,7 +49,7 @@ def get_residual(data, mesh, problem):
         # points
         # -- First order component -- #
         # TODO: This nq thing is a hack
-        nq = 1
+        nq = 2
         U_L = np.empty((nq, 4))
         U_R = np.empty_like(U_L)
         F = np.empty_like(U_L)
