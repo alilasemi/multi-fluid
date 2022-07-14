@@ -3,6 +3,8 @@ import pathlib
 import pickle
 import sympy as sp
 
+from cache.build.interior_face_residual import compute_interior_face_residual
+
 
 def get_residual(data, mesh, problem):
     # Unpack
@@ -40,6 +42,19 @@ def get_residual(data, mesh, problem):
         limiter[:, k] = damping * np.min(limiter_j, axis=1)
 
     # Loop over faces
+    # This loop requires:
+    # mesh.n_faces
+    # mesh.edge
+    # U
+    # nq?
+    # mesh.quad_pts_phys OR mesh.edge_points
+    # limiter
+    # gradU
+    # mesh.xy
+    # mesh.area_normals_p2
+    # mesh.area
+    # residual
+    compute_interior_face_residual(U, mesh.edge)
     for face_ID in range(mesh.n_faces):
         # Left and right cell IDs
         L = mesh.edge[face_ID, 0]

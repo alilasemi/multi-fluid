@@ -12,7 +12,7 @@ lib = $(src:$(src_dir)/%.cpp=$(build_dir)/%.so)
 # Paths to includes
 include_paths = eigen/
 # Compiler flags
-optimization = -O3
+optimization = -g
 flags = $(foreach dir, $(include_paths), -I$(dir)) -std=c++17 $(optimization) \
 		-Wall -shared -fPIC $(shell $(python) -m pybind11 --includes)
 # Libraries and locations
