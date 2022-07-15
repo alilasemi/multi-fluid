@@ -233,6 +233,92 @@ class AdvectedBubble(Problem):
                 print(f'ERROR: Invalid BC type given! bc = {bc}')
 
 
+class TaylorGreen(Problem):
+    '''
+    Class for the Taylor Green vortex problem.
+    '''
+
+    # bubble state (rho, u, v, p, phi)
+    bubble = np.array([
+            .125, 50, 0, 1e5, -1
+    ])
+
+    # Ambient state (rho, u, v, p, phi)
+    ambient = np.array([
+            1, 50, 0, 1e5, 1
+    ])
+
+    # Radius of bubble
+    radius = .25
+
+    # Ratio of specific heats
+    g = 1.4
+
+    def get_initial_conditions(self):
+        # Unpack
+        x = self.xy[:, 0]
+        y = self.xy[:, 1]
+        g = self.g
+        # Taylor Green initial velocity field
+        u =  np.cos(x) * np.sin(y)
+        v = -np.sin(x) * np.cos(y)
+        # Pick a number for density (it's an "incompressible" problem)
+        r = 1
+        # Pressure comes from momentum equations
+        p = (-r / 4) * (np.cos(2*x) + np.cos(2*y))
+        # TODO: What is going on here? TVG is a viscous case :(
+        p += 2
+
+        # Get initial conditions as conservatives
+        U = np.empty((self.n, 4))
+        for i in range(self.n):
+            U[i] = primitive_to_conservative(r, u[i], v[i], p[i], g)
+
+        # Phi doesn't really matter for this problem, but I guess a circle is
+        # cool
+        phi = self.xy[:, 0]**2 + self.xy[:, 1]**2 - self.radius**2
+        phi /= np.max(phi)
+        return U, phi
+
+    def compute_ghost_state(self, U, U_ghost, bc_type):
+        g = self.g
+        # Loop over each boundary cell
+        for i in range(U_ghost.shape[0]):
+            # Get the type of this boundary
+            cell_ID, bc = bc_type[i]
+            # Get primitives
+            V = conservative_to_primitive(*U[cell_ID], g)
+            # Compute wall ghost state, regardless of if it's marked as a wall,
+            # inflow or outflow
+            if bc in [1, 2, 3]:
+                # The density and pressure are kept the same in the ghost state
+                r = V[0]
+                p = V[3]
+                # The x-direction velocity is not changed since the wall is
+                # horizontal
+                u = V[1]
+                # The y-direction velocity is flipped in sign, since the wall is
+                # horizontal
+                v = -V[2]
+            else:
+                print(f'ERROR: Invalid BC type given! bc = {bc}')
+            # Compute ghost state
+            U_ghost[i] = primitive_to_conservative(r, u, v, p, g)
+
+    def compute_ghost_phi(self, phi, phi_ghost, bc_type):
+        # Loop over each boundary cell
+        for i in range(phi_ghost.shape[0]):
+            cell_ID, bc = bc_type[i]
+            # Compute wall ghost state, regardless of if it's marked as a wall,
+            # inflow or outflow
+            if bc in [1, 2, 3]:
+                # Just use the initial value as the boundary value
+                phi_ghost[i] = (self.xy[cell_ID, 0]**2 + self.xy[cell_ID, 1]**2
+                        - self.radius**2)
+            else:
+                print(f'ERROR: Invalid BC type given! bc = {bc}')
+
+
 def primitive_to_conservative(r, u, v, p, g):
     W = np.empty(4)
     W[0] = r

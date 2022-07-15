@@ -4,31 +4,33 @@ import numpy as np
 
 from mesh import Mesh
 from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
-        conservative_to_primitive)
+        TaylorGreen, conservative_to_primitive)
 from residual import get_residual, get_residual_phi, Roe, Upwind
 
 
 # Solver inputs
-Problem = AdvectedBubble
-nx = 40
-ny = 40
-n_t = 400
-t_final = .01#1e2 * .01 / 400
+Problem = TaylorGreen
+nx = 10
+ny = 10
+n_t = 200
+t_final = 10#1e2 * .01 / 400
 dt = t_final / n_t
 adaptive = False
 
 # Domain
-xL = -1
-xR = 1
-yL = -1
-yR = 1
+xL = 0
+xR = 2*np.pi
+yL = 0
+yR = 2*np.pi
 
 plot_mesh = False#True
 plot_contour = True
-only_rho = True
+only_rho = False
+plot_ICs = False
 filetype = 'pdf'
 
-t_list = [dt, .004, .008]
+#t_list = [dt, .004, .008]
+t_list = [dt, 4, 8]
 #t_list = [dt]
 
 def main():
@@ -51,6 +53,10 @@ def compute_solution():
     phi_list = []
     x_shock = np.empty(n_t)
     for i in range(n_t):
+        if plot_ICs:
+            U_list.append(U)
+            phi_list.append(phi)
+            break
         data.new_iteration()
         data.gradU = compute_gradient(data.U, mesh)
         # Update mesh
@@ -92,16 +98,20 @@ def compute_solution():
                     U[i, 0], U[i, 1], U[i, 2], U[i, 3], problem.g)
         V_list.append(V)
 
+    # Save solution
+    with open('U.npy', 'wb') as f:
+        np.save(f, data.U)
+
     # Plot
     rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
     rc('text', usetex=True)
 
     # Density, velocity, and pressure profiles
     if only_rho:
-        fig, axes = plt.subplots(1, len(t_list), figsize=(10, 3), squeeze=False)
+        fig, axes = plt.subplots(len(t_list), 1, figsize=(10, 3), squeeze=False)
         num_vars = 1
     else:
-        fig, axes = plt.subplots(len(t_list), 3, figsize=(6.5, 6.5))
+        fig, axes = plt.subplots(len(t_list), 3, figsize=(6.5, 6.5), squeeze=False)
         num_vars = 3
     for i in range(len(t_list)):
         V = V_list[i]

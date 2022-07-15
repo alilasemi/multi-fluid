@@ -65,10 +65,6 @@ void compute_interior_face_residual(np_array<double> U_np,
             }
         }
     }
-
-    cout << endl;
-    cout << U(0, all) << endl;
-    cout << edge(0, all) << endl;
 }
 
 PYBIND11_MODULE(interior_face_residual, m) {

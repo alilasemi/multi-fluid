@@ -43,10 +43,9 @@ def get_residual(data, mesh, problem):
 
     # Loop over faces
     # This loop requires:
-    # mesh.n_faces
-    # mesh.edge
     # U
-    # nq?
+    # mesh.edge
+    # mesh.quad_wts
     # mesh.quad_pts_phys OR mesh.edge_points
     # limiter
     # gradU
@@ -54,7 +53,9 @@ def get_residual(data, mesh, problem):
     # mesh.area_normals_p2
     # mesh.area
     # residual
-    compute_interior_face_residual(U, mesh.edge)
+#    compute_interior_face_residual(U, mesh.edge, mesh.quad_wts,
+#            mesh.quad_pts_phys, limiter, gradU, mesh.xy, mesh.area_normals_p2,
+#            mesh.area, residual)
     for face_ID in range(mesh.n_faces):
         # Left and right cell IDs
         L = mesh.edge[face_ID, 0]
@@ -64,7 +65,7 @@ def get_residual(data, mesh, problem):
         # points
         # -- First order component -- #
         # TODO: This nq thing is a hack
-        nq = 2
+        nq = 1
         U_L = np.empty((nq, 4))
         U_R = np.empty_like(U_L)
         F = np.empty_like(U_L)
