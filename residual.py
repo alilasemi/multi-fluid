@@ -83,20 +83,25 @@ def get_residual(data, mesh, problem):
             U_L[i] += limiter[L] * np.einsum('jk, k -> j', gradU[L], quad_pt - mesh.xy[L])
             U_R[i] += limiter[R] * np.einsum('jk, k -> j', gradU[R], quad_pt - mesh.xy[R])
 
-        # Evalute interior fluxes
-        # TODO: Serialize fluxes to get rid of the reshapes
-        F = data.flux.compute_flux(U_L, U_R, mesh.area_normals_p2[face_ID])
+            # Evalute interior fluxes
+            # TODO: Serialize fluxes to get rid of the reshapes
+            F[i] = data.flux.compute_flux(U_L, U_R, mesh.area_normals_p2[face_ID, i])
         # TODO: Unhardcode these quadrature weights (.5, .5)
         F = np.mean(F, axis=0)
 
         # Update residual of cells on the left and right
         residual[L] += -1 / mesh.area[L] * F
         residual[R] +=  1 / mesh.area[R] * F
+    breakpoint()
 
     # Compute ghost state
     problem.compute_ghost_state(U, U_ghost, mesh.bc_type)
+    F_bc = np.empty_like(U_ghost)
     # Evalute boundary fluxes
-    F_bc = data.flux.compute_flux(U[mesh.bc_type[:, 0]], U_ghost, mesh.bc_area_normal)
+    for face_ID in range(U_ghost.shape[0]):
+        F_bc[face_ID] = data.flux.compute_flux(
+                U[mesh.bc_type[face_ID, 0]].copy(), U_ghost[face_ID].copy(),
+                mesh.bc_area_normal[face_ID].copy())
 
     # Incorporate boundary faces
     cellL_ID = mesh.bc_type[:, 0]
@@ -187,6 +192,10 @@ class Roe:
                 self.get_diagonalization()
 
     def compute_flux(self, U_L, U_R, area_normal):
+        import cache.build.roe
+        return cache.build.roe.compute_flux(U_L[0].copy(), U_R[0].copy(), area_normal, self.g)
+        area_normal = area_normal.reshape((1, -1))
+
         g = self.g
         n_faces = U_L.shape[0]
         # Unit normals

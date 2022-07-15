@@ -10,7 +10,7 @@ build_dir = $(src_dir)/build
 src = $(wildcard $(src_dir)/*.cpp)
 lib = $(src:$(src_dir)/%.cpp=$(build_dir)/%.so)
 # Paths to includes
-include_paths = eigen/
+include_paths = ./ eigen/
 # Compiler flags
 optimization = -g
 flags = $(foreach dir, $(include_paths), -I$(dir)) -std=c++17 $(optimization) \
@@ -21,7 +21,7 @@ ldlibs =
 empty =
 
 .PHONY: all
-all: directories $(lib) $(build_dir)/interior_face_residual.so
+all: directories $(lib) $(build_dir)/interior_face_residual.so $(build_dir)/roe.so
 
 # This is purely for testing purposes
 .PHONY: print
@@ -40,4 +40,7 @@ $(build_dir)/%.so: $(src_dir)/%.cpp
 	$(CXX) $(flags) -o $@ $^
 
 $(build_dir)/interior_face_residual.so: interior_face_residual.cpp
+	$(CXX) $(flags) -o $@ $^
+
+$(build_dir)/roe.so: roe.cpp
 	$(CXX) $(flags) -o $@ $^

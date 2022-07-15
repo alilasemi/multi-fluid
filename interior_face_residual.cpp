@@ -1,20 +1,9 @@
 #include <math.h>
-#include <Eigen/Dense>
-#include <pybind11/numpy.h>
-#include <pybind11/pybind11.h>
 #include <iostream>
-namespace py = pybind11;
 using std::cout, std::endl;
 
+#include <defines.h>
 using StateVector = Eigen::Vector4d;
-using Eigen::placeholders::all;
-
-// Custom type for 2D matrices using Eigen maps. It is important to specify
-// RowMajor since the default of Eigen is column major
-template <class T> using matrix = Eigen::Map<
-        Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>;
-// Custom type for Numpy arrays
-template <class T> using np_array = py::array_t<T, py::array::c_style>;
 
 class Roe {
     public:
@@ -22,23 +11,12 @@ class Roe {
                 Eigen::Vector2d area_normal, StateVector F);
 };
 
-template <class T>
-matrix<T> numpy_to_eigen_2D(np_array<T> A) {
-    // Get pointer
-    T* A_ptr = (T*) A.request().ptr;
-    // Get shape
-    const auto& shape = A.request().shape;
-    // Turn into Eigen map
-    matrix<T> A_map(A_ptr, shape[0], shape[1]);
-    return A_map;
-}
-
 // Compute the interior faces' contributions to the residual.
 void compute_interior_face_residual(np_array<double> U_np,
         np_array<long> edge_np) {
     // Convert Numpy arrays to Eigen
-    auto U = numpy_to_eigen_2D(U_np);
-    auto edge = numpy_to_eigen_2D(edge_np);
+    auto U = numpy_to_eigen(U_np);
+    auto edge = numpy_to_eigen(edge_np);
 
     // Sizing
     auto n_faces = edge.rows();
