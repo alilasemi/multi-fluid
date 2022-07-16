@@ -30,14 +30,9 @@ matrix<double> convective_fluxes(matrix<double> U, double g) {
     return F;
 }
 
-np_array<double> compute_flux(np_array<double>& U_L_np,
-        np_array<double>& U_R_np, np_array<double>& area_normal_np, double g) {
-    // Convert Numpy arrays to Eigen
-    auto buf = U_L_np.request();
-    auto shape = buf.shape;
-    auto U_L = numpy_to_eigen(U_L_np);
-    auto U_R = numpy_to_eigen(U_R_np);
-    auto area_normal = numpy_to_eigen(area_normal_np);
+np_array<double> compute_flux(matrix<double> U_L,
+        matrix<double> U_R, matrix<double> area_normal, double g,
+        matrix<double> F) {
     // Sizing
     auto n_faces = U_L.rows();
 
@@ -79,15 +74,10 @@ np_array<double> compute_flux(np_array<double>& U_L_np,
     auto A_RL_p = Q_inv * Lambda_p * Q;
     auto abs_A_RL = A_RL_p - A_RL_m;
 
-    // Array of fluxes
-    auto F_np = np_array<double>(4);
-    auto F = numpy_to_eigen(F_np);
-
     // Compute flux
     F = length * (
             .5 * (convective_fluxes(U_L, g) + convective_fluxes(U_R, g)) * unit_normals
             - .5 * (abs_A_RL * (U_R - U_L)));
-    return F_np;
 }
 
 PYBIND11_MODULE(roe, m) {

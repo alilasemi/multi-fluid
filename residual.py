@@ -42,9 +42,13 @@ def get_residual(data, mesh, problem):
         # Take the minimum across each face point
         limiter[:, k] = damping * np.min(limiter_j, axis=1)
 
+    # TODO: Went I last worked on this, residual remains just zeros after this
+    # function runs, even though it's passed by reference. How to modify
+    # contents of a py::array_t?
     compute_interior_face_residual(U, mesh.edge, LagrangeSegment.quad_wts,
             mesh.quad_pts_phys, limiter, gradU, mesh.xy, mesh.area_normals_p2,
-            mesh.area, mesh.edge_points, residual)
+            mesh.area, mesh.edge_points, data.flux.g, residual)
+    breakpoint()
     for face_ID in range(mesh.n_faces):
         # Left and right cell IDs
         L = mesh.edge[face_ID, 0]

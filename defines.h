@@ -1,3 +1,6 @@
+#ifndef defines_h
+#define defines_h
+
 #include <Eigen/Dense>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
@@ -31,3 +34,5 @@ matrix_map<T> numpy_to_eigen(np_array<T> A) {
     matrix_map<T> A_map(A_ptr, rows, cols);
     return A_map;
 }
+
+#endif
