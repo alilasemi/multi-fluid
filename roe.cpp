@@ -30,15 +30,13 @@ matrix<double> convective_fluxes(matrix<double> U, double g) {
     return F;
 }
 
-np_array<double> compute_flux(np_array<double> U_L_np,
-        np_array<double> U_R_np, np_array<double> area_normal_np, double g) {
+np_array<double> compute_flux(np_array<double>& U_L_np,
+        np_array<double>& U_R_np, np_array<double>& area_normal_np, double g) {
     // Convert Numpy arrays to Eigen
-    const auto& shape = U_L_np.request().shape;
-    cout << shape[0] << "  " << shape[1] << endl;
+    auto buf = U_L_np.request();
+    auto shape = buf.shape;
     auto U_L = numpy_to_eigen(U_L_np);
     auto U_R = numpy_to_eigen(U_R_np);
-    cout << U_L.rows() << U_L.cols() << endl;
-    cout << U_R.rows() << U_R.cols() << endl;
     auto area_normal = numpy_to_eigen(area_normal_np);
     // Sizing
     auto n_faces = U_L.rows();

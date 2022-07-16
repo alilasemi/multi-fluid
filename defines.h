@@ -20,7 +20,7 @@ matrix_map<T> numpy_to_eigen(np_array<T> A) {
     // Get pointer
     T* A_ptr = (T*) A.request().ptr;
     // Get shape
-    const auto& shape = A.request().shape;
+    auto shape = A.request().shape;
     // Check if 1D or 2D
     int rows = shape[0];
     int cols = 1;

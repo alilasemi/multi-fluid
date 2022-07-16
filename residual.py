@@ -4,6 +4,7 @@ import pickle
 import sympy as sp
 
 from cache.build.interior_face_residual import compute_interior_face_residual
+from lagrange import LagrangeSegment
 
 
 def get_residual(data, mesh, problem):
@@ -41,21 +42,9 @@ def get_residual(data, mesh, problem):
         # Take the minimum across each face point
         limiter[:, k] = damping * np.min(limiter_j, axis=1)
 
-    # Loop over faces
-    # This loop requires:
-    # U
-    # mesh.edge
-    # mesh.quad_wts
-    # mesh.quad_pts_phys OR mesh.edge_points
-    # limiter
-    # gradU
-    # mesh.xy
-    # mesh.area_normals_p2
-    # mesh.area
-    # residual
-#    compute_interior_face_residual(U, mesh.edge, mesh.quad_wts,
-#            mesh.quad_pts_phys, limiter, gradU, mesh.xy, mesh.area_normals_p2,
-#            mesh.area, residual)
+    compute_interior_face_residual(U, mesh.edge, LagrangeSegment.quad_wts,
+            mesh.quad_pts_phys, limiter, gradU, mesh.xy, mesh.area_normals_p2,
+            mesh.area, mesh.edge_points, residual)
     for face_ID in range(mesh.n_faces):
         # Left and right cell IDs
         L = mesh.edge[face_ID, 0]
@@ -65,7 +54,7 @@ def get_residual(data, mesh, problem):
         # points
         # -- First order component -- #
         # TODO: This nq thing is a hack
-        nq = 1
+        nq = 2
         U_L = np.empty((nq, 4))
         U_R = np.empty_like(U_L)
         F = np.empty_like(U_L)
@@ -84,24 +73,29 @@ def get_residual(data, mesh, problem):
             U_R[i] += limiter[R] * np.einsum('jk, k -> j', gradU[R], quad_pt - mesh.xy[R])
 
             # Evalute interior fluxes
-            # TODO: Serialize fluxes to get rid of the reshapes
-            F[i] = data.flux.compute_flux(U_L, U_R, mesh.area_normals_p2[face_ID, i])
+            # TODO: For some reason, I have to pass 2D arrays into the
+            # C++/Pybind code. Otherwise, it says they are size 1 with ndim=0.
+            # It is annoying and I don't know why this happens (there are 1D
+            # array examples on the internet that work fine). Need a separate
+            # small reproducer.
+            # TODO: Check data ownership. F is created inside C++...not good.
+            F[i] = data.flux.compute_flux(U_L[i].reshape(1, -1), U_R[i].reshape(1, -1), mesh.area_normals_p2[face_ID, i])
         # TODO: Unhardcode these quadrature weights (.5, .5)
         F = np.mean(F, axis=0)
 
         # Update residual of cells on the left and right
         residual[L] += -1 / mesh.area[L] * F
         residual[R] +=  1 / mesh.area[R] * F
-    breakpoint()
 
     # Compute ghost state
     problem.compute_ghost_state(U, U_ghost, mesh.bc_type)
     F_bc = np.empty_like(U_ghost)
     # Evalute boundary fluxes
     for face_ID in range(U_ghost.shape[0]):
+        U_L = U[mesh.bc_type[face_ID, 0]].reshape(1, -1)
         F_bc[face_ID] = data.flux.compute_flux(
-                U[mesh.bc_type[face_ID, 0]].copy(), U_ghost[face_ID].copy(),
-                mesh.bc_area_normal[face_ID].copy())
+                U_L, U_ghost[face_ID].reshape(1, -1),
+                mesh.bc_area_normal[face_ID])
 
     # Incorporate boundary faces
     cellL_ID = mesh.bc_type[:, 0]
@@ -191,9 +185,10 @@ class Roe:
         self.A_RL_func, self.Lambda_func, self.Q_inv_func, self.Q_func = \
                 self.get_diagonalization()
 
-    def compute_flux(self, U_L, U_R, area_normal):
-        import cache.build.roe
-        return cache.build.roe.compute_flux(U_L[0].copy(), U_R[0].copy(), area_normal, self.g)
+    def compute_flux(self, U_L, U_R, area_normal, cpp=None):
+        if cpp is None:
+            import cache.build.roe
+            return cache.build.roe.compute_flux(U_L[0].copy(), U_R[0].copy(), area_normal, self.g)
         area_normal = area_normal.reshape((1, -1))
 
         g = self.g
