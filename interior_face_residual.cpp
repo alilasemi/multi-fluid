@@ -5,7 +5,6 @@ using std::cout, std::endl;
 #include <defines.h>
 //TODO
 #include <roe.cpp>
-using StateVector = Eigen::Vector4d;
 
 // Compute the interior faces' contributions to the residual.
 void compute_interior_face_residual(matrix_ref<double> U,
@@ -57,8 +56,10 @@ void compute_interior_face_residual(matrix_ref<double> U,
                 //quad_pt = edge_points(face_ID);
             }
             // TODO: There has to be a cleaner way...
-            U_L += (limiter(L, all).transpose().array() * (gradU_L * (quad_pt - xy(L, all).transpose())).array()).matrix();
-            U_R += (limiter(R, all).transpose().array() * (gradU_R * (quad_pt - xy(R, all).transpose())).array()).matrix();
+            for (int k = 0; k < 4; k++) {
+                U_L(k) += limiter(L, k) * (gradU_L(k, all).transpose().cwiseProduct(quad_pt - xy(L, all).transpose()).sum());
+                U_R(k) += limiter(R, k) * (gradU_R(k, all).transpose().cwiseProduct(quad_pt - xy(R, all).transpose()).sum());
+            }
 
             // Package the normals
             matrix<double> area_normal(2, 1);

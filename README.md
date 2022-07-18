@@ -12,3 +12,6 @@ TODO: Add versions for these!
 To download Pybind, use the following:
 
     conda install -c conda-forge pybind11
+
+TODO: Add instructions (automated?) for adding Eigen support to gdb (the
+.gdbinit file)
