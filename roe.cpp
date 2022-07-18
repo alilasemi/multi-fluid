@@ -30,12 +30,9 @@ matrix<double> convective_fluxes(matrix<double> U, double g) {
     return F;
 }
 
-np_array<double> compute_flux(matrix<double> U_L,
-        matrix<double> U_R, matrix<double> area_normal, double g,
-        matrix<double> F) {
-    // Sizing
-    auto n_faces = U_L.rows();
-
+void compute_flux(matrix<double>& U_L,
+        matrix<double>& U_R, matrix<double>& area_normal, double g,
+        vector<double>& F) {
     // Unit normals
     auto length = area_normal.norm();
     auto unit_normals = area_normal / length;
