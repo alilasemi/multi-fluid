@@ -9,29 +9,29 @@ from residual import get_residual, get_residual_phi, Roe, Upwind
 
 
 # Solver inputs
-Problem = TaylorGreen
+Problem = AdvectedBubble
 nx = 10
 ny = 10
-n_t = 200
-t_final = 10#1e2 * .01 / 400
+n_t = 2
+t_final = .01/200
 dt = t_final / n_t
-adaptive = False
+adaptive = True
 
 # Domain
-xL = 0
-xR = 2*np.pi
-yL = 0
-yR = 2*np.pi
+xL = -1
+xR = 1
+yL = -1
+yR = 1
 
-plot_mesh = False#True
+plot_mesh = True
 plot_contour = True
-only_rho = False
+only_rho = True#False
 plot_ICs = False
 filetype = 'pdf'
 
 #t_list = [dt, .004, .008]
-t_list = [dt, 4, 8]
-#t_list = [dt]
+#t_list = [dt, 4, 8]
+t_list = [dt, 2*dt]
 
 def main():
     compute_solution()
@@ -47,6 +47,8 @@ def compute_solution():
 
     # Store data
     data = SimulationData(U, U_ghost, phi, problem.g)
+    #TODO
+    data.coords_list = []
 
     # Loop over time
     U_list = []
@@ -58,10 +60,13 @@ def compute_solution():
             phi_list.append(phi)
             break
         data.new_iteration()
-        data.gradU = compute_gradient(data.U, mesh)
         # Update mesh
         if adaptive:
             mesh.update(data)
+            data.coords_list.append([mesh.vol_points.copy(),
+                    mesh.edge_points.copy()])
+        # Compute gradients
+        data.gradU = compute_gradient(data.U, mesh)
         # Update solution
         data.U = update(dt, data, mesh, problem)
         data.phi = update_phi(dt, data, mesh, problem)
@@ -173,6 +178,7 @@ def compute_solution():
         fig, axes = plt.subplots(len(t_list), 1, figsize=(6.5, 8), squeeze=False)
         for i in range(len(t_list)):
             phi = phi_list[i]
+            coords = data.coords_list[i]
 
             ax = axes[i, 0]
             ax.set_xlim([mesh.xL, mesh.xR])
@@ -183,7 +189,7 @@ def compute_solution():
                 ax.plot(points[:, 0], points[:, 1], 'k', lw=.5)
             # Loop over dual faces
             for face_ID in range(mesh.n_faces):
-                points = mesh.get_face_point_coords(face_ID)
+                points = mesh.get_face_point_coords(face_ID, *coords)
                 # Get dual mesh neighbors
                 i, j = mesh.edge[face_ID]
                 # Check if this is a surrogate boundary

@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.optimize
 
 from lagrange import (LagrangeSegmentP1, LagrangeSegmentP2, LagrangeTriangleP1,
         LagrangeTriangleP2)
@@ -277,21 +278,28 @@ class Mesh:
                 # Add final volume point
                 self.face_points[face_ID, 2] = indices[-1]
 
-    def get_face_point_coords(self, i_face):
+    def is_boundary(self, face_ID):
+        return self.face_points[face_ID, 2] == -1
+
+    def get_face_point_coords(self, i_face, vol_points = None, edge_points = None):
         '''
         Get coordinates of points on a given dual mesh face.
         '''
+        if vol_points is None:
+            vol_points = self.vol_points
+        if edge_points is None:
+            edge_points = self.edge_points
         # If it's a boundary face
-        if self.face_points[i_face, 2] == -1:
+        if self.is_boundary(i_face):
             coords = np.empty((2, 2))
-            coords[0] = self.vol_points[self.face_points[i_face, 0]]
-            coords[1] = self.edge_points[self.face_points[i_face, 1]]
+            coords[0] = vol_points[self.face_points[i_face, 0]]
+            coords[1] = edge_points[self.face_points[i_face, 1]]
         # If it's an interior face
         else:
             coords = np.empty((3, 2))
-            coords[0] = self.vol_points[self.face_points[i_face, 0]]
-            coords[1] = self.edge_points[self.face_points[i_face, 1]]
-            coords[2] = self.vol_points[self.face_points[i_face, 2]]
+            coords[0] = vol_points[self.face_points[i_face, 0]]
+            coords[1] = edge_points[self.face_points[i_face, 1]]
+            coords[2] = vol_points[self.face_points[i_face, 2]]
         return coords
 
     def get_plot_points_primal_cell(self, cell_ID):
@@ -308,52 +316,86 @@ class Mesh:
         Update the dual mesh to fit the interface better.
         '''
         t = data.t
-        max_iter = 10
-        for iter in range(max_iter):
-            print(f'mesh iteration = {1 + iter}/{max_iter}', end='\r')
-            # TODO: This is with a hardcoded phi. This is because I want to neglect
-            # error in phi for now.
-            u = 50
-            radius = .25
-            def get_phi(x, y):
-                phi = (x - u * t)**2 + y**2 - radius**2
-                phi /= self.xL**2 + self.xR**2 - radius**2
-                return phi
-            def get_grad_phi(x, y):
-                gphi = np.array([
-                    2 * (x - u * t),
-                    2 * y])
-                gphi /= self.xL**2 + self.xR**2 - radius**2
-                return gphi
+        # TODO: This is with a hardcoded phi. This is because I want to neglect
+        # error in phi for now.
+        u = 50
+        radius = .25
+        def get_phi(coords):
+            x, y = coords
+            phi = (x - u * t)**2 + y**2 - radius**2
+            phi /= self.xL**2 + self.xR**2 - radius**2
+            return phi
+        def get_grad_phi(coords):
+            x, y = coords
+            gphi = np.array([
+                2 * (x - u * t),
+                2 * y])
+            gphi /= self.xL**2 + self.xR**2 - radius**2
+            return gphi
+        def get_phi_squared(coords):
+            return get_phi(coords)**2
+        def get_grad_phi_squared(coords):
+            return 2 * get_phi(coords) * get_grad_phi(coords)
+        def get_incenter_and_inradius(node_coords):
+            # -- Incenter -- #
+            A = node_coords[0]
+            B = node_coords[1]
+            C = node_coords[2]
+            a = np.linalg.norm(C - B)
+            b = np.linalg.norm(C - A)
+            c = np.linalg.norm(A - B)
+            incenter = (A*a + B*b + C*c)/(a + b + c)
+            # -- Inradius -- #
+            x1, y1 = node_coords[0]
+            x2, y2 = node_coords[1]
+            x3, y3 = node_coords[2]
+            area = .5 * (x1*(y2 - y3) + x2*(y3 - y1) + x3*(y1 - y2))
+            inradius = 2 * area / (a + b + c)
+            return incenter, inradius
+        def constraint_func(coords, incenter, inradius):
+            return np.sum((coords - incenter)**2) - inradius**2
+        def constraint_jac(coords, incenter, inradius):
+            return np.array([2 * (coords[0] - incenter[0]), 2 * (coords[1] - incenter[1])])
 
-            for face_ID in range(self.n_faces):
-                # Get dual mesh neighbors
-                i, j = self.edge[face_ID]
-                # Check for interface
-                xi, yi = self.xy[i]
-                xj, yj = self.xy[j]
-                if get_phi(xi, yi) * get_phi(xj, yj) < 0:
-                    # If it's an interface, move the edge point towards phi = 0
-                    x, y = self.edge_points[face_ID]
-                    phi = get_phi(x, y)
-                    gphi = get_grad_phi(x, y)
-                    if np.abs(gphi[0]) > 1e-5:
-                        self.edge_points[face_ID, 0] -= .3 * phi / gphi[0]
-                    if np.abs(gphi[1]) > 1e-5:
-                        self.edge_points[face_ID, 1] -= .3 * phi / gphi[1]
+        for face_ID in range(self.n_faces):
+            # TODO: Only works for interior faces
+            if self.is_boundary(face_ID): continue
 
-            phi_nodes = get_phi(self.xy[:, 0], self.xy[:, 1])
-            for cell_ID in range(self.n_primal_cells):
-                nodes = self.primal_cell_to_nodes[cell_ID]
-                phi = phi_nodes[nodes]
-                products = np.array([phi[0] * phi[1], phi[1] * phi[2], phi[2] * phi[0]])
-                if np.any(products < 0):
-                    x, y = self.vol_points[cell_ID]
-                    phi = get_phi(x, y)
-                    gphi = get_grad_phi(x, y)
-                    self.vol_points[cell_ID, 0] -= .3 * phi / gphi[0]
-                    self.vol_points[cell_ID, 1] -= .3 * phi / gphi[1]
-        print()
+            # Get dual mesh neighbors
+            i, j = self.edge[face_ID]
+            # Check for interface
+            if get_phi(self.xy[i]) * get_phi(self.xy[j]) < 0:
+                # If it's an interface, move the face points towards phi = 0
+                for i in range(3):
+                    if i == 1:
+                        coords = self.edge_points[self.face_points[face_ID, i]]
+                    else:
+                        cell_ID = self.face_points[face_ID, i]
+                        coords = self.vol_points[cell_ID]
+                        # Get primal cell nodes
+                        nodes = self.primal_cell_to_nodes[cell_ID]
+                        node_coords = self.xy[nodes]
+                        incenter, inradius = get_incenter_and_inradius(node_coords)
+                        min_coords = scipy.optimize.minimize(get_phi_squared,
+                                incenter, jac=get_grad_phi_squared,
+                                constraints=[{
+                                    'type': 'ineq',
+                                    'fun': constraint_func,
+                                    'jac': constraint_jac,
+                                    'args': (incenter, inradius)}]).x
+                        coords[:] = min_coords
+
+#            phi_nodes = get_phi(self.xy[:, 0], self.xy[:, 1])
+#            for cell_ID in range(self.n_primal_cells):
+#                nodes = self.primal_cell_to_nodes[cell_ID]
+#                phi = phi_nodes[nodes]
+#                products = np.array([phi[0] * phi[1], phi[1] * phi[2], phi[2] * phi[0]])
+#                if np.any(products < 0):
+#                    x, y = self.vol_points[cell_ID]
+#                    phi = get_phi(x, y)
+#                    gphi = get_grad_phi(x, y)
+#                    self.vol_points[cell_ID, 0] -= .3 * phi / gphi[0]
+#                    self.vol_points[cell_ID, 1] -= .3 * phi / gphi[1]
 
     def compute_cell_areas(self):
         '''

@@ -42,55 +42,13 @@ def get_residual(data, mesh, problem):
         # Take the minimum across each face point
         limiter[:, k] = damping * np.min(limiter_j, axis=1)
 
-    # TODO: Went I last worked on this, residual remains just zeros after this
-    # function runs, even though it's passed by reference. How to modify
-    # contents of a py::array_t?
+    # Compute the interior face residual
+    # TODO: is Pybind OOP a thing? Seems to not be...
+    # TODO: Ditch the whole area_normals_p2 vs regular normals thing (actually
+    # p1 wouldn't even work)
     compute_interior_face_residual(U, mesh.edge, LagrangeSegment.quad_wts,
             mesh.quad_pts_phys, limiter, gradU, mesh.xy, mesh.area_normals_p2,
             mesh.area, mesh.edge_points, data.flux.g, residual)
-#    for face_ID in range(mesh.n_faces):
-#        # Left and right cell IDs
-#        L = mesh.edge[face_ID, 0]
-#        R = mesh.edge[face_ID, 1]
-#
-#        # Evaluate solution at faces on left and right, for both quadrature
-#        # points
-#        # -- First order component -- #
-#        # TODO: This nq thing is a hack
-#        nq = 2
-#        U_L = np.empty((nq, 4))
-#        U_R = np.empty_like(U_L)
-#        F = np.empty_like(U_L)
-#        U_L[:] = U[L].copy()
-#        U_R[:] = U[R].copy()
-#
-#        # -- Second order component -- #
-#        for i in range(nq):
-#            if nq == 2:
-#                # Get quadrature point in physical space
-#                quad_pt = mesh.quad_pts_phys[face_ID, i]
-#            else:
-#                # Use the midpoint
-#                quad_pt = mesh.edge_points[face_ID]
-#            U_L[i] += limiter[L] * np.einsum('jk, k -> j', gradU[L], quad_pt - mesh.xy[L])
-#            U_R[i] += limiter[R] * np.einsum('jk, k -> j', gradU[R], quad_pt - mesh.xy[R])
-#
-#            # Evalute interior fluxes
-#            # TODO: For some reason, I have to pass 2D arrays into the
-#            # C++/Pybind code. Otherwise, it says they are size 1 with ndim=0.
-#            # It is annoying and I don't know why this happens (there are 1D
-#            # array examples on the internet that work fine). Need a separate
-#            # small reproducer.
-#            # TODO: Check data ownership. F is created inside C++...not good.
-#            F[i] = data.flux.compute_flux(U_L[i].reshape(1, -1),
-#                    U_R[i].reshape(1, -1), mesh.area_normals_p2[face_ID, i],
-#                    cpp=False)
-#        # TODO: Unhardcode these quadrature weights (.5, .5)
-#        F = np.mean(F, axis=0)
-#
-#        # Update residual of cells on the left and right
-#        residual[L] += -1 / mesh.area[L] * F
-#        residual[R] +=  1 / mesh.area[R] * F
 
     # Compute ghost state
     problem.compute_ghost_state(U, U_ghost, mesh.bc_type)
