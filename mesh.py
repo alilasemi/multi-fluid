@@ -352,10 +352,6 @@ class Mesh:
             area = .5 * (x1*(y2 - y3) + x2*(y3 - y1) + x3*(y1 - y2))
             inradius = 2 * area / (a + b + c)
             return incenter, inradius
-        def constraint_func(coords, incenter, inradius):
-            return np.sum((coords - incenter)**2) - inradius**2
-        def constraint_jac(coords, incenter, inradius):
-            return np.array([2 * (coords[0] - incenter[0]), 2 * (coords[1] - incenter[1])])
 
         for face_ID in range(self.n_faces):
             # TODO: Only works for interior faces
@@ -366,24 +362,113 @@ class Mesh:
             # Check for interface
             if get_phi(self.xy[i]) * get_phi(self.xy[j]) < 0:
                 # If it's an interface, move the face points towards phi = 0
-                for i in range(3):
-                    if i == 1:
-                        coords = self.edge_points[self.face_points[face_ID, i]]
+                for i_point in range(3):
+                    # -- Edge points -- #
+                    if i_point == 1:
+                        coords = self.edge_points[self.face_points[face_ID, i_point]]
+                        def constraint_1(coords, xy1, xy2):
+                            '''
+                            Coords must be on the line between xy1 and xy2.
+
+                            This constraint comes from the law of cosines, with
+                            the angle set to 0.
+                            '''
+                            a = np.linalg.norm(coords - xy1)
+                            b = np.linalg.norm(xy2 - xy1)
+                            c = np.linalg.norm(coords - xy2)
+                            return a**2 + b**2 - c**2 - 2*a*b
+                        def jac_1(coords, xy1, xy2):
+                            '''
+                            Jacobian of constraint 1.
+                            '''
+                            a = np.linalg.norm(coords - xy1)
+                            b = np.linalg.norm(xy2 - xy1)
+                            grad_a2 = 2*(coords - xy1)
+                            grad_c2 = 2*(coords - xy2)
+                            grad_a = (coords - xy1) / a
+                            return grad_a2 - grad_c2 - 2*b*grad_a
+                        def constraint_2(coords, xy1, xy2):
+                            '''
+                            Coords must be after xy1.
+
+                            This constraint comes from keeping the dot product
+                            positive.
+                            '''
+                            return np.dot( coords - xy1, xy2 - xy1 )
+                        def jac_2(coords, xy1, xy2):
+                            '''
+                            Jacobian of constraint 2.
+                            '''
+                            return xy2 - xy1
+                        def constraint_3(coords, xy1, xy2):
+                            '''
+                            Coords must be before xy2.
+
+                            This constraint comes from keeping the dot product
+                            positive.
+                            '''
+                            return np.dot( coords - xy2, xy1 - xy2 )
+                        def jac_3(coords, xy1, xy2):
+                            '''
+                            Jacobian of constraint 3.
+                            '''
+                            return xy1 - xy2
+                        # Solve optimization problem for the new node locations,
+                        # by moving them as close as possible to the interface
+                        # (phi = 0) while still keeping the point between nodes
+                        # i and j
+                        optimization = scipy.optimize.minimize(get_phi_squared,
+                                incenter, jac=get_grad_phi_squared,
+                                constraints=[{
+                                    'type': 'eq',
+                                    'fun': constraint_1,
+                                    'jac': jac_1,
+                                    'args': (self.xy[i], self.xy[j]),
+                                    }, {
+                                    'type': 'ineq',
+                                    'fun': constraint_2,
+                                    'jac': jac_2,
+                                    'args': (self.xy[i], self.xy[j]),
+                                    }, {
+                                    'type': 'ineq',
+                                    'fun': constraint_3,
+                                    'jac': jac_3,
+                                    'args': (self.xy[i], self.xy[j]),
+                                    }])
+                        coords[:] = optimization.x
+                    # -- Volume points -- #
                     else:
-                        cell_ID = self.face_points[face_ID, i]
+                        def constraint_func(coords, incenter, inradius):
+                            '''
+                            Constraint to keep the coords within the inradius.
+
+                            Need the negative sign since inequality constraints are always ">="
+                            in Scipy.
+                            '''
+                            return -( np.sum((coords - incenter)**2) - inradius**2 )
+                        def constraint_jac(coords, incenter, inradius):
+                            '''
+                            Compute the Jacobian of the constraint.
+                            '''
+                            return np.array([-2 * (coords[0] - incenter[0]), -2 * (coords[1] - incenter[1])])
+                        cell_ID = self.face_points[face_ID, i_point]
                         coords = self.vol_points[cell_ID]
                         # Get primal cell nodes
                         nodes = self.primal_cell_to_nodes[cell_ID]
                         node_coords = self.xy[nodes]
                         incenter, inradius = get_incenter_and_inradius(node_coords)
-                        min_coords = scipy.optimize.minimize(get_phi_squared,
+                        # Solve optimization problem for the new node locations,
+                        # by moving them as close as possible to the interface
+                        # (phi = 0) while still keeping the point to within the
+                        # incenter of the triangle
+                        optimization = scipy.optimize.minimize(get_phi_squared,
                                 incenter, jac=get_grad_phi_squared,
                                 constraints=[{
                                     'type': 'ineq',
                                     'fun': constraint_func,
                                     'jac': constraint_jac,
-                                    'args': (incenter, inradius)}]).x
-                        coords[:] = min_coords
+                                    'args': (incenter, inradius)}])
+                        coords[:] = optimization.x
 
 #            phi_nodes = get_phi(self.xy[:, 0], self.xy[:, 1])
 #            for cell_ID in range(self.n_primal_cells):

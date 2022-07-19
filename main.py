@@ -12,8 +12,8 @@ from residual import get_residual, get_residual_phi, Roe, Upwind
 Problem = AdvectedBubble
 nx = 10
 ny = 10
-n_t = 2
-t_final = .01/200
+n_t = 10
+t_final = .01 / 20
 dt = t_final / n_t
 adaptive = True
 
@@ -31,7 +31,7 @@ filetype = 'pdf'
 
 #t_list = [dt, .004, .008]
 #t_list = [dt, 4, 8]
-t_list = [dt, 2*dt]
+t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt, 8*dt, 9*dt, 10*dt]
 
 def main():
     compute_solution()
@@ -63,8 +63,8 @@ def compute_solution():
         # Update mesh
         if adaptive:
             mesh.update(data)
-            data.coords_list.append([mesh.vol_points.copy(),
-                    mesh.edge_points.copy()])
+        data.coords_list.append([mesh.vol_points.copy(),
+                mesh.edge_points.copy()])
         # Compute gradients
         data.gradU = compute_gradient(data.U, mesh)
         # Update solution
@@ -175,7 +175,7 @@ def compute_solution():
 
     # Mesh plots
     if plot_mesh:
-        fig, axes = plt.subplots(len(t_list), 1, figsize=(6.5, 8), squeeze=False)
+        fig, axes = plt.subplots(len(t_list), 1, figsize=(6.5, 4*len(t_list)), squeeze=False)
         for i in range(len(t_list)):
             phi = phi_list[i]
             coords = data.coords_list[i]
@@ -183,6 +183,8 @@ def compute_solution():
             ax = axes[i, 0]
             ax.set_xlim([mesh.xL, mesh.xR])
             ax.set_ylim([mesh.yL, mesh.yR])
+            # TODO: Quick hack to plot a circle
+            ax.add_patch(plt.Circle((0, 0), 0.25, color='r', fill=False))
             # Loop over primal cells
             for cell_ID in range(mesh.n_primal_cells):
                 points = mesh.get_plot_points_primal_cell(cell_ID)
@@ -209,11 +211,12 @@ def compute_solution():
         if only_rho:
             num_vars = 1
         else: num_vars = 3
-        fig, axes = plt.subplots(len(t_list), num_vars, figsize=(6.5, 8), squeeze=False)
+        fig, axes = plt.subplots(len(t_list), num_vars, figsize=(6.5, 4*len(t_list)), squeeze=False)
         for i_iter in range(len(t_list)):
             V = V_list[i_iter]
             phi = phi_list[i_iter]
             t = t_list[i_iter]
+            coords = data.coords_list[i_iter]
 
             r = V[:, 0]
             u = V[:, 1]
@@ -234,7 +237,7 @@ def compute_solution():
 
                 # Loop over dual faces
                 for face_ID in range(mesh.n_faces):
-                    points = mesh.get_face_point_coords(face_ID)
+                    points = mesh.get_face_point_coords(face_ID, *coords)
                     # Get dual mesh neighbors
                     i, j = mesh.edge[face_ID]
                     # Check if this is a surrogate boundary
