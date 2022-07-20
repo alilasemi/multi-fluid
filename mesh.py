@@ -54,6 +54,7 @@ class Mesh:
         # Allocate space
         self.edge_points = np.empty((self.n_faces, 2))
         self.vol_points = np.empty((self.n_primal_cells, 2))
+        self.neighbors = np.empty(self.n, dtype=object)
         self.stencil = np.empty(self.n, dtype=object)
         self.max_limiter_stencil_size = 6
         self.limiter_stencil = np.empty((self.n, self.max_limiter_stencil_size),
@@ -122,7 +123,11 @@ class Mesh:
                     stencil.append(below_ID)
 
                 # Store stencil
-                self.stencil[cell_ID] = stencil
+                self.stencil[cell_ID] = stencil.copy()
+                # Also store as the neighbors. Later on, the stencil will be
+                # modified by the phase field, but the neighbors will stay the
+                # same.
+                self.neighbors[cell_ID] = stencil.copy()
 
                 # Store a vectorized-friendly version of stencil, with a
                 # hardcoded maximum stencil size to avoid the jagged array.
@@ -162,6 +167,59 @@ class Mesh:
             # defining the edge
             self.edge_points[face_ID] = np.mean(self.xy[self.edge[face_ID]],
                     axis=0)
+
+    def update_stencil(self, phi):
+        '''
+        Update the stencil to not include points crossing an interface.
+
+        Inputs:
+        -------
+        phi - array containing level set evaluated at nodes (n,)
+
+        Outputs:
+        --------
+        self.stencil - array of lists of neighbors, not including those crossing
+                an interface (n,)
+        '''
+        # Loop over nodes
+        for i in range(self.n):
+            stencil = []
+            # Loop over neighbors
+            for j in self.neighbors[i]:
+                # Check if this is a surrogate interface
+                is_surrogate = phi[i] * phi[j] < 0
+                # If it isn't an interface, include the point in the stencil
+                if not is_surrogate:
+                    stencil.append(j)
+            # Store
+            self.stencil[i] = stencil.copy()
+            # Also use for the limiter stencil
+            self.limiter_stencil[i, :len(stencil)] = stencil
+            self.limiter_stencil[i, len(stencil):] = i
+
+        # There are some unfortunate edge cases to handle. In order to solve the
+        # linear system to define a gradient, at least three points are needed
+        # in the stencil (since a plane is defined by three unknowns). However,
+        # depending on phi, the interface may be in between most of the node
+        # neighbors of this cell. In the case that only one neighbor remains
+        # (therefore two points in the stencil) one solution is to just append
+        # the stencil of that one neighbor to the stencil of the current cell.
+        # Loop over nodes
+        for i in range(self.n):
+            if len(self.stencil[i]) == 2:
+                # Get the neighbor
+                self.stencil[i].remove(i)
+                neighbor_ID = self.stencil[i][0]
+                # Append neighbor stencil to this stencil. Since the neighbor ID
+                # and cell i are both included in the neighbor stencil, we can
+                # just copy it directly.
+                self.stencil[i] = self.stencil[neighbor_ID].copy()
+
+        # TODO: Here are some other unfortunate edge cases:
+        # - if all neighbors are cut off, and a node is left "alone". Probably
+        #   just use zero gradient in that situation.
+        # - if there is one neighbor, but even that one neighbor only has one
+        #   neighbor. Again, probably just use zero gradient.
 
     def create_primal_cells(self):
         '''
@@ -241,11 +299,19 @@ class Mesh:
         is L vs. R is chosen to preserve the counterclockwise node ordering of
         the primal cells.
         '''
+        # Array of empty lists
+        unordered_cell_faces = np.empty(self.n, dtype=object)
+        for i in range(self.n): unordered_cell_faces[i] = []
         # Loop over faces
         self.face_points = np.empty((self.n_faces, 3), dtype=int)
         for face_ID in range(self.n_faces):
             # Get dual mesh neighbors
             i, j = self.edge[face_ID]
+            # Add this face to an unordered list of the faces of these cells.
+            # It's unordered because there is no gaurantee that these faces will
+            # be ordered counterclockwise or be connected in the order listed.
+            unordered_cell_faces[i].append(face_ID)
+            unordered_cell_faces[j].append(face_ID)
             # Get primal cells of each node
             i_primals = self.nodes_to_primal_cells[i]
             j_primals = self.nodes_to_primal_cells[j]
@@ -277,6 +343,33 @@ class Mesh:
             else:
                 # Add final volume point
                 self.face_points[face_ID, 2] = indices[-1]
+
+        # TODO: This is slightly jank (but not too bad). Basically, the idea
+        # here is that for this mesh, there are at most 12 points per cell.
+        # However, I haven't bothered to sift out the duplicates, so really it
+        # stores the 18 points (3 from each face, at most). Also, boundary cells
+        # don't have this many. Therefore, there are quite a few either
+        # duplicates or empty values, all of which get padded with the nodal
+        # coordinate. This works, because the only thing this array is used for
+        # is the limiter, which is agnostic to both repeated coordinates and
+        # coordinates that are not at the face of a cell (aka, the node
+        # coordinate). Just don't use it for anything else.
+        # Loop over dual cells
+        self.max_num_face_points = 18
+        self.cell_point_coords = np.empty((self.n, self.max_num_face_points, 2))
+        for i in range(self.n):
+            coord_counter = 0
+            # Loop over faces
+            for face_ID in unordered_cell_faces[i]:
+                # Get face point coords
+                coords = self.get_face_point_coords(face_ID)
+                # Loop over coords
+                for coord_ID in range(coords.shape[0]):
+                    # Store
+                    self.cell_point_coords[i, coord_counter] = coords[coord_ID]
+                    coord_counter += 1
+            # Pad the rest of the array with the node location
+            self.cell_point_coords[i, coord_counter:] = self.xy[i]
 
     def is_boundary(self, face_ID):
         return self.face_points[face_ID, 2] == -1
@@ -318,17 +411,21 @@ class Mesh:
         t = data.t
         # TODO: This is with a hardcoded phi. This is because I want to neglect
         # error in phi for now.
-        u = 50
+        # TODO: For some reason, u needs to be 10 times larger here. A bug
+        # somewhere?
+        # TODO: The mesh plot thick black line does not line up with the
+        # adapted points! (see left)
+        u_bubble = 50 * 75
         radius = .25
         def get_phi(coords):
             x, y = coords
-            phi = (x - u * t)**2 + y**2 - radius**2
+            phi = (x - u_bubble * t)**2 + y**2 - radius**2
             phi /= self.xL**2 + self.xR**2 - radius**2
             return phi
         def get_grad_phi(coords):
             x, y = coords
             gphi = np.array([
-                2 * (x - u * t),
+                2 * (x - u_bubble * t),
                 2 * y])
             gphi /= self.xL**2 + self.xR**2 - radius**2
             return gphi
@@ -336,22 +433,6 @@ class Mesh:
             return get_phi(coords)**2
         def get_grad_phi_squared(coords):
             return 2 * get_phi(coords) * get_grad_phi(coords)
-        def get_incenter_and_inradius(node_coords):
-            # -- Incenter -- #
-            A = node_coords[0]
-            B = node_coords[1]
-            C = node_coords[2]
-            a = np.linalg.norm(C - B)
-            b = np.linalg.norm(C - A)
-            c = np.linalg.norm(A - B)
-            incenter = (A*a + B*b + C*c)/(a + b + c)
-            # -- Inradius -- #
-            x1, y1 = node_coords[0]
-            x2, y2 = node_coords[1]
-            x3, y3 = node_coords[2]
-            area = .5 * (x1*(y2 - y3) + x2*(y3 - y1) + x3*(y1 - y2))
-            inradius = 2 * area / (a + b + c)
-            return incenter, inradius
 
         for face_ID in range(self.n_faces):
             # TODO: Only works for interior faces
@@ -417,8 +498,13 @@ class Mesh:
                         # by moving them as close as possible to the interface
                         # (phi = 0) while still keeping the point between nodes
                         # i and j
+                        # The guess value is important - it cannot start the
+                        # guess on the edge itself. Instead, I add half the
+                        # vector from i to j, rotated 90 degrees.
+                        vector = (self.xy[j] - self.xy[i])/3
+                        guess = coords + [vector[1], -vector[0]]
                         optimization = scipy.optimize.minimize(get_phi_squared,
-                                incenter, jac=get_grad_phi_squared,
+                                guess, jac=get_grad_phi_squared,
                                 constraints=[{
                                     'type': 'eq',
                                     'fun': constraint_1,
@@ -435,52 +521,62 @@ class Mesh:
                                     'jac': jac_3,
                                     'args': (self.xy[i], self.xy[j]),
                                     }])
+                        if not optimization.success:
+                            print(f'Oh no! Edge point of face {face_ID} failed to optimize!')
                         coords[:] = optimization.x
                     # -- Volume points -- #
                     else:
-                        def constraint_func(coords, incenter, inradius):
+                        def constraint_func(coords, node_coords):
                             '''
-                            Constraint to keep the coords within the inradius.
+                            Constraint to keep the coords within the triangle.
 
-                            Need the negative sign since inequality constraints are always ">="
-                            in Scipy.
+                            Thank you to andreasdr on Stack Overflow:
+                            https://stackoverflow.com/questions/2049582/how-to-determine-if-a-point-is-in-a-2d-triangle
                             '''
-                            return -( np.sum((coords - incenter)**2) - inradius**2 )
-                        def constraint_jac(coords, incenter, inradius):
+                            # Compute Barycentric coordinate parameters
+                            px, py = coords
+                            p0x, p0y = node_coords[0]
+                            p1x, p1y = node_coords[1]
+                            p2x, p2y = node_coords[2]
+                            s = p0y*p2x - p0x*p2y + (p2y - p0y)*px + (p0x - p2x)*py
+                            t = p0x*p1y - p0y*p1x + (p0y - p1y)*px + (p1x - p0x)*py
+                            return np.array([s, t, 1 - s - t])
+                        def constraint_jac(coords, node_coords):
                             '''
                             Compute the Jacobian of the constraint.
                             '''
-                            return np.array([-2 * (coords[0] - incenter[0]), -2 * (coords[1] - incenter[1])])
+                            p0x, p0y = node_coords[0]
+                            p1x, p1y = node_coords[1]
+                            p2x, p2y = node_coords[2]
+                            dsdx = p2y - p0y
+                            dsdy = p0x - p2x
+                            dtdx = p0y - p1y
+                            dtdy = p1x - p0x
+                            return np.array([
+                                    [dsdx, dsdy],
+                                    [dtdx, dtdy],
+                                    [-dsdx - dtdx, -dsdy - dtdy]])
                         cell_ID = self.face_points[face_ID, i_point]
                         coords = self.vol_points[cell_ID]
                         # Get primal cell nodes
                         nodes = self.primal_cell_to_nodes[cell_ID]
                         node_coords = self.xy[nodes]
-                        incenter, inradius = get_incenter_and_inradius(node_coords)
                         # Solve optimization problem for the new node locations,
                         # by moving them as close as possible to the interface
-                        # (phi = 0) while still keeping the point to within the
-                        # incenter of the triangle
+                        # (phi = 0) while still keeping the point within the
+                        # triangle
                         optimization = scipy.optimize.minimize(get_phi_squared,
-                                incenter, jac=get_grad_phi_squared,
+                                coords, jac=get_grad_phi_squared,
                                 constraints=[{
                                     'type': 'ineq',
                                     'fun': constraint_func,
                                     'jac': constraint_jac,
-                                    'args': (incenter, inradius)}])
+                                    'args': (node_coords,)}])
                         coords[:] = optimization.x
 
-#            phi_nodes = get_phi(self.xy[:, 0], self.xy[:, 1])
-#            for cell_ID in range(self.n_primal_cells):
-#                nodes = self.primal_cell_to_nodes[cell_ID]
-#                phi = phi_nodes[nodes]
-#                products = np.array([phi[0] * phi[1], phi[1] * phi[2], phi[2] * phi[0]])
-#                if np.any(products < 0):
-#                    x, y = self.vol_points[cell_ID]
-#                    phi = get_phi(x, y)
-#                    gphi = get_grad_phi(x, y)
-#                    self.vol_points[cell_ID, 0] -= .3 * phi / gphi[0]
-#                    self.vol_points[cell_ID, 1] -= .3 * phi / gphi[1]
+        # Now that the face points have moved, the area of each dual mesh cell
+        # has changed, and thus needs to be recalculated
+        self.compute_cell_areas()
 
     def compute_cell_areas(self):
         '''

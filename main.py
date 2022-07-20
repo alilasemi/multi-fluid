@@ -10,12 +10,13 @@ from residual import get_residual, get_residual_phi, Roe, Upwind
 
 # Solver inputs
 Problem = AdvectedBubble
-nx = 10
-ny = 10
-n_t = 10
-t_final = .01 / 20
+nx = 30
+ny = 30
+n_t = 300
+t_final = .01
 dt = t_final / n_t
-adaptive = True
+adaptive = False
+rho_levels = levels=np.linspace(.15, 1.05, 19)
 
 # Domain
 xL = -1
@@ -25,13 +26,15 @@ yR = 1
 
 plot_mesh = True
 plot_contour = True
-only_rho = True#False
+only_rho = True
 plot_ICs = False
 filetype = 'pdf'
 
+t_list = [dt, .0025, .005, .0075, .01]
 #t_list = [dt, .004, .008]
 #t_list = [dt, 4, 8]
-t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt, 8*dt, 9*dt, 10*dt]
+#t_list = [dt, 8*dt, 16*dt, 24*dt, 32*dt, 40*dt]
+#t_list = [dt, 4*dt, 8*dt, 12*dt, 16*dt, 20*dt]
 
 def main():
     compute_solution()
@@ -39,6 +42,8 @@ def main():
 def compute_solution():
     # Create mesh
     mesh = Mesh(nx, ny, xL, xR, yL, yR)
+    original_vol_points = mesh.vol_points.copy()
+    original_edge_points = mesh.edge_points.copy()
 
     # Initial solution
     problem = Problem(mesh.xy, t_list)
@@ -62,18 +67,38 @@ def compute_solution():
         data.new_iteration()
         # Update mesh
         if adaptive:
+            # Revert back to original face points
+            mesh.vol_points = original_vol_points.copy()
+            mesh.edge_points = original_edge_points.copy()
+            # Update the mesh
             mesh.update(data)
+        # Store the new face points, for plotting later
         data.coords_list.append([mesh.vol_points.copy(),
                 mesh.edge_points.copy()])
+        # Update the stencil to not include points across the interface
+        mesh.update_stencil(data.phi)
         # Compute gradients
         data.gradU = compute_gradient(data.U, mesh)
         # Update solution
         data.U = update(dt, data, mesh, problem)
         data.phi = update_phi(dt, data, mesh, problem)
         data.t = (i + 1) * dt
+
+        # TODO: This is with a hardcoded phi. This is because I want to neglect
+        # error in phi for now.
+        u_bubble = 50
+        radius = .25
+        def get_phi(coords):
+            x = coords[:, 0]
+            y = coords[:, 1]
+            phi = (x - u_bubble * data.t)**2 + y**2 - radius**2
+            phi /= mesh.xL**2 + mesh.xR**2 - radius**2
+            return phi
+        data.phi = get_phi(mesh.xy)
+
         if np.any(np.isclose(t_list, data.t)):
-            U_list.append(data.U)
-            phi_list.append(data.phi)
+            U_list.append(data.U.copy())
+            phi_list.append(data.phi.copy())
         # Find shock
         if Problem == RiemannProblem:
             for j in range(nx):
@@ -87,12 +112,13 @@ def compute_solution():
                     break
 
     # Fit a line to the shock location
-    try:
-        fit_shock = np.polyfit(np.linspace(dt, t_final, n_t), x_shock, 1)
-        shock_speed = fit_shock[0]
-        print(f'The shock speed is {shock_speed} m/s.')
-    except np.linalg.LinAlgError:
-        print('-- Shock speed calculation failed! --')
+    if Problem == RiemannProblem:
+        try:
+            fit_shock = np.polyfit(np.linspace(dt, t_final, n_t), x_shock, 1)
+            shock_speed = fit_shock[0]
+            print(f'The shock speed is {shock_speed} m/s.')
+        except np.linalg.LinAlgError:
+            print('-- Shock speed calculation failed! --')
 
     # Final primitives
     V_list = []
@@ -156,6 +182,8 @@ def compute_solution():
                 ax.plot(mesh.xy[j*nx:(j+1)*nx, 0], phi[j*nx:(j+1)*nx], 'k', linewidth=1)
                 # Find interface and plot as a vertical line
                 i_interface = np.argmin(np.abs(phi[j*nx:(j+1)*nx]))
+                # Make sure no scaling happens with this tall vertical line
+                ax.autoscale(False)
                 ax.vlines(mesh.xy[j*nx:(j+1)*nx, 0][i_interface], mesh.yL,
                         mesh.yR, color='r', ls='--')
             if problem.exact:
@@ -176,15 +204,15 @@ def compute_solution():
     # Mesh plots
     if plot_mesh:
         fig, axes = plt.subplots(len(t_list), 1, figsize=(6.5, 4*len(t_list)), squeeze=False)
-        for i in range(len(t_list)):
-            phi = phi_list[i]
-            coords = data.coords_list[i]
+        for i_iter in range(len(t_list)):
+            phi = phi_list[i_iter]
+            coords = data.coords_list[i_iter]
 
-            ax = axes[i, 0]
+            ax = axes[i_iter, 0]
             ax.set_xlim([mesh.xL, mesh.xR])
             ax.set_ylim([mesh.yL, mesh.yR])
             # TODO: Quick hack to plot a circle
-            ax.add_patch(plt.Circle((0, 0), 0.25, color='r', fill=False))
+            ax.add_patch(plt.Circle((50 * t_list[i_iter], 0), 0.25, color='r', fill=False))
             # Loop over primal cells
             for cell_ID in range(mesh.n_primal_cells):
                 points = mesh.get_plot_points_primal_cell(cell_ID)
@@ -230,10 +258,14 @@ def compute_solution():
             # Loop over variables
             for idx in range(num_vars):
                 ax = axes[i_iter, idx]
-                contourf = ax.tricontourf(mesh.xy[:, 0], mesh.xy[:, 1], f[idx])
+                #TODO Make levels less jank
+                contourf = ax.tricontourf(mesh.xy[:, 0], mesh.xy[:, 1], f[idx],
+                        levels=rho_levels)
                 plt.colorbar(mappable=contourf, ax=ax)
                 ax.set_title(ylabels[idx], fontsize=10)
                 ax.tick_params(labelsize=10)
+                # TODO: Quick hack to plot a circle
+                ax.add_patch(plt.Circle((50 * t_list[i_iter], 0), 0.25, color='r', fill=False))
 
                 # Loop over dual faces
                 for face_ID in range(mesh.n_faces):
@@ -300,6 +332,7 @@ class SimulationData:
     flux
     flux_phi
     i
+    t
     '''
     # Iteration counter
     i = 0

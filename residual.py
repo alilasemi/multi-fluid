@@ -19,25 +19,26 @@ def get_residual(data, mesh, problem):
     # This uses the multidimensional Barth-Jesperson limiter from:
     # https://arc.aiaa.org/doi/pdf/10.2514/6.1989-366
     # TODO Why is this damping needed?
-    damping = .8
+    damping = .7
     limiter = np.empty((mesh.n, 4))
     # Loop state vars
     for k in range(4):
         # Compute extrapolated value
-        midpoint = .5 * (mesh.xy.reshape(-1, 1, 2) + mesh.xy[mesh.limiter_stencil])
-        U_face = U[:, k].reshape(-1, 1) + np.einsum('id, ijd -> ij', gradU[:, k], midpoint - mesh.xy[mesh.limiter_stencil])
+        # In the paper, this is the value of u_i - u_A
+        U_face_diff = np.einsum('id, ijd -> ij', gradU[:, k],
+                mesh.cell_point_coords - mesh.xy.reshape((mesh.n, 1, 2)))
         u_A_min = np.min(U[mesh.limiter_stencil, k], axis=1)
         u_A_max = np.max(U[mesh.limiter_stencil, k], axis=1)
-        # Limiter value for all neighbors of cell i
-        limiter_j = np.empty((mesh.n, mesh.max_limiter_stencil_size))
+        # Limiter value for all face points of cell i
+        limiter_j = np.empty((mesh.n, mesh.max_num_face_points))
         # Condition 1
-        index = np.nonzero((U_face - U[:, k].reshape(-1, 1)) > 0)
-        limiter_j[index] = (u_A_max[index[0]] - U[index[0], k]) / (U_face[index] - U[index[0], k])
+        index = np.nonzero(U_face_diff > 0)
+        limiter_j[index] = (u_A_max[index[0]] - U[index[0], k]) / U_face_diff[index]
         # Condition 2
-        index = np.nonzero((U_face - U[:, k].reshape(-1, 1)) < 0)
-        limiter_j[index] = (u_A_min[index[0]] - U[index[0], k]) / (U_face[index] - U[index[0], k])
+        index = np.nonzero(U_face_diff < 0)
+        limiter_j[index] = (u_A_min[index[0]] - U[index[0], k]) / U_face_diff[index]
         # Condition 3
-        index = np.nonzero((U_face - U[:, k].reshape(-1, 1)) == 0)
+        index = np.nonzero(U_face_diff == 0)
         limiter_j[index] = 1
         # Take the minimum across each face point
         limiter[:, k] = damping * np.min(limiter_j, axis=1)
