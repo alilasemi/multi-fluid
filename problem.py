@@ -318,6 +318,88 @@ class TaylorGreen(Problem):
             else:
                 print(f'ERROR: Invalid BC type given! bc = {bc}')
 
+class RiderKotheVortex(Problem):
+    '''
+    Class for a single vortex problem, as posed by Rider and Kothe (1995).
+    '''
+
+    # bubble state (rho, u, v, p, phi)
+    r_bubble = .125
+    r_ambient = 1
+    p = 101325
+
+    # Radius of bubble
+    radius = 1/6
+    # Displacement of bubble
+    x_bubble = .5
+    y_bubble = .75
+
+    # Ratio of specific heats
+    g = 1.4
+
+    def get_initial_conditions(self):
+        # Unpack
+        x = self.xy[:, 0]
+        y = self.xy[:, 1]
+        g = self.g
+        # Rider-Kothe initial velocity field
+        u =  (1/np.pi) * np.sin(np.pi * x) * np.cos(np.pi * y)
+        v = -(1/np.pi) * np.cos(np.pi * x) * np.sin(np.pi * y)
+        # Equation of circle
+        circle = (x - self.x_bubble)**2 + (y - self.y_bubble)**2 - self.radius**2
+
+        # Get initial conditions as conservatives
+        U = np.empty((self.n, 4))
+        for i in range(self.n):
+            # If outside of bubble
+            if circle[i] > 0:
+                r = self.r_ambient
+            # If inside bubble
+            else:
+                r = self.r_bubble
+            U[i] = primitive_to_conservative(r, u[i], v[i], self.p, g)
+
+        # TODO: Phi is ignored for now
+        phi = np.ones_like(u)
+        return U, phi
+
+    def compute_ghost_state(self, U, U_ghost, bc_type):
+        g = self.g
+        # Loop over each boundary cell
+        for i in range(U_ghost.shape[0]):
+            # Get the type of this boundary
+            cell_ID, bc = bc_type[i]
+            # Get primitives
+            V = conservative_to_primitive(*U[cell_ID], g)
+            # Compute wall ghost state, regardless of if it's marked as a wall,
+            # inflow or outflow
+            if bc in [1, 2, 3]:
+                # The density and pressure are kept the same in the ghost state
+                r = V[0]
+                p = V[3]
+                # The x-direction velocity is not changed since the wall is
+                # horizontal
+                u = V[1]
+                # The y-direction velocity is flipped in sign, since the wall is
+                # horizontal
+                v = -V[2]
+            else:
+                print(f'ERROR: Invalid BC type given! bc = {bc}')
+            # Compute ghost state
+            U_ghost[i] = primitive_to_conservative(r, u, v, p, g)
+
+    def compute_ghost_phi(self, phi, phi_ghost, bc_type):
+        # Loop over each boundary cell
+        for i in range(phi_ghost.shape[0]):
+            cell_ID, bc = bc_type[i]
+            # Compute wall ghost state, regardless of if it's marked as a wall,
+            # inflow or outflow
+            if bc in [1, 2, 3]:
+                # Just use the initial value as the boundary value
+                phi_ghost[i] = 1
+            else:
+                print(f'ERROR: Invalid BC type given! bc = {bc}')
+
 
 def primitive_to_conservative(r, u, v, p, g):
     W = np.empty(4)

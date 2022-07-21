@@ -4,33 +4,38 @@ import numpy as np
 
 from mesh import Mesh
 from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
-        TaylorGreen, conservative_to_primitive)
+        TaylorGreen, RiderKotheVortex, conservative_to_primitive)
 from residual import get_residual, get_residual_phi, Roe, Upwind
 
 
 # Solver inputs
-Problem = AdvectedBubble
-nx = 30
-ny = 30
-n_t = 300
-t_final = .01
+Problem = RiderKotheVortex
+nx = 10
+ny = 10
+n_t = 200
+t_final = .05
 dt = t_final / n_t
 adaptive = False
 rho_levels = levels=np.linspace(.15, 1.05, 19)
 
 # Domain
-xL = -1
+xL = 0
 xR = 1
-yL = -1
+yL = 0
 yR = 1
 
+hardcoded_phi = False
+levelset = False
 plot_mesh = True
 plot_contour = True
 only_rho = True
 plot_ICs = False
+equal_aspect_ratio = True
 filetype = 'pdf'
 
-t_list = [dt, .0025, .005, .0075, .01]
+#t_list = [dt, .025, .05, .075, .1]
+t_list = [dt, .025, .05]
+#t_list = [dt, .0025, .005, .0075, .01]
 #t_list = [dt, .004, .008]
 #t_list = [dt, 4, 8]
 #t_list = [dt, 8*dt, 16*dt, 24*dt, 32*dt, 40*dt]
@@ -81,20 +86,22 @@ def compute_solution():
         data.gradU = compute_gradient(data.U, mesh)
         # Update solution
         data.U = update(dt, data, mesh, problem)
-        data.phi = update_phi(dt, data, mesh, problem)
+        if levelset:
+            data.phi = update_phi(dt, data, mesh, problem)
         data.t = (i + 1) * dt
 
         # TODO: This is with a hardcoded phi. This is because I want to neglect
         # error in phi for now.
-        u_bubble = 50
-        radius = .25
-        def get_phi(coords):
-            x = coords[:, 0]
-            y = coords[:, 1]
-            phi = (x - u_bubble * data.t)**2 + y**2 - radius**2
-            phi /= mesh.xL**2 + mesh.xR**2 - radius**2
-            return phi
-        data.phi = get_phi(mesh.xy)
+        if hardcoded_phi:
+            u_bubble = 50
+            radius = .25
+            def get_phi(coords):
+                x = coords[:, 0]
+                y = coords[:, 1]
+                phi = (x - u_bubble * data.t)**2 + y**2 - radius**2
+                phi /= mesh.xL**2 + mesh.xR**2 - radius**2
+                return phi
+            data.phi = get_phi(mesh.xy)
 
         if np.any(np.isclose(t_list, data.t)):
             U_list.append(data.U.copy())
@@ -209,10 +216,13 @@ def compute_solution():
             coords = data.coords_list[i_iter]
 
             ax = axes[i_iter, 0]
+            if equal_aspect_ratio:
+                ax.set_aspect('equal', adjustable='box')
             ax.set_xlim([mesh.xL, mesh.xR])
             ax.set_ylim([mesh.yL, mesh.yR])
             # TODO: Quick hack to plot a circle
-            ax.add_patch(plt.Circle((50 * t_list[i_iter], 0), 0.25, color='r', fill=False))
+            if hardcoded_phi:
+                ax.add_patch(plt.Circle((50 * t_list[i_iter], 0), 0.25, color='r', fill=False))
             # Loop over primal cells
             for cell_ID in range(mesh.n_primal_cells):
                 points = mesh.get_plot_points_primal_cell(cell_ID)
@@ -258,6 +268,8 @@ def compute_solution():
             # Loop over variables
             for idx in range(num_vars):
                 ax = axes[i_iter, idx]
+                if equal_aspect_ratio:
+                    ax.set_aspect('equal', adjustable='box')
                 #TODO Make levels less jank
                 contourf = ax.tricontourf(mesh.xy[:, 0], mesh.xy[:, 1], f[idx],
                         levels=rho_levels)
@@ -265,7 +277,8 @@ def compute_solution():
                 ax.set_title(ylabels[idx], fontsize=10)
                 ax.tick_params(labelsize=10)
                 # TODO: Quick hack to plot a circle
-                ax.add_patch(plt.Circle((50 * t_list[i_iter], 0), 0.25, color='r', fill=False))
+                if hardcoded_phi:
+                    ax.add_patch(plt.Circle((50 * t_list[i_iter], 0), 0.25, color='r', fill=False))
 
                 # Loop over dual faces
                 for face_ID in range(mesh.n_faces):
@@ -292,15 +305,25 @@ def compute_gradient(U, mesh):
     # Loop over all cells
     for i in range(mesh.n):
         n_points = len(mesh.stencil[i])
-        # Construct A matrix: [x_i, y_i, 1]
-        A = np.ones((n_points, 3))
-        A[:, :-1] = mesh.xy[mesh.stencil[i]]
-        # We desired [x_i, y_i, 1] @ [c0, c1, c2] = U[i], therefore Ax=b.
-        # However, there are more equations than unknowns (for most points)
-        # so instead, solve the normal equations: A.T @ A x = A.T @ b
-        c = np.linalg.solve(A.T @ A, A.T @ U[mesh.stencil[i]])
-        # Since U = c0 x + c1 u + c2, then dU/dx = c0 and dU/dy = c1.
-        gradU[i] = c[:-1].T
+        # If there are no other points in the stencil, then set the gradient to
+        # zero
+        if n_points == 1:
+            gradU[i] = 0
+        # Otherwise, solve with least squares
+        else:
+            # Construct A matrix: [x_i, y_i, 1]
+            A = np.ones((n_points, 3))
+            A[:, :-1] = mesh.xy[mesh.stencil[i]]
+            # We desired [x_i, y_i, 1] @ [c0, c1, c2] = U[i], therefore Ax=b.
+            # However, there are more equations than unknowns (for most points)
+            # so instead, solve the normal equations: A.T @ A x = A.T @ b
+            try:
+                c = np.linalg.solve(A.T @ A, A.T @ U[mesh.stencil[i]])
+                # Since U = c0 x + c1 u + c2, then dU/dx = c0 and dU/dy = c1.
+                gradU[i] = c[:-1].T
+            except:
+                print(f'Gradient calculation failed! Stencil = {mesh.stencil[i]}')
+                gradU[i] = 0
     return gradU
 
 def update(dt, data, mesh, problem):
