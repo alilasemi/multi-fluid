@@ -52,7 +52,7 @@ def get_residual(data, mesh, problem):
             mesh.area, mesh.edge_points, data.flux.g, residual)
 
     # Compute ghost state
-    problem.compute_ghost_state(U, U_ghost, mesh.bc_type)
+    problem.compute_ghost_state(U, U_ghost, mesh.bc_type, mesh.bc_area_normal)
     F_bc = np.empty_like(U_ghost)
     # Evalute boundary fluxes
     for face_ID in range(U_ghost.shape[0]):

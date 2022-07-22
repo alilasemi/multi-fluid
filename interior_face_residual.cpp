@@ -28,6 +28,8 @@ void compute_interior_face_residual(matrix_ref<double> U,
         // Left and right cell IDs
         auto L = edge(face_ID, 0);
         auto R = edge(face_ID, 1);
+        // Skip interfaces - those are handled seperately
+        if (L == -1 and R == -1) continue;
         // Gradients for these cells
         auto gradU_ptr = (double*) gradU_np.request().ptr;
         matrix_map<double> gradU_L(gradU_ptr + L*4*2, 4, 2);

@@ -4,28 +4,28 @@ import numpy as np
 
 from mesh import Mesh
 from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
-        TaylorGreen, RiderKotheVortex, conservative_to_primitive)
+        conservative_to_primitive)
 from residual import get_residual, get_residual_phi, Roe, Upwind
 
 
 # Solver inputs
-Problem = RiderKotheVortex
-nx = 10
-ny = 10
-n_t = 200
-t_final = .05
+Problem = AdvectedBubble
+nx = 20
+ny = 20
+n_t = 20
+t_final = .01 / 10
 dt = t_final / n_t
 adaptive = False
-rho_levels = levels=np.linspace(.15, 1.05, 19)
+rho_levels = np.linspace(.15, 1.05, 19)
 
 # Domain
-xL = 0
+xL = -1
 xR = 1
-yL = 0
+yL = -1
 yR = 1
 
-hardcoded_phi = False
-levelset = False
+hardcoded_phi = True
+levelset = True
 plot_mesh = True
 plot_contour = True
 only_rho = True
@@ -34,12 +34,13 @@ equal_aspect_ratio = True
 filetype = 'pdf'
 
 #t_list = [dt, .025, .05, .075, .1]
-t_list = [dt, .025, .05]
 #t_list = [dt, .0025, .005, .0075, .01]
+#t_list = [.01]
 #t_list = [dt, .004, .008]
 #t_list = [dt, 4, 8]
 #t_list = [dt, 8*dt, 16*dt, 24*dt, 32*dt, 40*dt]
 #t_list = [dt, 4*dt, 8*dt, 12*dt, 16*dt, 20*dt]
+t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt]
 
 def main():
     compute_solution()
@@ -53,10 +54,9 @@ def compute_solution():
     # Initial solution
     problem = Problem(mesh.xy, t_list)
     U, phi = problem.get_initial_conditions()
-    U_ghost = np.empty((mesh.bc_type.shape[0], 4))
 
     # Store data
-    data = SimulationData(U, U_ghost, phi, problem.g)
+    data = SimulationData(U, phi, problem.g)
     #TODO
     data.coords_list = []
 
@@ -84,6 +84,8 @@ def compute_solution():
         mesh.update_stencil(data.phi)
         # Compute gradients
         data.gradU = compute_gradient(data.U, mesh)
+        # Create ghost fluid interfaces
+        mesh.create_interfaces(data)
         # Update solution
         data.U = update(dt, data, mesh, problem)
         if levelset:
@@ -93,7 +95,7 @@ def compute_solution():
         # TODO: This is with a hardcoded phi. This is because I want to neglect
         # error in phi for now.
         if hardcoded_phi:
-            u_bubble = 50
+            u_bubble = 0
             radius = .25
             def get_phi(coords):
                 x = coords[:, 0]
@@ -117,6 +119,10 @@ def compute_solution():
                 if delta_u > .01 * u4:
                     x_shock[i] = mesh.xy[nx - 1 - j, 0]
                     break
+
+    # TODO: Should this be done?
+    # Copy the original edge back
+    mesh.edge = mesh.original_edge.copy()
 
     # Fit a line to the shock location
     if Problem == RiemannProblem:
@@ -362,9 +368,8 @@ class SimulationData:
     # Simulation time
     t = 0
 
-    def __init__(self, U, U_ghost, phi, g):
+    def __init__(self, U, phi, g):
         self.U = U
-        self.U_ghost = U_ghost
         self.phi = phi
         # Set flux of flow variables to be Roe
         self.flux = Roe(g)

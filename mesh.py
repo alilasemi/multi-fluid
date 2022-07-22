@@ -161,6 +161,13 @@ class Mesh:
                         self.bc_area_normal[BC_ID] /= 2
                     BC_ID += 1
 
+        # Store the number of real boundaries, not counting interfaces
+        self.num_boundaries = self.bc_type.shape[0]
+
+        # Make a copy of the original edge array. This array gets modified by
+        # interfaces, but needs to be reverted to the original.
+        self.original_edge = self.edge.copy()
+
         # Loop over faces
         for face_ID in range(self.n_faces):
             # compute the edge point as being halfway between the two points
@@ -415,7 +422,7 @@ class Mesh:
         # somewhere?
         # TODO: The mesh plot thick black line does not line up with the
         # adapted points! (see left)
-        u_bubble = 50 * 75
+        u_bubble = 0#50 * 50
         radius = .25
         def get_phi(coords):
             x, y = coords
@@ -701,3 +708,43 @@ class Mesh:
             # [x, y] -> [-y, x].
             self.area_normals_p2[face_ID, :, 0] = -y_seg.jac
             self.area_normals_p2[face_ID, :, 1] =  x_seg.jac
+
+    def create_interfaces(self, data):
+        '''
+        Create interface faces.
+
+        Interfaces are implemented in the same way as wall boundary faces are.
+        Therefore, this function finds the interfaces, removes them from the
+        interior face calculations, and adds boundary faces (on either side)
+        instead.
+        '''
+        num_boundaries = self.num_boundaries
+        # Copy the original edge back
+        self.edge = self.original_edge.copy()
+        # Find interfaces
+        is_surrogate = data.phi[self.edge[:, 0]] * data.phi[self.edge[:, 1]] < 0
+        interface_IDs = np.argwhere(is_surrogate)[:, 0]
+        # "turn off" those interior faces
+        self.edge[interface_IDs] = [-1, -1]
+
+        # Create new arrays for boundary faces
+        num_interfaces = interface_IDs.size
+        bc_type = np.empty((num_boundaries + 2*num_interfaces, 2), dtype=int)
+        bc_area_normal = np.empty((num_boundaries + 2*num_interfaces, 2))
+        # Copy the old data in
+        bc_type[:num_boundaries] = self.bc_type[:num_boundaries]
+        bc_area_normal[:num_boundaries] = self.bc_area_normal[:num_boundaries]
+
+        # Loop over interfaces
+        for i, interface_ID in enumerate(interface_IDs):
+            # Add to BCs
+            bc_type[num_boundaries + 2*i + 0] = [self.edge[interface_ID, 0], 0]
+            bc_type[num_boundaries + 2*i + 1] = [self.edge[interface_ID, 1], 0]
+            bc_area_normal[num_boundaries + 2*i + 0] =  self.edge_area_normal[interface_ID]
+            bc_area_normal[num_boundaries + 2*i + 1] = -self.edge_area_normal[interface_ID]
+
+        # Switch to using these new arrays
+        self.bc_type = bc_type
+        self.bc_area_normal = bc_area_normal
+        # Resize ghost data
+        data.U_ghost = np.empty((self.bc_type.shape[0], 4))
