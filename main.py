@@ -12,10 +12,10 @@ from residual import get_residual, get_residual_phi, Roe, Upwind
 Problem = AdvectedBubble
 nx = 20
 ny = 20
-n_t = 20
-t_final = .01 / 10
+n_t = 200
+t_final = .01
 dt = t_final / n_t
-adaptive = False
+adaptive = True
 rho_levels = np.linspace(.15, 1.05, 19)
 
 # Domain
@@ -34,13 +34,13 @@ equal_aspect_ratio = True
 filetype = 'pdf'
 
 #t_list = [dt, .025, .05, .075, .1]
-#t_list = [dt, .0025, .005, .0075, .01]
+t_list = [dt, .0025, .005, .0075, .01]
 #t_list = [.01]
 #t_list = [dt, .004, .008]
 #t_list = [dt, 4, 8]
 #t_list = [dt, 8*dt, 16*dt, 24*dt, 32*dt, 40*dt]
 #t_list = [dt, 4*dt, 8*dt, 12*dt, 16*dt, 20*dt]
-t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt]
+#t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt]
 
 def main():
     compute_solution()
@@ -88,14 +88,12 @@ def compute_solution():
         mesh.create_interfaces(data)
         # Update solution
         data.U = update(dt, data, mesh, problem)
-        if levelset:
-            data.phi = update_phi(dt, data, mesh, problem)
         data.t = (i + 1) * dt
 
         # TODO: This is with a hardcoded phi. This is because I want to neglect
         # error in phi for now.
         if hardcoded_phi:
-            u_bubble = 0
+            u_bubble = 50
             radius = .25
             def get_phi(coords):
                 x = coords[:, 0]
@@ -104,6 +102,9 @@ def compute_solution():
                 phi /= mesh.xL**2 + mesh.xR**2 - radius**2
                 return phi
             data.phi = get_phi(mesh.xy)
+        else:
+            if levelset:
+                data.phi = update_phi(dt, data, mesh, problem)
 
         if np.any(np.isclose(t_list, data.t)):
             U_list.append(data.U.copy())
@@ -120,8 +121,7 @@ def compute_solution():
                     x_shock[i] = mesh.xy[nx - 1 - j, 0]
                     break
 
-    # TODO: Should this be done?
-    # Copy the original edge back
+    # Copy the original edge back. This is to make plotting not skip interfaces
     mesh.edge = mesh.original_edge.copy()
 
     # Fit a line to the shock location

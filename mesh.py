@@ -416,13 +416,15 @@ class Mesh:
         Update the dual mesh to fit the interface better.
         '''
         t = data.t
+        # Copy the original edge back
+        self.edge = self.original_edge.copy()
         # TODO: This is with a hardcoded phi. This is because I want to neglect
         # error in phi for now.
         # TODO: For some reason, u needs to be 10 times larger here. A bug
         # somewhere?
         # TODO: The mesh plot thick black line does not line up with the
         # adapted points! (see left)
-        u_bubble = 0#50 * 50
+        u_bubble = 50 * 50
         radius = .25
         def get_phi(coords):
             x, y = coords
@@ -724,8 +726,6 @@ class Mesh:
         # Find interfaces
         is_surrogate = data.phi[self.edge[:, 0]] * data.phi[self.edge[:, 1]] < 0
         interface_IDs = np.argwhere(is_surrogate)[:, 0]
-        # "turn off" those interior faces
-        self.edge[interface_IDs] = [-1, -1]
 
         # Create new arrays for boundary faces
         num_interfaces = interface_IDs.size
@@ -742,6 +742,9 @@ class Mesh:
             bc_type[num_boundaries + 2*i + 1] = [self.edge[interface_ID, 1], 0]
             bc_area_normal[num_boundaries + 2*i + 0] =  self.edge_area_normal[interface_ID]
             bc_area_normal[num_boundaries + 2*i + 1] = -self.edge_area_normal[interface_ID]
+
+        # "turn off" those interior faces
+        self.edge[interface_IDs] = [-1, -1]
 
         # Switch to using these new arrays
         self.bc_type = bc_type

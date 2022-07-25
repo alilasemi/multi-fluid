@@ -177,12 +177,12 @@ class AdvectedBubble(Problem):
 
     # bubble state (rho, u, v, p, phi)
     bubble = np.array([
-            .125, 0, 0, 1e5, -1
+            .125, 50, 0, 1e5, -1
     ])
 
     # Ambient state (rho, u, v, p, phi)
     ambient = np.array([
-            1, 0, 0, 1e5, 1
+            1, 50, 0, 1e5, 1
     ])
 
     # Radius of bubble
