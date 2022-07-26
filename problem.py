@@ -1,6 +1,7 @@
 import numpy as np
 
 from exact_solution import exact_solution
+import matplotlib.patches
 
 
 class Problem:
@@ -118,8 +119,13 @@ class RiemannProblem(Problem):
             cell_ID, bc = bc_type[i]
             # Get primitives
             V = conservative_to_primitive(*U[cell_ID], g)
+            # TODO: This requires exact phi!
+            # Compute interface ghost state
+            if bc == 0:
+                r, u, v, p = self.compute_ghost_wall(V, bc_area_normal[i],
+                        wall_velocity=np.array([self.u, 0]))
             # Compute wall ghost state
-            if bc in [0, 1]:
+            elif bc == 1:
                 r, u, v, p = self.compute_ghost_wall(V, bc_area_normal[i])
             # Compute inflow ghost state
             elif bc == 2:
@@ -169,34 +175,47 @@ class AdvectedContact(RiemannProblem):
     Class for a contact wave advected at a constant velocity. This is based off
     of a special case of a Riemann problem.
     '''
+    # Advection speed
+    u = 50
     # Left state (rho, u, v, p, phi)
     state_4 = np.array([
-            1, 300, 0, 1e5, -1
+            1, u, 0, 1e5, -1
     ])
 
     # Right state (rho, u, v, p, phi)
     state_1 = np.array([
-            .125, 300, 0, 1e5, 1
+            .125, u, 0, 1e5, 1
     ])
+
+    def compute_exact_phi(self, coords, t):
+        '''
+        Compute the exact phi, which is a plane advecting at constant speed.
+        '''
+        x = coords[:, 0]
+        phi = x - self.u * t
+        phi /= np.max(x)
+        return phi
+
+    def plot_exact_interface(self, axis, mesh, t):
+        axis.vlines(self.u * t, mesh.yL, mesh.yR, color='r')
 
 class AdvectedBubble(Problem):
     '''
     Class for a bubble advecting at constant velocity.
     '''
-
+    # Advection speed
+    u = 50
     # bubble state (rho, u, v, p, phi)
     bubble = np.array([
-            .125, 50, 0, 1e5, -1
+            .125, u, 0, 1e5, -1
     ])
-
     # Ambient state (rho, u, v, p, phi)
     ambient = np.array([
-            1, 50, 0, 1e5, 1
+            1, u, 0, 1e5, 1
     ])
 
     # Radius of bubble
     radius = .25
-
     # Ratio of specific heats
     g = 1.4
 
@@ -220,6 +239,21 @@ class AdvectedBubble(Problem):
         phi /= np.max(phi)
         return U, phi
 
+    def compute_exact_phi(self, coords, t):
+        '''
+        Compute the exact phi, which is a paraboloid advecting at constant
+        speed.
+        '''
+        x = coords[:, 0]
+        y = coords[:, 1]
+        phi = (x - self.u * t)**2 + y**2 - self.radius**2
+        phi /= np.max(x)**2 + np.max(y)**2 - self.radius**2
+        return phi
+
+    def plot_exact_interface(self, axis, mesh, t):
+        axis.add_patch(matplotlib.patches.Circle((self.u * t, 0), self.radius,
+            color='r', fill=False))
+
     def compute_ghost_state(self, U, U_ghost, bc_type, bc_area_normal):
         # Unpack
         r0, u0, v0, p0, _ = self.ambient
@@ -231,11 +265,11 @@ class AdvectedBubble(Problem):
             cell_ID, bc = bc_type[i]
             # Get primitives
             V = conservative_to_primitive(*U[cell_ID], g)
+            # TODO: This requires exact phi!
             # Compute interface ghost state
-            #TODO: Unhack interface velocity
             if bc == 0:
                 r, u, v, p = self.compute_ghost_wall(V, bc_area_normal[i],
-                        wall_velocity=np.array([50, 0]))
+                        wall_velocity=np.array([self.u, 0]))
             # Compute wall ghost state
             elif bc == 1:
                 r, u, v, p = self.compute_ghost_wall(V, bc_area_normal[i])

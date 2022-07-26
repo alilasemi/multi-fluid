@@ -15,7 +15,7 @@ ny = 20
 n_t = 200
 t_final = .01
 dt = t_final / n_t
-adaptive = False
+adaptive = True
 rho_levels = np.linspace(.15, 1.05, 19)
 
 # Domain
@@ -24,11 +24,14 @@ xR = 1
 yL = -1
 yR = 1
 
+ghost_fluid_interfaces = True
+update_ghost_fluid_cells = True
+linear_ghost_extrapolation = True
 hardcoded_phi = True
 levelset = True
 plot_mesh = False
 plot_contour = True
-only_rho = False
+only_rho = True
 plot_ICs = False
 equal_aspect_ratio = True
 filetype = 'pdf'
@@ -57,6 +60,7 @@ def compute_solution():
 
     # Store data
     data = SimulationData(U, phi, problem.g)
+    data.U_ghost = np.empty((mesh.bc_type.shape[0], 4))
     #TODO
     data.coords_list = []
 
@@ -70,7 +74,8 @@ def compute_solution():
             phi_list.append(phi)
             break
         data.new_iteration()
-        # Update mesh
+
+        # -- Update Mesh -- #
         if adaptive:
             # Revert back to original face points
             mesh.vol_points = original_vol_points.copy()
@@ -82,30 +87,77 @@ def compute_solution():
                 mesh.edge_points.copy()])
         # Update the stencil to not include points across the interface
         mesh.update_stencil(data.phi)
+
+        # -- Update Solution -- #
         # Compute gradients
         data.gradU = compute_gradient(data.U, mesh)
         # Create ghost fluid interfaces
-        mesh.create_interfaces(data)
+        if ghost_fluid_interfaces:
+            mesh.create_interfaces(data)
         # Update solution
         data.U = update(dt, data, mesh, problem)
         data.t = (i + 1) * dt
 
-        # TODO: This is with a hardcoded phi. This is because I want to neglect
-        # error in phi for now.
+        # -- Copy phi, Then Update -- #
+        phi_old = data.phi.copy()
         if hardcoded_phi:
-            u_bubble = 50
-            radius = .25
-            def get_phi(coords):
-                x = coords[:, 0]
-                y = coords[:, 1]
-                phi = (x - u_bubble * data.t)**2 + y**2 - radius**2
-                phi /= mesh.xL**2 + mesh.xR**2 - radius**2
-                return phi
-            data.phi = get_phi(mesh.xy)
+            data.phi = problem.compute_exact_phi(mesh.xy, data.t)
         else:
             if levelset:
                 data.phi = update_phi(dt, data, mesh, problem)
 
+        # -- Update Ghost Fluid Cells -- #
+        if ghost_fluid_interfaces and update_ghost_fluid_cells:
+            # Find which cells just switched from being in one fluid to being in
+            # another
+            ghost_IDs = np.argwhere(phi_old * data.phi < 0)[:, 0]
+            # Loop over each ghost
+            for ghost_ID in ghost_IDs:
+                # Get new sign of phi for this ghost
+                sign = np.sign(data.phi[ghost_ID])
+                # Get neighbors, not including this cell
+                neighbors = np.array(mesh.neighbors[ghost_ID])[1:]
+                # Get neighbors that are in the same fluid
+                fluid_neighbors = neighbors[
+                        np.argwhere(data.phi[neighbors] * sign > 0
+                        )[:, 0]].tolist()
+                # Make sure other ghosts are not included
+                fluid_neighbors = np.array([n for n in fluid_neighbors if not n in
+                        ghost_IDs])
+                # Check for lonely ghosts
+                n_points = fluid_neighbors.size
+                if n_points == 0:
+                    print('Oh no, a lone ghost fluid cell!')
+                    breakpoint()
+
+                if linear_ghost_extrapolation:
+                    # Loop over state variables
+                    for k in range(4):
+                        # Construct A matrix:
+                        # [x_i, y_i, 1]
+                        # [1,   0,   0]
+                        # [0,   1,   0]
+                        A = np.zeros((3 * n_points, 3))
+                        gradients = data.gradU[fluid_neighbors, k]
+                        A[:n_points, :-1] = mesh.xy[fluid_neighbors]
+                        A[:n_points, -1] = 1
+                        A[n_points:2*n_points, 0] = 1
+                        A[2*n_points:, 1] = 1
+                        b = np.empty(3 * n_points)
+                        b[:n_points] = data.U[fluid_neighbors, k]
+                        b[n_points:2*n_points] = gradients[:, 0]
+                        b[2*n_points:] = gradients[:, 1]
+                        # We desired [x_i, y_i, 1] @ [c0, c1, c2] = U[i], therefore Ax=b.
+                        # However, there are more equations than unknowns (for most points)
+                        # so instead, solve the normal equations: A.T @ A x = A.T @ b
+                        c = np.linalg.solve(A.T @ A, A.T @ b)
+                        # Evaluate extrapolant, U = c0 x + c1 y + c2.
+                        data.U[ghost_ID, k] = np.dot(c[:-1], mesh.xy[ghost_ID]) + c[-1]
+                else:
+                    # Use constant extrapolation
+                    data.U[ghost_ID] = np.mean(data.U[fluid_neighbors], axis=0)
+
+        # Store data
         if np.any(np.isclose(t_list, data.t)):
             U_list.append(data.U.copy())
             phi_list.append(data.phi.copy())
@@ -226,9 +278,8 @@ def compute_solution():
                 ax.set_aspect('equal', adjustable='box')
             ax.set_xlim([mesh.xL, mesh.xR])
             ax.set_ylim([mesh.yL, mesh.yR])
-            # TODO: Quick hack to plot a circle
             if hardcoded_phi:
-                ax.add_patch(plt.Circle((50 * t_list[i_iter], 0), 0.25, color='r', fill=False))
+                problem.plot_exact_interface(ax, mesh, t_list[i_iter])
             # Loop over primal cells
             for cell_ID in range(mesh.n_primal_cells):
                 points = mesh.get_plot_points_primal_cell(cell_ID)
@@ -255,7 +306,7 @@ def compute_solution():
         if only_rho:
             num_vars = 1
         else: num_vars = 3
-        fig, axes = plt.subplots(len(t_list), num_vars, figsize=(6.5, 4*len(t_list)), squeeze=False)
+        fig, axes = plt.subplots(len(t_list), num_vars, figsize=(5 * num_vars, 4*len(t_list)), squeeze=False)
         for i_iter in range(len(t_list)):
             V = V_list[i_iter]
             phi = phi_list[i_iter]
@@ -286,9 +337,8 @@ def compute_solution():
                 plt.colorbar(mappable=contourf, ax=ax)
                 ax.set_title(ylabels[idx], fontsize=10)
                 ax.tick_params(labelsize=10)
-                # TODO: Quick hack to plot a circle
                 if hardcoded_phi:
-                    ax.add_patch(plt.Circle((50 * t_list[i_iter], 0), 0.25, color='r', fill=False))
+                    problem.plot_exact_interface(ax, mesh, t_list[i_iter])
 
                 # Loop over dual faces
                 for face_ID in range(mesh.n_faces):
@@ -329,7 +379,7 @@ def compute_gradient(U, mesh):
             # so instead, solve the normal equations: A.T @ A x = A.T @ b
             try:
                 c = np.linalg.solve(A.T @ A, A.T @ U[mesh.stencil[i]])
-                # Since U = c0 x + c1 u + c2, then dU/dx = c0 and dU/dy = c1.
+                # Since U = c0 x + c1 y + c2, then dU/dx = c0 and dU/dy = c1.
                 gradU[i] = c[:-1].T
             except:
                 print(f'Gradient calculation failed! Stencil = {mesh.stencil[i]}')
