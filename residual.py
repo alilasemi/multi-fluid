@@ -54,8 +54,9 @@ def get_residual(data, mesh, problem):
     # Compute ghost state
     problem.compute_ghost_state(U, U_ghost, mesh.bc_type, mesh.bc_area_normal)
     F_bc = np.empty_like(U_ghost)
-    # Evalute boundary fluxes
+    # Evaluate boundary fluxes
     for face_ID in range(U_ghost.shape[0]):
+        # TODO: Need second order boundaries!
         U_L = U[mesh.bc_type[face_ID, 0]].reshape(1, -1)
         F_bc[face_ID] = data.flux.compute_flux(
                 U_L, U_ghost[face_ID].reshape(1, -1),

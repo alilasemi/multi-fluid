@@ -15,7 +15,7 @@ ny = 20
 n_t = 200
 t_final = .01
 dt = t_final / n_t
-adaptive = True
+adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
 # Domain
@@ -26,9 +26,9 @@ yR = 1
 
 hardcoded_phi = True
 levelset = True
-plot_mesh = True
+plot_mesh = False
 plot_contour = True
-only_rho = True
+only_rho = False
 plot_ICs = False
 equal_aspect_ratio = True
 filetype = 'pdf'
@@ -277,8 +277,12 @@ def compute_solution():
                 if equal_aspect_ratio:
                     ax.set_aspect('equal', adjustable='box')
                 #TODO Make levels less jank
+                if only_rho:
+                    levels = rho_levels
+                else:
+                    levels = None
                 contourf = ax.tricontourf(mesh.xy[:, 0], mesh.xy[:, 1], f[idx],
-                        levels=rho_levels)
+                        levels=levels, extend='both')
                 plt.colorbar(mappable=contourf, ax=ax)
                 ax.set_title(ylabels[idx], fontsize=10)
                 ax.tick_params(labelsize=10)

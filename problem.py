@@ -13,18 +13,22 @@ class Problem:
         self.t_list = t_list
         self.n = xy.shape[0]
 
-    def compute_ghost_wall(self, V, bc_area_normal):
+    def compute_ghost_wall(self, V, bc_area_normal, wall_velocity=None):
         '''
         Compute the ghost state for a wall BC.
 
         Inputs:
         -------
-        V - array of primitive variables
+        V - array of primitive variables (4,)
+        bc_area_normal - array of area-weighted normal vector (2,)
+        wall_velocity - velocity of wall (2,)
 
         Outputs:
         --------
-        V_ghost - array of primitive ghost state
+        V_ghost - array of primitive ghost state (4,)
         '''
+        if wall_velocity is None:
+            wall_velocity = np.zeros(2)
         # The density and pressure are kept the same in the ghost state
         r = V[0]
         p = V[3]
@@ -33,14 +37,19 @@ class Problem:
         # Tangent vector is normal vector, rotated 90 degrees
         t_hat = np.array([-n_hat[1], n_hat[0]])
         # Create rotation matrix
-        rotation = np.array([t_hat, n_hat])
-        # Rotate velocity into tangential - normal frame
+        rotation = np.array([n_hat, t_hat])
+        # Rotate velocity into normal - tangential frame
         velocity = np.array([V[1], V[2]])
-        velocity_tn = rotation @ velocity
-        # The normal velocity is set to be zero at a wall
-        velocity_tn[1] = 0
+        velocity_nt = rotation @ velocity
+        wall_velocity_nt = rotation @ wall_velocity
+        # The normal velocity of the fluid is set so that the mean of the normal
+        # velocity of the fluid vs. the ghost will equal the wall velocity.
+        # This is represented by: 1/2 (U_fluid + U_ghost) = U_wall. Solving for
+        # U_ghost gives:
+        velocity_nt[0] = 2 * wall_velocity_nt[0] - velocity_nt[0]
         # Rotate back to original frame
-        velocity_new = rotation @ velocity_tn
+        velocity_new = rotation.T @ velocity_nt
+        #if not np.all(np.isclose(wall_velocity, np.zeros(2))): breakpoint()
         V_ghost = np.array([r, *velocity_new, p])
         return V_ghost
 
@@ -222,10 +231,18 @@ class AdvectedBubble(Problem):
             cell_ID, bc = bc_type[i]
             # Get primitives
             V = conservative_to_primitive(*U[cell_ID], g)
-            # Compute wall ghost state, regardless of if it's marked as a wall,
-            # inflow or outflow
-            if bc in [0, 1, 2, 3]:
+            # Compute interface ghost state
+            #TODO: Unhack interface velocity
+            if bc == 0:
+                r, u, v, p = self.compute_ghost_wall(V, bc_area_normal[i],
+                        wall_velocity=np.array([50, 0]))
+            # Compute wall ghost state
+            elif bc == 1:
                 r, u, v, p = self.compute_ghost_wall(V, bc_area_normal[i])
+            # Compute inflow/outflow ghost state
+            elif bc in [2, 3]:
+                # Set state to ambient
+                r, u, v, p, _ = self.ambient
             else:
                 print(f'ERROR: Invalid BC type given! bc = {bc}')
             # Compute ghost state
