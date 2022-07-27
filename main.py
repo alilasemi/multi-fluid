@@ -31,19 +31,19 @@ hardcoded_phi = True
 levelset = True
 plot_mesh = False
 plot_contour = True
-only_rho = False
+only_rho = True
 plot_ICs = False
 equal_aspect_ratio = True
 filetype = 'pdf'
 
 #t_list = [dt, .025, .05, .075, .1]
-#t_list = [dt, .0025, .005, .0075, .01]
+t_list = [dt, .0025, .005, .0075, .01]
 #t_list = [.01]
 #t_list = [dt, .004, .008]
 #t_list = [dt, 4, 8]
 #t_list = [dt, 8*dt, 16*dt, 24*dt, 32*dt, 40*dt]
 #t_list = [dt, 4*dt, 8*dt, 12*dt, 16*dt, 20*dt]
-t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt]
+#t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt]
 
 def main():
     compute_solution()

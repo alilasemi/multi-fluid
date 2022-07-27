@@ -204,7 +204,7 @@ class AdvectedBubble(Problem):
     Class for a bubble advecting at constant velocity.
     '''
     # Advection speed
-    u = 0
+    u = 50
     # bubble state (rho, u, v, p, phi)
     bubble = np.array([
             .125, u, 0, 1e5, -1

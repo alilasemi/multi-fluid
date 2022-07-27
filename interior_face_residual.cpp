@@ -153,7 +153,11 @@ void compute_boundary_face_residual(matrix_ref<double> U,
             // Evaluate interior fluxes
             compute_flux(U_L, U_ghost, area_normal, g, F);
             // Add contribution to quadrature
-            F_integral += F * quad_wts(i, 0);
+            if (nq == 2) {
+                F_integral += F * quad_wts(i, 0);
+            } else {
+                F_integral += F;
+            }
         }
         // Update residual of cell on the left
         residual(L, all) += -1 / area(L, 0) * F_integral;
