@@ -10,12 +10,12 @@ from residual import get_residual, get_residual_phi, Roe, Upwind
 
 # Solver inputs
 Problem = AdvectedBubble
-nx = 20
-ny = 20
+nx = 10
+ny = 10
 n_t = 200
 t_final = .01
 dt = t_final / n_t
-adaptive = True
+adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
 # Domain
@@ -31,19 +31,19 @@ hardcoded_phi = True
 levelset = True
 plot_mesh = False
 plot_contour = True
-only_rho = True
+only_rho = False
 plot_ICs = False
 equal_aspect_ratio = True
 filetype = 'pdf'
 
 #t_list = [dt, .025, .05, .075, .1]
-t_list = [dt, .0025, .005, .0075, .01]
+#t_list = [dt, .0025, .005, .0075, .01]
 #t_list = [.01]
 #t_list = [dt, .004, .008]
 #t_list = [dt, 4, 8]
 #t_list = [dt, 8*dt, 16*dt, 24*dt, 32*dt, 40*dt]
 #t_list = [dt, 4*dt, 8*dt, 12*dt, 16*dt, 20*dt]
-#t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt]
+t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt]
 
 def main():
     compute_solution()
@@ -305,7 +305,7 @@ def compute_solution():
     if plot_contour:
         if only_rho:
             num_vars = 1
-        else: num_vars = 3
+        else: num_vars = 4
         fig, axes = plt.subplots(len(t_list), num_vars, figsize=(5 * num_vars, 4*len(t_list)), squeeze=False)
         for i_iter in range(len(t_list)):
             V = V_list[i_iter]
@@ -319,9 +319,10 @@ def compute_solution():
             p = V[:, 3]
 
             # Plotting rho, u, and p
-            f = [r, u, p]
+            f = [r, u, v, p]
             time = f'(t={t} \\textrm{{ s}})'
-            ylabels = [f'$\\rho{time}$ (kg/m$^3$)', f'$u{time}$ (m/s)', f'$p{time}$ (N/m$^2$)']
+            ylabels = [f'$\\rho{time}$ (kg/m$^3$)', f'$v{time}$ (m/s)',
+                    f'$u{time}$ (m/s)', f'$p{time}$ (N/m$^2$)']
             # Loop over variables
             for idx in range(num_vars):
                 ax = axes[i_iter, idx]

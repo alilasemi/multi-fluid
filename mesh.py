@@ -36,6 +36,8 @@ class Mesh:
         self.xy[:, 0] = grid[0].flatten()
         self.xy[:, 1] = grid[1].flatten()
 
+        self.interface_IDs = np.array([], dtype=int)
+
         self.create_dual_faces()
         self.create_primal_cells()
         self.create_face_points()
@@ -584,8 +586,10 @@ class Mesh:
                         coords[:] = optimization.x
 
         # Now that the face points have moved, the area of each dual mesh cell
-        # has changed, and thus needs to be recalculated
+        # has changed, and so have the face area normals. They must now be
+        # recalculated.
         self.compute_cell_areas()
+        self.compute_face_area_normals()
 
     def compute_cell_areas(self):
         '''
@@ -711,6 +715,28 @@ class Mesh:
             self.area_normals_p2[face_ID, :, 0] = -y_seg.jac
             self.area_normals_p2[face_ID, :, 1] =  x_seg.jac
 
+        total_num_boundaries = self.bc_type.shape[0]
+        self.bc_area_normals_p2 = np.empty((total_num_boundaries, 2, 2))
+        self.bc_quad_pts_phys = np.empty((total_num_boundaries, 2, 2))
+        # Set the outer boundaries (not the interfaces) to just be first order.
+        # Only first point is filled, the second point is set to (-1, -1) as a
+        # sentinel value, used later
+        self.bc_area_normals_p2[:self.num_boundaries, 0] = self.bc_area_normal[
+                :self.num_boundaries]
+        self.bc_area_normals_p2[:self.num_boundaries, 1] = -1
+        # If there are any interfaces
+        if self.interface_IDs.size != 0:
+            # Copy interface area normals over
+            self.bc_area_normals_p2[self.num_boundaries::2] = self.area_normals_p2[
+                    self.interface_IDs]
+            self.bc_area_normals_p2[self.num_boundaries + 1::2] = -self.area_normals_p2[
+                    self.interface_IDs]
+            # Get quad point location for interfaces. Leave non-interfaces blank
+            self.bc_quad_pts_phys[self.num_boundaries::2] = self.quad_pts_phys[
+                    self.interface_IDs]
+            self.bc_quad_pts_phys[self.num_boundaries + 1::2] = self.quad_pts_phys[
+                    self.interface_IDs]
+
     def create_interfaces(self, data):
         '''
         Create interface faces.
@@ -725,10 +751,10 @@ class Mesh:
         self.edge = self.original_edge.copy()
         # Find interfaces
         is_surrogate = data.phi[self.edge[:, 0]] * data.phi[self.edge[:, 1]] < 0
-        interface_IDs = np.argwhere(is_surrogate)[:, 0]
+        self.interface_IDs = np.argwhere(is_surrogate)[:, 0]
 
         # Create new arrays for boundary faces
-        num_interfaces = interface_IDs.size
+        num_interfaces = self.interface_IDs.size
         bc_type = np.empty((num_boundaries + 2*num_interfaces, 2), dtype=int)
         bc_area_normal = np.empty((num_boundaries + 2*num_interfaces, 2))
         # Copy the old data in
@@ -736,7 +762,7 @@ class Mesh:
         bc_area_normal[:num_boundaries] = self.bc_area_normal[:num_boundaries]
 
         # Loop over interfaces
-        for i, interface_ID in enumerate(interface_IDs):
+        for i, interface_ID in enumerate(self.interface_IDs):
             # Add to BCs
             bc_type[num_boundaries + 2*i + 0] = [self.edge[interface_ID, 0], 0]
             bc_type[num_boundaries + 2*i + 1] = [self.edge[interface_ID, 1], 0]
@@ -744,10 +770,12 @@ class Mesh:
             bc_area_normal[num_boundaries + 2*i + 1] = -self.edge_area_normal[interface_ID]
 
         # "turn off" those interior faces
-        self.edge[interface_IDs] = [-1, -1]
+        self.edge[self.interface_IDs] = [-1, -1]
 
         # Switch to using these new arrays
         self.bc_type = bc_type
         self.bc_area_normal = bc_area_normal
         # Resize ghost data
         data.U_ghost = np.empty((self.bc_type.shape[0], 4))
+        # Recompute area normals with new interfaces
+        self.compute_face_area_normals()

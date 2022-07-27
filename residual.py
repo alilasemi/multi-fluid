@@ -3,7 +3,8 @@ import pathlib
 import pickle
 import sympy as sp
 
-from cache.build.interior_face_residual import compute_interior_face_residual
+from cache.build.interior_face_residual import (
+        compute_interior_face_residual, compute_boundary_face_residual)
 from lagrange import LagrangeSegment
 
 
@@ -49,22 +50,29 @@ def get_residual(data, mesh, problem):
     # p1 wouldn't even work)
     compute_interior_face_residual(U, mesh.edge, LagrangeSegment.quad_wts,
             mesh.quad_pts_phys, limiter, gradU, mesh.xy, mesh.area_normals_p2,
-            mesh.area, mesh.edge_points, data.flux.g, residual)
+            mesh.area, data.flux.g, residual)
 
     # Compute ghost state
     problem.compute_ghost_state(U, U_ghost, mesh.bc_type, mesh.bc_area_normal)
-    F_bc = np.empty_like(U_ghost)
-    # Evaluate boundary fluxes
-    for face_ID in range(U_ghost.shape[0]):
-        # TODO: Need second order boundaries!
-        U_L = U[mesh.bc_type[face_ID, 0]].reshape(1, -1)
-        F_bc[face_ID] = data.flux.compute_flux(
-                U_L, U_ghost[face_ID].reshape(1, -1),
-                mesh.bc_area_normal[face_ID], cpp=False)
+    # TODO: Evaluate at quadrature points
+    U_ghost = np.repeat(U_ghost.reshape(-1, 1, 4), 2, axis=1)
+
+    # Compute the boundary face residual
+    compute_boundary_face_residual(U, U_ghost, mesh.bc_type, LagrangeSegment.quad_wts,
+            mesh.bc_quad_pts_phys, limiter, gradU, mesh.xy, mesh.bc_area_normals_p2,
+            mesh.area, data.flux.g, mesh.num_boundaries, residual)
+#    F_bc = np.empty_like(U_ghost)
+#    # Evaluate boundary fluxes
+#    for face_ID in range(U_ghost.shape[0]):
+#        # TODO: Need second order boundaries!
+#        U_L = U[mesh.bc_type[face_ID, 0]].reshape(1, -1)
+#        F_bc[face_ID] = data.flux.compute_flux(
+#                U_L, U_ghost[face_ID].reshape(1, -1),
+#                mesh.bc_area_normal[face_ID], cpp=False)
 
     # Incorporate boundary faces
-    cellL_ID = mesh.bc_type[:, 0]
-    np.add.at(residual, cellL_ID, -1 / mesh.area[cellL_ID].reshape(-1, 1) * F_bc)
+#    cellL_ID = mesh.bc_type[:, 0]
+#    np.add.at(residual, cellL_ID, -1 / mesh.area[cellL_ID].reshape(-1, 1) * F_bc)
     return residual
 
 def get_residual_phi(data, mesh, problem):
