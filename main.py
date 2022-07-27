@@ -15,7 +15,7 @@ ny = 10
 n_t = 200
 t_final = .01
 dt = t_final / n_t
-adaptive = False
+adaptive = True
 rho_levels = np.linspace(.15, 1.05, 19)
 
 # Domain
@@ -29,7 +29,7 @@ update_ghost_fluid_cells = True
 linear_ghost_extrapolation = True
 hardcoded_phi = True
 levelset = True
-plot_mesh = False
+plot_mesh = True
 plot_contour = True
 only_rho = True
 plot_ICs = False
@@ -81,10 +81,7 @@ def compute_solution():
             mesh.vol_points = original_vol_points.copy()
             mesh.edge_points = original_edge_points.copy()
             # Update the mesh
-            mesh.update(data)
-        # Store the new face points, for plotting later
-        data.coords_list.append([mesh.vol_points.copy(),
-                mesh.edge_points.copy()])
+            mesh.update(data, problem)
         # Update the stencil to not include points across the interface
         mesh.update_stencil(data.phi)
 
@@ -161,6 +158,9 @@ def compute_solution():
         if np.any(np.isclose(t_list, data.t)):
             U_list.append(data.U.copy())
             phi_list.append(data.phi.copy())
+            # Store the new face points, for plotting later
+            data.coords_list.append([mesh.vol_points.copy(),
+                    mesh.edge_points.copy()])
         # Find shock
         if Problem == RiemannProblem:
             for j in range(nx):

@@ -103,9 +103,8 @@ class RiemannProblem(Problem):
         U = np.empty((self.n, 4))
         U[self.xy[:, 0] <= 0] = W4
         U[self.xy[:, 0] > 0] = W1
-        # Phi is set to be zero at the initial contact (x = 0)
-        phi = self.xy[:, 0].copy()
-        phi /= np.max(phi)
+        # Compute initial phi
+        phi = self.compute_exact_phi(self.xy, 0)
         return U, phi
 
     def compute_ghost_state(self, U, U_ghost, bc_type, bc_area_normal):
@@ -193,8 +192,15 @@ class AdvectedContact(RiemannProblem):
         '''
         x = coords[:, 0]
         phi = x - self.u * t
-        phi /= np.max(x)
         return phi
+
+    def compute_exact_phi_gradient(self, coords, t):
+        '''
+        Compute the gradient of the exact phi.
+        '''
+        x = coords[:, 0]
+        gphi = np.array([1, 0])
+        return gphi
 
     def plot_exact_interface(self, axis, mesh, t):
         axis.vlines(self.u * t, mesh.yL, mesh.yR, color='r')
@@ -234,9 +240,8 @@ class AdvectedBubble(Problem):
         indices = np.nonzero(self.xy[:, 0]**2 + self.xy[:, 1]**2 <
                 self.radius**2)
         U[indices] = W1
-        # Phi is set to be zero at the initial bubble
-        phi = self.xy[:, 0]**2 + self.xy[:, 1]**2 - self.radius**2
-        phi /= np.max(phi)
+        # Compute initial phi
+        phi = self.compute_exact_phi(self.xy, 0)
         return U, phi
 
     def compute_exact_phi(self, coords, t):
@@ -247,8 +252,18 @@ class AdvectedBubble(Problem):
         x = coords[:, 0]
         y = coords[:, 1]
         phi = (x - self.u * t)**2 + y**2 - self.radius**2
-        phi /= np.max(x)**2 + np.max(y)**2 - self.radius**2
         return phi
+
+    def compute_exact_phi_gradient(self, coords, t):
+        '''
+        Compute the gradient of the exact phi.
+        '''
+        x = coords[:, 0]
+        y = coords[:, 1]
+        gphi = np.array([
+            2 * (x - self.u * t),
+            2 * y])
+        return gphi
 
     def plot_exact_interface(self, axis, mesh, t):
         axis.add_patch(matplotlib.patches.Circle((self.u * t, 0), self.radius,

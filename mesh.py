@@ -413,37 +413,25 @@ class Mesh:
         coords[3] = self.xy[self.primal_cell_to_nodes[cell_ID, 0]]
         return coords
 
-    def update(self, data):
+    def update(self, data, problem):
         '''
         Update the dual mesh to fit the interface better.
         '''
-        t = data.t
         # Copy the original edge back
         self.edge = self.original_edge.copy()
-        # TODO: This is with a hardcoded phi. This is because I want to neglect
-        # error in phi for now.
+        # TODO: This is with a hardcoded/exact phi. This is because I want to
+        # neglect error in phi for now.
         # TODO: For some reason, u needs to be 10 times larger here. A bug
         # somewhere?
         # TODO: The mesh plot thick black line does not line up with the
         # adapted points! (see left)
-        u_bubble = 50 * 50
-        radius = .25
-        def get_phi(coords):
-            x, y = coords
-            phi = (x - u_bubble * t)**2 + y**2 - radius**2
-            phi /= self.xL**2 + self.xR**2 - radius**2
-            return phi
-        def get_grad_phi(coords):
-            x, y = coords
-            gphi = np.array([
-                2 * (x - u_bubble * t),
-                2 * y])
-            gphi /= self.xL**2 + self.xR**2 - radius**2
-            return gphi
-        def get_phi_squared(coords):
-            return get_phi(coords)**2
-        def get_grad_phi_squared(coords):
-            return 2 * get_phi(coords) * get_grad_phi(coords)
+        def get_phi_squared(coords, t):
+            coords = coords.reshape(1, -1)
+            return problem.compute_exact_phi(coords, t)**2
+        def get_grad_phi_squared(coords, t):
+            coords = coords.reshape(1, -1)
+            return (2 * problem.compute_exact_phi(coords, t)
+                    * problem.compute_exact_phi_gradient(coords, t))
 
         for face_ID in range(self.n_faces):
             # TODO: Only works for interior faces
@@ -452,7 +440,7 @@ class Mesh:
             # Get dual mesh neighbors
             i, j = self.edge[face_ID]
             # Check for interface
-            if get_phi(self.xy[i]) * get_phi(self.xy[j]) < 0:
+            if data.phi[i] * data.phi[j] < 0:
                 # If it's an interface, move the face points towards phi = 0
                 for i_point in range(3):
                     # -- Edge points -- #
@@ -515,7 +503,7 @@ class Mesh:
                         vector = (self.xy[j] - self.xy[i])/3
                         guess = coords + [vector[1], -vector[0]]
                         optimization = scipy.optimize.minimize(get_phi_squared,
-                                guess, jac=get_grad_phi_squared,
+                                guess, args=(data.t,), jac=get_grad_phi_squared,
                                 constraints=[{
                                     'type': 'eq',
                                     'fun': constraint_1,
@@ -577,7 +565,7 @@ class Mesh:
                         # (phi = 0) while still keeping the point within the
                         # triangle
                         optimization = scipy.optimize.minimize(get_phi_squared,
-                                coords, jac=get_grad_phi_squared,
+                                coords, args=(data.t,), jac=get_grad_phi_squared,
                                 constraints=[{
                                     'type': 'ineq',
                                     'fun': constraint_func,
@@ -715,15 +703,17 @@ class Mesh:
             self.area_normals_p2[face_ID, :, 0] = -y_seg.jac
             self.area_normals_p2[face_ID, :, 1] =  x_seg.jac
 
+        # Copy over to the BC faces as well
+        self.copy_bc_face_area_normals()
+
+    def copy_bc_face_area_normals(self):
         total_num_boundaries = self.bc_type.shape[0]
         self.bc_area_normals_p2 = np.empty((total_num_boundaries, 2, 2))
         self.bc_quad_pts_phys = np.empty((total_num_boundaries, 2, 2))
         # Set the outer boundaries (not the interfaces) to just be first order.
-        # Only first point is filled, the second point is set to (-1, -1) as a
-        # sentinel value, used later
+        # Only the first point is filled.
         self.bc_area_normals_p2[:self.num_boundaries, 0] = self.bc_area_normal[
                 :self.num_boundaries]
-        self.bc_area_normals_p2[:self.num_boundaries, 1] = -1
         # If there are any interfaces
         if self.interface_IDs.size != 0:
             # Copy interface area normals over
@@ -777,5 +767,5 @@ class Mesh:
         self.bc_area_normal = bc_area_normal
         # Resize ghost data
         data.U_ghost = np.empty((self.bc_type.shape[0], 4))
-        # Recompute area normals with new interfaces
-        self.compute_face_area_normals()
+        # Copy over the face information into the BCs with the new interfaces
+        self.copy_bc_face_area_normals()
