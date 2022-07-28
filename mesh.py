@@ -421,10 +421,6 @@ class Mesh:
         self.edge = self.original_edge.copy()
         # TODO: This is with a hardcoded/exact phi. This is because I want to
         # neglect error in phi for now.
-        # TODO: For some reason, u needs to be 10 times larger here. A bug
-        # somewhere?
-        # TODO: The mesh plot thick black line does not line up with the
-        # adapted points! (see left)
         def get_phi_squared(coords, t):
             coords = coords.reshape(1, -1)
             return problem.compute_exact_phi(coords, t)**2

@@ -164,6 +164,98 @@ void compute_boundary_face_residual(matrix_ref<double> U,
     }
 }
 
+
+vector<double> compute_ghost_interface(vector<double> V, vector<double> bc_area_normal,
+        vector<double> wall_velocity) {
+    /*
+    Compute the ghost state for a wall/interface BC.
+
+    Inputs:
+    -------
+    V - array of primitive variables (4,)
+    bc_area_normal - array of area-weighted normal vector (2,)
+    wall_velocity - velocity of wall (2,)
+
+    Outputs:
+    --------
+    V_ghost - array of primitive ghost state (4,)
+    */
+    // The density and pressure are kept the same in the ghost state
+    auto r = V[0];
+    auto p = V[3];
+    // Compute unit normal vector
+    vector<double> n_hat = bc_area_normal.normalized();
+    // Tangent vector is normal vector, rotated 90 degrees
+    vector<double> t_hat(2);
+    t_hat(0) = -n_hat(1);
+    t_hat(1) =  n_hat(0);
+    // Create rotation matrix
+    matrix<double> rotation(2, 2);
+    rotation(0, all) = n_hat;
+    rotation(1, all) = t_hat;
+    // Rotate velocity into normal - tangential frame
+    vector<double> velocity(2);
+    velocity(0) = V(1);
+    velocity(1) = V(2);
+    vector<double> velocity_nt = rotation * velocity;
+    vector<double> wall_velocity_nt = rotation * wall_velocity;
+    // The normal velocity of the fluid is set so that the mean of the normal
+    // velocity of the fluid vs. the ghost will equal the wall velocity.
+    // This is represented by: 1/2 (U_fluid + U_ghost) = U_wall. Solving for
+    // U_ghost gives:
+    velocity_nt(0) = 2 * wall_velocity_nt(0) - velocity_nt(0);
+    // Rotate back to original frame
+    vector<double> velocity_new = rotation.transpose() * velocity_nt;
+    vector<double> V_ghost(4);
+    V_ghost(0) = r;
+    V_ghost(1) = velocity_new(0);
+    V_ghost(2) = velocity_new(1);
+    V_ghost(3) = p;
+    return V_ghost;
+}
+
+vector<double> compute_ghost_wall(vector<double> V, vector<double> bc_area_normal) {
+    // A wall is just an interface that isn't moving
+    auto wall_velocity = vector<double>::Zero(2);
+    return compute_ghost_interface(V, bc_area_normal, wall_velocity);
+}
+
+//TODO Fill me!
+vector<double> conservative_to_primitive(vector<double> U, double g) {
+    return U;
+}
+//TODO Fill me!
+vector<double> primitive_to_conservative(vector<double> V, double g) {
+    return V;
+}
+
+vector<double> compute_ghost_state(vector<double> U, long bc,
+        vector<double> bc_area_normal, matrix<double> bc_data) {
+    // TODO: Create bc_data, and place gamma in the final index for all cases
+    // TODO: Get the exact wall_velocity in here somehow
+    // Compute interface ghost state
+    auto g = bc_data(bc, 4);
+    vector<double> V_ghost(4);
+    // Compute interface ghost state
+    if (bc == 0) {
+        auto V = conservative_to_primitive(U, g);
+        vector<double> wall_velocity(4); // TODO: Fill me! from bc_data? But how...this changes?
+        V_ghost = compute_ghost_interface(V, bc_area_normal, wall_velocity);
+    // Compute wall ghost state
+    } else if (bc == 1) {
+        auto V = conservative_to_primitive(U, g);
+        V_ghost = compute_ghost_wall(V, bc_area_normal);
+    // Compute inflow/outflow ghost state
+    } else if (bc == 2 or bc == 3) {
+        //V_ghost = bc_data(bc, 0:4); //TODO
+    } else {
+        printf("ERROR: Invalid BC type given! bc = %li\n", bc);
+    }
+    // Convert to conservative
+    auto U_ghost = primitive_to_conservative(V_ghost, g);
+    return U_ghost;
+}
+
 PYBIND11_MODULE(interior_face_residual, m) {
     m.doc() = "doc"; // optional module docstring
     m.def("compute_interior_face_residual", &compute_interior_face_residual,
