@@ -53,16 +53,9 @@ def get_residual(data, mesh, problem):
             mesh.area, data.flux.g, residual)
 
     # Compute the boundary face residual
-    # TODO
-    g = data.flux.g
-    bc_data = np.array([
-            [0, 0, 0, 0, g],
-            [0, 0, 0, 0, g],
-            [1, 50, 0, 1e5, g],
-            [1, 50, 0, 1e5, g]])
     compute_boundary_face_residual(U, mesh.bc_type, LagrangeSegment.quad_wts,
             mesh.bc_quad_pts_phys, limiter, gradU, mesh.xy, mesh.bc_area_normals_p2,
-            mesh.area, g, mesh.num_boundaries, bc_data, residual)
+            mesh.area, data.flux.g, mesh.num_boundaries, problem.bc_data, residual)
     return residual
 
 def get_residual_phi(data, mesh, problem):

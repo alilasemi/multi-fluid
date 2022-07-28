@@ -8,51 +8,30 @@ class Problem:
     '''
     Parent class for all problem definitions.
     '''
+
+    bc_data = np.empty((4, 5))
     exact = False
     def __init__(self, xy, t_list):
         self.xy = xy
         self.t_list = t_list
         self.n = xy.shape[0]
+        self.set_bc_data()
 
-    def compute_ghost_wall(self, V, bc_area_normal, wall_velocity=None):
-        '''
-        Compute the ghost state for a wall BC.
-
-        Inputs:
-        -------
-        V - array of primitive variables (4,)
-        bc_area_normal - array of area-weighted normal vector (2,)
-        wall_velocity - velocity of wall (2,)
-
-        Outputs:
-        --------
-        V_ghost - array of primitive ghost state (4,)
-        '''
-        if wall_velocity is None:
-            wall_velocity = np.zeros(2)
-        # The density and pressure are kept the same in the ghost state
-        r = V[0]
-        p = V[3]
-        # Compute unit normal vector
-        n_hat = bc_area_normal / np.linalg.norm(bc_area_normal)
-        # Tangent vector is normal vector, rotated 90 degrees
-        t_hat = np.array([-n_hat[1], n_hat[0]])
-        # Create rotation matrix
-        rotation = np.array([n_hat, t_hat])
-        # Rotate velocity into normal - tangential frame
-        velocity = np.array([V[1], V[2]])
-        velocity_nt = rotation @ velocity
-        wall_velocity_nt = rotation @ wall_velocity
-        # The normal velocity of the fluid is set so that the mean of the normal
-        # velocity of the fluid vs. the ghost will equal the wall velocity.
-        # This is represented by: 1/2 (U_fluid + U_ghost) = U_wall. Solving for
-        # U_ghost gives:
-        velocity_nt[0] = 2 * wall_velocity_nt[0] - velocity_nt[0]
-        # Rotate back to original frame
-        velocity_new = rotation.T @ velocity_nt
-        #if not np.all(np.isclose(wall_velocity, np.zeros(2))): breakpoint()
-        V_ghost = np.array([r, *velocity_new, p])
-        return V_ghost
+    def set_bc(self, bc, bc_name, data=None):
+        # All BCs store gamma in the last entry
+        self.bc_data[bc, -1] = self.g
+        # Nothing special needed for walls or interfaces at the moment
+        if bc_name == 'wall' or bc_name == 'interface':
+            pass
+        # For full state BCs, store the state
+        elif bc_name == 'full state':
+            # Check to make sure data was supplied
+            if data is None:
+                print(f'No data given for full state BC! data = {data}')
+            self.bc_data[bc, :4] = data
+        # Otherwise, this BC is not recognized
+        else:
+            print(f'BC name not recognized! was given bc_name = {bc_name}')
 
 
 class RiemannProblem(Problem):
@@ -107,43 +86,15 @@ class RiemannProblem(Problem):
         phi = self.compute_exact_phi(self.xy, 0)
         return U, phi
 
-    def compute_ghost_state(self, U, U_ghost, bc_type, bc_area_normal):
-        # Unpack
-        r4, u4, v4, p4, _ = self.state_4
-        r1, u1, v1, p1, _ = self.state_1
-        g = self.g
-        # Loop over each boundary cell
-        for i in range(U_ghost.shape[0]):
-            # Get the type of this boundary
-            cell_ID, bc = bc_type[i]
-            # Get primitives
-            V = conservative_to_primitive(*U[cell_ID], g)
-            # TODO: This requires exact phi!
-            # Compute interface ghost state
-            if bc == 0:
-                r, u, v, p = self.compute_ghost_wall(V, bc_area_normal[i],
-                        wall_velocity=np.array([self.u, 0]))
-            # Compute wall ghost state
-            elif bc == 1:
-                r, u, v, p = self.compute_ghost_wall(V, bc_area_normal[i])
-            # Compute inflow ghost state
-            elif bc == 2:
-                # Set state to the left state
-                r = r4
-                u = u4
-                v = v4
-                p = p4
-            # Compute outflow ghost state
-            elif bc == 3:
-                # Set state to the right state
-                r = r1
-                u = u1
-                v = v1
-                p = p1
-            else:
-                print(f'ERROR: Invalid BC type given! bc = {bc}')
-            # Compute ghost state
-            U_ghost[i] = primitive_to_conservative(r, u, v, p, g)
+    def set_bc_data(self):
+        # Set BC 0 to be the interfaces
+        self.set_bc(0, 'interface')
+        # Set BC 1 to be the walls
+        self.set_bc(1, 'wall')
+        # Set BC 2 to be the left state
+        self.set_bc(2, 'full state', self.state_4[:-1])
+        # Set BC 3 to be the right state
+        self.set_bc(3, 'full state', self.state_1[:-1])
 
     def compute_ghost_phi(self, phi, phi_ghost, bc_type):
         # Unpack
@@ -269,33 +220,14 @@ class AdvectedBubble(Problem):
         axis.add_patch(matplotlib.patches.Circle((self.u * t, 0), self.radius,
             color='r', fill=False))
 
-    def compute_ghost_state(self, U, U_ghost, bc_type, bc_area_normal):
-        # Unpack
-        r0, u0, v0, p0, _ = self.ambient
-        r1, u1, v1, p1, _ = self.bubble
-        g = self.g
-        # Loop over each boundary cell
-        for i in range(U_ghost.shape[0]):
-            # Get the type of this boundary
-            cell_ID, bc = bc_type[i]
-            # Get primitives
-            V = conservative_to_primitive(*U[cell_ID], g)
-            # TODO: This requires exact phi!
-            # Compute interface ghost state
-            if bc == 0:
-                r, u, v, p = self.compute_ghost_wall(V, bc_area_normal[i],
-                        wall_velocity=np.array([self.u, 0]))
-            # Compute wall ghost state
-            elif bc == 1:
-                r, u, v, p = self.compute_ghost_wall(V, bc_area_normal[i])
-            # Compute inflow/outflow ghost state
-            elif bc in [2, 3]:
-                # Set state to ambient
-                r, u, v, p, _ = self.ambient
-            else:
-                print(f'ERROR: Invalid BC type given! bc = {bc}')
-            # Compute ghost state
-            U_ghost[i] = primitive_to_conservative(r, u, v, p, g)
+    def set_bc_data(self):
+        # Set BC 0 to be the interfaces
+        self.set_bc(0, 'interface')
+        # Set BC 1 to be the walls
+        self.set_bc(1, 'wall')
+        # Set BC 2 and 3 to be the ambient state
+        self.set_bc(2, 'full state', self.ambient[:-1])
+        self.set_bc(3, 'full state', self.ambient[:-1])
 
     def compute_ghost_phi(self, phi, phi_ghost, bc_type):
         # Unpack
@@ -314,6 +246,7 @@ class AdvectedBubble(Problem):
                 print(f'ERROR: Invalid BC type given! bc = {bc}')
 
 
+# TODO: These are marked for removal. Point to the C++ functions instead.
 def primitive_to_conservative(r, u, v, p, g):
     W = np.empty(4)
     W[0] = r
