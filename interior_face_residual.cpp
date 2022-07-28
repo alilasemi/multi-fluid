@@ -220,13 +220,33 @@ vector<double> compute_ghost_wall(vector<double> V, vector<double> bc_area_norma
     return compute_ghost_interface(V, bc_area_normal, wall_velocity);
 }
 
-//TODO Fill me!
 vector<double> conservative_to_primitive(vector<double> U, double g) {
-    return U;
-}
-//TODO Fill me!
-vector<double> primitive_to_conservative(vector<double> V, double g) {
+    // Unpack
+    auto& r = U(0);
+    auto& ru = U(1);
+    auto& rv = U(2);
+    auto& re = U(3);
+    // Compute primitive variables
+    vector<double> V(4);
+    V(0) = r;
+    V(1) = ru / r;
+    V(2) = rv / r;
+    V(3) = (re - .5 * (ru*ru + rv*rv) / r) * (g - 1);
     return V;
+}
+vector<double> primitive_to_conservative(vector<double> V, double g) {
+    // Unpack
+    auto& r = V(0);
+    auto& u = V(1);
+    auto& v = V(2);
+    auto& p = V(3);
+    // Compute conservative variables
+    vector<double> U(4);
+    U(0) = r;
+    U(1) = r * u;
+    U(2) = r * v;
+    U(3) = p / (g - 1) + .5 * r * (u*u + v*v);
+    return U;
 }
 
 vector<double> compute_ghost_state(vector<double> U, long bc,
