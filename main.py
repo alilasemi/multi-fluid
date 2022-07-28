@@ -10,12 +10,12 @@ from residual import get_residual, get_residual_phi, Roe, Upwind
 
 # Solver inputs
 Problem = AdvectedBubble
-nx = 10
-ny = 10
+nx = 20
+ny = 20
 n_t = 200
 t_final = .01
 dt = t_final / n_t
-adaptive = True
+adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
 # Domain

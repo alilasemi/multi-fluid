@@ -7,6 +7,7 @@
 #include <pybind11/pybind11.h>
 namespace py = pybind11;
 using Eigen::placeholders::all;
+using Eigen::seq;
 
 // Custom types for 1D vectors and 2D matrices in Eigen. It is important to
 // specify RowMajor since the default of Eigen is column major

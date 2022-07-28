@@ -83,14 +83,18 @@ void compute_interior_face_residual(matrix_ref<double> U,
     }
 }
 
+// Forward declare
+// TODO: Header files!! Organize!!
+vector<double> compute_ghost_state(vector<double> U, long bc,
+        vector<double> bc_area_normal, matrix<double> bc_data);
 // Compute the boundary faces' contributions to the residual.
 void compute_boundary_face_residual(matrix_ref<double> U,
-        np_array<double> U_ghost_np,
         matrix_ref<long> bc_type, matrix_ref<double> quad_wts,
         np_array<double> quad_pts_phys_np, matrix_ref<double> limiter,
         np_array<double> gradU_np, matrix_ref<double> xy,
         np_array<double> area_normals_p2_np, matrix_ref<double> area,
-        double g, long num_boundaries, matrix_ref<double> residual) {
+        double g, long num_boundaries, matrix<double> bc_data,
+        matrix_ref<double> residual) {
     // Sizing
     auto n_faces = bc_type.rows();
 
@@ -101,6 +105,8 @@ void compute_boundary_face_residual(matrix_ref<double> U,
     for (auto face_ID = 0; face_ID < n_faces; face_ID++) {
         // Left cell ID
         auto L = bc_type(face_ID, 0);
+        // Type of BC
+        auto bc = bc_type(face_ID, 1);
 
         // Gradients for this cell
         auto gradU_ptr = (double*) gradU_np.request().ptr;
@@ -117,9 +123,6 @@ void compute_boundary_face_residual(matrix_ref<double> U,
         // Loop over quadrature points
         vector<double> F_integral = vector<double>::Zero(4);
         for (auto i = 0; i < nq; i++) {
-            // Get ghost state
-            auto U_ghost_ptr = (double*) U_ghost_np.request().ptr;
-            matrix<double> U_ghost = matrix_map<double>(U_ghost_ptr + face_ID*2*4 + i*4, 4, 1);
             // Evaluate solution at face on left
             // -- First order component -- #
             U_L = U(L, all).transpose();
@@ -150,6 +153,17 @@ void compute_boundary_face_residual(matrix_ref<double> U,
             auto area_normals_ptr = (double*) area_normals_p2_np.request().ptr;
             area_normal(0, 0) = area_normals_ptr[face_ID * 2 * 2 + i * 2 + 0];
             area_normal(1, 0) = area_normals_ptr[face_ID * 2 * 2 + i * 2 + 1];
+
+            // TODO Get rid of this matrix vs vector thing...
+            vector<double> area_normal_vec(2);
+            area_normal_vec(0) = area_normal(0, 0);
+            area_normal_vec(1) = area_normal(1, 0);
+            // Compute ghost state
+            auto U_ghost_vec = compute_ghost_state(U_L, bc, area_normal_vec, bc_data);
+            // TODO: Fix matrix vs vector!
+            matrix<double> U_ghost(4, 1);
+            U_ghost << U_ghost_vec(0), U_ghost_vec(1), U_ghost_vec(2), U_ghost_vec(3);
+
             // Evaluate interior fluxes
             compute_flux(U_L, U_ghost, area_normal, g, F);
             // Add contribution to quadrature
@@ -194,18 +208,18 @@ vector<double> compute_ghost_interface(vector<double> V, vector<double> bc_area_
     rotation(0, all) = n_hat;
     rotation(1, all) = t_hat;
     // Rotate velocity into normal - tangential frame
-    vector<double> velocity(2);
+    vector<double> velocity(2, 1);
     velocity(0) = V(1);
     velocity(1) = V(2);
-    vector<double> velocity_nt = rotation * velocity;
-    vector<double> wall_velocity_nt = rotation * wall_velocity;
+    matrix<double> velocity_nt = rotation * velocity;
+    matrix<double> wall_velocity_nt = rotation * wall_velocity.reshaped(2, 1);
     // The normal velocity of the fluid is set so that the mean of the normal
     // velocity of the fluid vs. the ghost will equal the wall velocity.
     // This is represented by: 1/2 (U_fluid + U_ghost) = U_wall. Solving for
     // U_ghost gives:
     velocity_nt(0) = 2 * wall_velocity_nt(0) - velocity_nt(0);
     // Rotate back to original frame
-    vector<double> velocity_new = rotation.transpose() * velocity_nt;
+    matrix<double> velocity_new = rotation.transpose() * velocity_nt;
     vector<double> V_ghost(4);
     V_ghost(0) = r;
     V_ghost(1) = velocity_new(0);
@@ -259,7 +273,8 @@ vector<double> compute_ghost_state(vector<double> U, long bc,
     // Compute interface ghost state
     if (bc == 0) {
         auto V = conservative_to_primitive(U, g);
-        vector<double> wall_velocity(4); // TODO: Fill me! from bc_data? But how...this changes?
+        vector<double> wall_velocity(2); // TODO: Fill me! from bc_data? But how...this changes?
+        wall_velocity << 50, 0;
         V_ghost = compute_ghost_interface(V, bc_area_normal, wall_velocity);
     // Compute wall ghost state
     } else if (bc == 1) {
@@ -267,7 +282,7 @@ vector<double> compute_ghost_state(vector<double> U, long bc,
         V_ghost = compute_ghost_wall(V, bc_area_normal);
     // Compute inflow/outflow ghost state
     } else if (bc == 2 or bc == 3) {
-        //V_ghost = bc_data(bc, 0:4); //TODO
+        V_ghost = bc_data(bc, seq(0, 3));
     } else {
         printf("ERROR: Invalid BC type given! bc = %li\n", bc);
     }
