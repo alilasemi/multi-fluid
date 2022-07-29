@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 from matplotlib import rc
 import numpy as np
+import rich.traceback
+rich.traceback.install()
 
 from mesh import Mesh
 from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
@@ -37,7 +39,8 @@ equal_aspect_ratio = True
 filetype = 'pdf'
 
 #t_list = [dt, .025, .05, .075, .1]
-t_list = [dt, .0025, .005, .0075, .01]
+#t_list = [dt, .0025, .005, .0075, .01]
+t_list = [dt, .0005, .001, .0015, .002]
 #t_list = [.01]
 #t_list = [dt, .004, .008]
 #t_list = [dt, 4, 8]
@@ -391,6 +394,13 @@ def update(dt, data, mesh, problem):
     U_new = data.U.copy()
     # Compute residual
     R = get_residual(data, mesh, problem)
+    # Check for NaNs
+    nan_IDs = np.argwhere(np.isnan(R))[:, 0]
+    if nan_IDs.size != 0:
+        message = 'Oh no! NaN detected in the residual!\n'
+        message += f'The following {nan_IDs.size} cell residuals are all NaN\'d out:\n'
+        message += f'{nan_IDs}'
+        raise FloatingPointError(message)
     # Forward euler
     U_new += dt * R
     return U_new

@@ -36,13 +36,17 @@ class ComputeCollapsingCylinderVelocity : ComputeForcedInterfaceVelocity {
             auto theta = atan2(y, x);
             // Precompute factor
             auto a = 100 * M_PI;
+            // Radius of cylinder
+            auto R = data(0);
             // TODO below not needed, but document the math
             // Compute r
             //auto r = (1/3 * (2 + cos(4 * theta)))
             //        * pow(sin(a*t), 2) + pow(cos(a*t), 2);
+            // r *= R;
             // Compute dr/dt
             auto drdt = (1/3 * (2 + cos(4 * theta)))
                     * 2*a*sin(a*t) + 2*a*cos(a*t);
+            drdt *= R;
             // Compute dx/dt
             velocity(0) = drdt * cos(theta);
             // Compute dy/dt

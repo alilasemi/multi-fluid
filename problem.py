@@ -258,6 +258,9 @@ class CollapsingCylinder(Problem):
             1, 0, 0, 1e5
     ])
 
+    # Radius of cylinder
+    R = .25
+
     # Ratio of specific heats
     g = 1.4
 
@@ -277,7 +280,8 @@ class CollapsingCylinder(Problem):
 
     def compute_exact_phi(self, coords, t):
         '''
-        Compute the exact phi, which is a paraboloid following the interface.
+        Compute the exact phi, which is a deformed paraboloid following the
+        interface.
         '''
         x = coords[:, 0]
         y = coords[:, 1]
@@ -285,11 +289,9 @@ class CollapsingCylinder(Problem):
         # Compute r
         a = 100 * np.pi
         r = (1/3 * (2 + np.cos(4 * theta))) * np.sin(a*t)**2 + np.cos(a*t)**2
-        # Convert to x and y
-        x_interface = r * np.cos(theta)
-        y_interface = r * np.sin(theta)
+        r *= self.R
         # Compute paraboloid
-        phi = (x - x_interface)**2 + (y - y_interface)**2
+        phi = (x/r)**2 + (y/r)**2 - 1
         return phi
 
     def compute_exact_phi_gradient(self, coords, t):
@@ -302,13 +304,11 @@ class CollapsingCylinder(Problem):
         # Compute r
         a = 100 * np.pi
         r = (1/3 * (2 + np.cos(4 * theta))) * np.sin(a*t)**2 + np.cos(a*t)**2
-        # Convert to x and y
-        x_interface = r * np.cos(theta)
-        y_interface = r * np.sin(theta)
+        r *= R
         # Compute paraboloid's gradient
         gphi = np.array([
-            2 * (x - x_interface),
-            2 * (y - y_interface)])
+            2 * (x/r) / r,
+            2 * (y/r) / r])
         return gphi
 
     def plot_exact_interface(self, axis, mesh, t):
@@ -318,6 +318,7 @@ class CollapsingCylinder(Problem):
         # Compute r
         a = 100 * np.pi
         r = (1/3 * (2 + np.cos(4 * theta))) * np.sin(a*t)**2 + np.cos(a*t)**2
+        r *= self.R
         # Convert to x and y
         x = r * np.cos(theta)
         y = r * np.sin(theta)
@@ -329,12 +330,12 @@ class CollapsingCylinder(Problem):
         x_loop[-1] = x[0]
         y_loop[-1] = y[0]
         # Plot
-        axis.plot(x_loop, y_loop, 'k', lw=3)
+        axis.plot(x_loop, y_loop, 'r')
 
     def set_bc_data(self):
         # Set BC 0 to be the interfaces
         #TODO
-        interface_velocity_data = np.array([0])
+        interface_velocity_data = np.array([self.R])
         self.set_bc(0, 'interface', interface_velocity_data)
         # Set BC 1, 2, and 3 to be walls
         self.set_bc(1, 'wall')

@@ -8,6 +8,7 @@ TODO: Add versions for these!
 - Scipy
 - Sympy
 - Pybind11
+- Rich
 
 To download Pybind, use the following:
 

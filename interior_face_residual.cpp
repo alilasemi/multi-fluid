@@ -89,6 +89,7 @@ void compute_interior_face_residual(matrix_ref<double> U,
 // Forward declare
 // TODO: Header files!! Organize!!
 vector<double> compute_ghost_state(vector<double> U, long bc,
+        matrix<double> quad_pt, double t,
         vector<double> bc_area_normal, matrix<double> bc_data,
         ComputeForcedInterfaceVelocity*);
 // Compute the boundary faces' contributions to the residual.
@@ -98,7 +99,7 @@ void compute_boundary_face_residual(matrix_ref<double> U,
         np_array<double> gradU_np, matrix_ref<double> xy,
         np_array<double> area_normals_p2_np, matrix_ref<double> area,
         double g, long num_boundaries, matrix<double> bc_data,
-        string problem_name, matrix_ref<double> residual) {
+        string problem_name, double t, matrix_ref<double> residual) {
     // Sizing
     auto n_faces = bc_type.rows();
 
@@ -174,8 +175,8 @@ void compute_boundary_face_residual(matrix_ref<double> U,
             area_normal_vec(0) = area_normal(0, 0);
             area_normal_vec(1) = area_normal(1, 0);
             // Compute ghost state
-            auto U_ghost_vec = compute_ghost_state(U_L, bc, area_normal_vec,
-                    bc_data, compute_interface_velocity);
+            auto U_ghost_vec = compute_ghost_state(U_L, bc, quad_pt, t,
+                    area_normal_vec, bc_data, compute_interface_velocity);
             // TODO: Fix matrix vs vector!
             matrix<double> U_ghost(4, 1);
             U_ghost << U_ghost_vec(0), U_ghost_vec(1), U_ghost_vec(2), U_ghost_vec(3);
@@ -280,7 +281,8 @@ vector<double> primitive_to_conservative(vector<double> V, double g) {
 }
 
 vector<double> compute_ghost_state(vector<double> U, long bc,
-        vector<double> bc_area_normal, matrix<double> bc_data,
+        matrix<double> quad_pt, double t, vector<double> bc_area_normal,
+        matrix<double> bc_data,
         ComputeForcedInterfaceVelocity* compute_interface_velocity) {
     // Compute interface ghost state
     auto g = bc_data(bc, 4);
@@ -289,8 +291,8 @@ vector<double> compute_ghost_state(vector<double> U, long bc,
     if (bc == 0) {
         auto V = conservative_to_primitive(U, g);
         vector<double> data = bc_data(bc, all);
-        //TODO Put actual interface quadrature point location!! Max importance
-        auto wall_velocity = (*compute_interface_velocity)(0, 0, 0, data);
+        auto wall_velocity = (*compute_interface_velocity)(
+                quad_pt(0), quad_pt(1), t, data);
         V_ghost = compute_ghost_interface(V, bc_area_normal, wall_velocity);
     // Compute wall ghost state
     } else if (bc == 1) {
