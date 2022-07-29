@@ -1,10 +1,13 @@
 #include <math.h>
 #include <iostream>
+#include <string>
 using std::cout, std::endl;
+using std::string;
 
 #include <defines.h>
 //TODO
 #include <roe.cpp>
+#include <forced_interface.cpp>
 
 // Compute the interior faces' contributions to the residual.
 void compute_interior_face_residual(matrix_ref<double> U,
@@ -86,7 +89,8 @@ void compute_interior_face_residual(matrix_ref<double> U,
 // Forward declare
 // TODO: Header files!! Organize!!
 vector<double> compute_ghost_state(vector<double> U, long bc,
-        vector<double> bc_area_normal, matrix<double> bc_data);
+        vector<double> bc_area_normal, matrix<double> bc_data,
+        ComputeForcedInterfaceVelocity*);
 // Compute the boundary faces' contributions to the residual.
 void compute_boundary_face_residual(matrix_ref<double> U,
         matrix_ref<long> bc_type, matrix_ref<double> quad_wts,
@@ -94,9 +98,20 @@ void compute_boundary_face_residual(matrix_ref<double> U,
         np_array<double> gradU_np, matrix_ref<double> xy,
         np_array<double> area_normals_p2_np, matrix_ref<double> area,
         double g, long num_boundaries, matrix<double> bc_data,
-        matrix_ref<double> residual) {
+        string problem_name, matrix_ref<double> residual) {
     // Sizing
     auto n_faces = bc_type.rows();
+
+    // Create forced interface velocity functor
+    ComputeForcedInterfaceVelocity* compute_interface_velocity = nullptr;
+    if (problem_name == "RiemannProblem" or problem_name == "AdvectedContact"
+            or problem_name == "AdvectedBubble") {
+        compute_interface_velocity = (ComputeForcedInterfaceVelocity*) new ComputeAdvectionInterfaceVelocity;
+    } else if (problem_name == "CollapsingCylinder") {
+        compute_interface_velocity = (ComputeForcedInterfaceVelocity*) new ComputeCollapsingCylinderVelocity;
+    } else {
+        cout << "Problem name invalid! Given problem_name = " << problem_name << endl;
+    }
 
     // Create buffers
     matrix<double> U_L(4, 1);
@@ -159,12 +174,13 @@ void compute_boundary_face_residual(matrix_ref<double> U,
             area_normal_vec(0) = area_normal(0, 0);
             area_normal_vec(1) = area_normal(1, 0);
             // Compute ghost state
-            auto U_ghost_vec = compute_ghost_state(U_L, bc, area_normal_vec, bc_data);
+            auto U_ghost_vec = compute_ghost_state(U_L, bc, area_normal_vec,
+                    bc_data, compute_interface_velocity);
             // TODO: Fix matrix vs vector!
             matrix<double> U_ghost(4, 1);
             U_ghost << U_ghost_vec(0), U_ghost_vec(1), U_ghost_vec(2), U_ghost_vec(3);
 
-            // Evaluate interior fluxes
+            // Evaluate boundary fluxes
             compute_flux(U_L, U_ghost, area_normal, g, F);
             // Add contribution to quadrature
             if (nq == 2) {
@@ -264,17 +280,17 @@ vector<double> primitive_to_conservative(vector<double> V, double g) {
 }
 
 vector<double> compute_ghost_state(vector<double> U, long bc,
-        vector<double> bc_area_normal, matrix<double> bc_data) {
-    // TODO: Create bc_data, and place gamma in the final index for all cases
-    // TODO: Get the exact wall_velocity in here somehow
+        vector<double> bc_area_normal, matrix<double> bc_data,
+        ComputeForcedInterfaceVelocity* compute_interface_velocity) {
     // Compute interface ghost state
     auto g = bc_data(bc, 4);
     vector<double> V_ghost(4);
     // Compute interface ghost state
     if (bc == 0) {
         auto V = conservative_to_primitive(U, g);
-        vector<double> wall_velocity(2); // TODO: Fill me! from bc_data? But how...this changes?
-        wall_velocity << 50, 0;
+        vector<double> data = bc_data(bc, all);
+        //TODO Put actual interface quadrature point location!! Max importance
+        auto wall_velocity = (*compute_interface_velocity)(0, 0, 0, data);
         V_ghost = compute_ghost_interface(V, bc_area_normal, wall_velocity);
     // Compute wall ghost state
     } else if (bc == 1) {

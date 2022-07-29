@@ -55,7 +55,9 @@ def get_residual(data, mesh, problem):
     # Compute the boundary face residual
     compute_boundary_face_residual(U, mesh.bc_type, LagrangeSegment.quad_wts,
             mesh.bc_quad_pts_phys, limiter, gradU, mesh.xy, mesh.bc_area_normals_p2,
-            mesh.area, data.flux.g, mesh.num_boundaries, problem.bc_data, residual)
+            mesh.area, data.flux.g, mesh.num_boundaries, problem.bc_data,
+            problem.__class__.__name__, residual)
+
     return residual
 
 def get_residual_phi(data, mesh, problem):

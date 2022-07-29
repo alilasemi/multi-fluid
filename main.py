@@ -4,12 +4,12 @@ import numpy as np
 
 from mesh import Mesh
 from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
-        conservative_to_primitive)
+        CollapsingCylinder, conservative_to_primitive)
 from residual import get_residual, get_residual_phi, Roe, Upwind
 
 
 # Solver inputs
-Problem = AdvectedBubble
+Problem = CollapsingCylinder
 nx = 20
 ny = 20
 n_t = 200

@@ -20,15 +20,16 @@ class Problem:
     def set_bc(self, bc, bc_name, data=None):
         # All BCs store gamma in the last entry
         self.bc_data[bc, -1] = self.g
-        # Nothing special needed for walls or interfaces at the moment
-        if bc_name == 'wall' or bc_name == 'interface':
+        # Nothing special needed for walls
+        if bc_name == 'wall':
             pass
-        # For full state BCs, store the state
-        elif bc_name == 'full state':
+        # For interfaces, need to pass some data for computing the interface
+        # velocity later on. For full state BCs, store the state.
+        elif bc_name == 'interface' or 'full state':
             # Check to make sure data was supplied
             if data is None:
-                print(f'No data given for full state BC! data = {data}')
-            self.bc_data[bc, :4] = data
+                print(f'No data given for {bc_name} BC! data = {data}')
+            self.bc_data[bc, :data.size] = data
         # Otherwise, this BC is not recognized
         else:
             print(f'BC name not recognized! was given bc_name = {bc_name}')
@@ -162,13 +163,14 @@ class AdvectedBubble(Problem):
     '''
     # Advection speed
     u = 50
+    v = 0
     # bubble state (rho, u, v, p, phi)
     bubble = np.array([
-            .125, u, 0, 1e5, -1
+            .125, u, v, 1e5, -1
     ])
     # Ambient state (rho, u, v, p, phi)
     ambient = np.array([
-            1, u, 0, 1e5, 1
+            1, u, v, 1e5, 1
     ])
 
     # Radius of bubble
@@ -222,7 +224,8 @@ class AdvectedBubble(Problem):
 
     def set_bc_data(self):
         # Set BC 0 to be the interfaces
-        self.set_bc(0, 'interface')
+        interface_velocity = np.array([self.u, self.v])
+        self.set_bc(0, 'interface', interface_velocity)
         # Set BC 1 to be the walls
         self.set_bc(1, 'wall')
         # Set BC 2 and 3 to be the ambient state
@@ -244,6 +247,102 @@ class AdvectedBubble(Problem):
                         - self.radius**2)
             else:
                 print(f'ERROR: Invalid BC type given! bc = {bc}')
+
+
+class CollapsingCylinder(Problem):
+    '''
+    Class for a collapsing cylinder.
+    '''
+    # Ambient state (rho, u, v, p)
+    ambient = np.array([
+            1, 0, 0, 1e5
+    ])
+
+    # Ratio of specific heats
+    g = 1.4
+
+    def get_initial_conditions(self):
+        # Unpack
+        r, u, v, p = self.ambient
+        g = self.g
+
+        # Get initial conditions as conservatives
+        W = primitive_to_conservative(r, u, v, p, g)
+
+        # Set whole domain to have this solution
+        U = W * np.ones((self.n, 4))
+        # Compute initial phi
+        phi = self.compute_exact_phi(self.xy, 0)
+        return U, phi
+
+    def compute_exact_phi(self, coords, t):
+        '''
+        Compute the exact phi, which is a paraboloid following the interface.
+        '''
+        x = coords[:, 0]
+        y = coords[:, 1]
+        theta = np.arctan2(y, x)
+        # Compute r
+        a = 100 * np.pi
+        r = (1/3 * (2 + np.cos(4 * theta))) * np.sin(a*t)**2 + np.cos(a*t)**2
+        # Convert to x and y
+        x_interface = r * np.cos(theta)
+        y_interface = r * np.sin(theta)
+        # Compute paraboloid
+        phi = (x - x_interface)**2 + (y - y_interface)**2
+        return phi
+
+    def compute_exact_phi_gradient(self, coords, t):
+        '''
+        Compute the gradient of the exact phi.
+        '''
+        x = coords[:, 0]
+        y = coords[:, 1]
+        theta = np.arctan2(y, x)
+        # Compute r
+        a = 100 * np.pi
+        r = (1/3 * (2 + np.cos(4 * theta))) * np.sin(a*t)**2 + np.cos(a*t)**2
+        # Convert to x and y
+        x_interface = r * np.cos(theta)
+        y_interface = r * np.sin(theta)
+        # Compute paraboloid's gradient
+        gphi = np.array([
+            2 * (x - x_interface),
+            2 * (y - y_interface)])
+        return gphi
+
+    def plot_exact_interface(self, axis, mesh, t):
+        # Range of theta
+        n_points = 100
+        theta = np.linspace(0, 2*np.pi, n_points)
+        # Compute r
+        a = 100 * np.pi
+        r = (1/3 * (2 + np.cos(4 * theta))) * np.sin(a*t)**2 + np.cos(a*t)**2
+        # Convert to x and y
+        x = r * np.cos(theta)
+        y = r * np.sin(theta)
+        # "loop" the array back onto itself for plotting
+        x_loop = np.empty(n_points + 1)
+        y_loop = np.empty(n_points + 1)
+        x_loop[:-1] = x
+        y_loop[:-1] = y
+        x_loop[-1] = x[0]
+        y_loop[-1] = y[0]
+        # Plot
+        axis.plot(x_loop, y_loop, 'k', lw=3)
+
+    def set_bc_data(self):
+        # Set BC 0 to be the interfaces
+        #TODO
+        interface_velocity_data = np.array([0])
+        self.set_bc(0, 'interface', interface_velocity_data)
+        # Set BC 1, 2, and 3 to be walls
+        self.set_bc(1, 'wall')
+        self.set_bc(2, 'wall')
+        self.set_bc(3, 'wall')
+
+    def compute_ghost_phi(self, phi, phi_ghost, bc_type):
+        print('compute_ghost_phi not implemented for CollapsingCylinder!')
 
 
 # TODO: These are marked for removal. Point to the C++ functions instead.

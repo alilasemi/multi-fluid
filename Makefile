@@ -21,7 +21,7 @@ ldlibs =
 empty =
 
 .PHONY: all
-all: directories $(lib) $(build_dir)/interior_face_residual.so $(build_dir)/roe.so
+all: directories $(lib) $(build_dir)/interior_face_residual.so $(build_dir)/roe.so $(build_dir)/forced_interface.so
 
 # This is purely for testing purposes
 .PHONY: print
@@ -43,4 +43,7 @@ $(build_dir)/interior_face_residual.so: interior_face_residual.cpp
 	$(CXX) $(flags) -o $@ $^
 
 $(build_dir)/roe.so: roe.cpp
+	$(CXX) $(flags) -o $@ $^
+
+$(build_dir)/forced_interface.so: forced_interface.cpp
 	$(CXX) $(flags) -o $@ $^
