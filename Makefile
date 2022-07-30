@@ -14,7 +14,8 @@ include_paths = ./ eigen/
 # Compiler flags
 optimization = -g
 flags = $(foreach dir, $(include_paths), -I$(dir)) -std=c++17 $(optimization) \
-		-Wall -shared -fPIC $(shell $(python) -m pybind11 --includes)
+		-Wall -shared -fPIC $(shell $(python) -m pybind11 --includes) \
+		-L./cache/build/ -Wl,-rpath=./cache/build/
 # Libraries and locations
 ldlibs =
 # Useful variables
@@ -40,7 +41,7 @@ $(build_dir)/%.so: $(src_dir)/%.cpp
 	$(CXX) $(flags) -o $@ $^
 
 $(build_dir)/interior_face_residual.so: interior_face_residual.cpp
-	$(CXX) $(flags) -o $@ $^
+	$(CXX) $(flags) -o $@ $^ -l:roe.so -l:forced_interface.so
 
 $(build_dir)/roe.so: roe.cpp
 	$(CXX) $(flags) -o $@ $^
@@ -49,4 +50,4 @@ $(build_dir)/forced_interface.so: forced_interface.cpp
 	$(CXX) $(flags) -o $@ $^
 
 $(build_dir)/pybind_bindings.so: pybind_bindings.cpp
-	$(CXX) $(flags) -o $@ $^ -L./cache/build/ -Wl,-rpath=./cache/build/ -l:interior_face_residual.so
+	$(CXX) $(flags) -o $@ $^ -l:interior_face_residual.so

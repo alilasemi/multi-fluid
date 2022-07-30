@@ -1,13 +1,12 @@
-//#include <roe.h>
 #include <iostream>
 using std::cout;
 using std::endl;
 
-#include <defines.h>
 #include <cache/compute_A_RL.cpp>
 #include <cache/compute_Lambda.cpp>
 #include <cache/compute_Q_inv.cpp>
 #include <cache/compute_Q.cpp>
+#include <roe.h>
 
 
 matrix<double> convective_fluxes(matrix<double> U, double g) {
@@ -75,10 +74,4 @@ void compute_flux(matrix<double>& U_L,
     F = length * (
             .5 * (convective_fluxes(U_L, g) + convective_fluxes(U_R, g)) * unit_normals
             - .5 * (abs_A_RL * (U_R - U_L)));
-}
-
-PYBIND11_MODULE(roe, m) {
-    m.doc() = "doc"; // optional module docstring
-    m.def("compute_flux", &compute_flux,
-            "A function that computes...");
 }

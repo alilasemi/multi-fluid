@@ -5,10 +5,9 @@ using std::cout, std::endl;
 using std::string;
 
 #include <defines.h>
-//TODO
 #include <face_residual.h>
-#include <roe.cpp>
-#include <forced_interface.cpp>
+#include <forced_interface.h>
+#include <roe.h>
 
 
 // Compute the interior faces' contributions to the residual.
