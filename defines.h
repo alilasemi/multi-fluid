@@ -7,7 +7,7 @@
 #include <pybind11/stl.h>
 #include <vector>
 namespace py = pybind11;
-using Eigen::placeholders::all;
+using Eigen::all;
 using Eigen::seq;
 
 // Custom types for 1D vectors and 2D matrices in Eigen. It is important to
