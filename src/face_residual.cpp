@@ -289,13 +289,13 @@ vector<double> compute_ghost_state(vector<double> U, long bc,
         auto wall_velocity = (*compute_interface_velocity)(
                 quad_pt(0), quad_pt(1), t, data);
         V_ghost = compute_ghost_interface(V, bc_area_normal, wall_velocity);
-        cout << quad_pt.transpose() << "  " << V.transpose() << "   " << V_ghost.transpose() << endl;
+        //cout << quad_pt.transpose() << "  " << V.transpose() << "   " << V_ghost.transpose() << endl;
     // Compute wall ghost state
     } else if (bc == 1) {
         auto V = conservative_to_primitive(U, g);
         V_ghost = compute_ghost_wall(V, bc_area_normal);
-    // Compute inflow/outflow ghost state
-    } else if (bc == 2 or bc == 3) {
+    // Compute full state ghost state
+    } else if (bc == 2) {
         V_ghost = bc_data(bc, seq(0, 3));
     } else {
         printf("ERROR: Invalid BC type given! bc = %li\n", bc);

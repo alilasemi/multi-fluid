@@ -8,15 +8,15 @@ from rich.progress import track, Progress
 from mesh import Mesh
 from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
         CollapsingCylinder, conservative_to_primitive)
-from residual import get_residual, get_residual_phi, Roe, Upwind
+from residual import get_residual, get_residual_phi, Upwind
 
 
 # Solver inputs
 Problem = CollapsingCylinder
 nx = 30
 ny = 30
-n_t = 1
-t_final = .01 / 200
+n_t = 200
+t_final = .01
 dt = t_final / n_t
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
@@ -27,6 +27,7 @@ xR = 1
 yL = -1
 yR = 1
 
+show_progress_bar = True
 ghost_fluid_interfaces = True
 update_ghost_fluid_cells = True
 linear_ghost_extrapolation = True
@@ -41,7 +42,7 @@ equal_aspect_ratio = True
 filetype = 'pdf'
 
 #t_list = [dt, .025, .05, .075, .1]
-#t_list = [dt, .0025, .005, .0075, .01]
+t_list = [dt, .0025, .005, .0075, .01]
 #t_list = [dt, .00025 ,.0005, .00075, .001]
 #t_list = [.01]
 #t_list = [dt, .004, .008]
@@ -49,7 +50,7 @@ filetype = 'pdf'
 #t_list = [dt, 8*dt, 16*dt, 24*dt, 32*dt, 40*dt]
 #t_list = [dt, 4*dt, 8*dt, 12*dt, 16*dt, 20*dt]
 #t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt]
-t_list = [dt]
+#t_list = [dt]
 
 def main():
     compute_solution()
@@ -61,7 +62,7 @@ def compute_solution():
     original_edge_points = mesh.edge_points.copy()
 
     # Initial solution
-    problem = Problem(mesh.xy, t_list)
+    problem = Problem(mesh.xy, t_list, mesh.bc_type)
     U, phi = problem.get_initial_conditions()
 
     # Store data
@@ -76,7 +77,7 @@ def compute_solution():
     x_shock = np.empty(n_t)
     print('---- Solving ----')
     for i in track(range(n_t), description="Running iterations...",
-            finished_style='purple', disable=True):
+            finished_style='purple', disable=not show_progress_bar):
         if plot_ICs:
             U_list.append(U)
             phi_list.append(phi)
@@ -452,7 +453,6 @@ class SimulationData:
     U_ghost
     gradU
     phi
-    flux
     flux_phi
     i
     t
@@ -465,10 +465,10 @@ class SimulationData:
     def __init__(self, U, phi, g):
         self.U = U
         self.phi = phi
-        # Set flux of flow variables to be Roe
-        self.flux = Roe(g)
         # Set the flux of phi to be upwind
         self.flux_phi = Upwind()
+        # Set the ratio of specific heats
+        self.g = 1.4
 
     def new_iteration(self):
         # Update iteration counter

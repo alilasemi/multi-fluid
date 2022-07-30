@@ -1,7 +1,7 @@
 #include <defines.h>
 #include <face_residual.h>
 
-PYBIND11_MODULE(pybind_bindings, m) {
+PYBIND11_MODULE(libpybind_bindings, m) {
     //TODO docstrings
     m.doc() = "doc"; // optional module docstring
 

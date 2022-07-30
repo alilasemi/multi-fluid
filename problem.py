@@ -11,10 +11,11 @@ class Problem:
 
     bc_data = np.empty((4, 5))
     exact = False
-    def __init__(self, xy, t_list):
+    def __init__(self, xy, t_list, bc_type):
         self.xy = xy
         self.t_list = t_list
         self.n = xy.shape[0]
+        self.bc_type = bc_type
         self.set_bc_data()
 
     def set_bc(self, bc, bc_name, data=None):
@@ -33,6 +34,22 @@ class Problem:
         # Otherwise, this BC is not recognized
         else:
             print(f'BC name not recognized! was given bc_name = {bc_name}')
+        # Change the BC IDs
+        self.change_bc_ID(bc, bc_name)
+
+    #TODO: This is a bit jank. maybe change how this works at some point.
+    # Basically, originally the mesh marks the top and bottom as bc = 1, the
+    # left as bc = 2, and the right as bc = 3. Later, when Problem sets the BC
+    # type on each boundary, this number is changed: 0 for interface, 1 for
+    # wall, and 2 for full state.
+    def change_bc_ID(self, bc, bc_name):
+        if bc_name == 'interface':
+            bc_ID = 0
+        elif bc_name == 'wall':
+            bc_ID = 1
+        elif bc_name == 'full state':
+            bc_ID = 2
+        self.bc_type[np.nonzero(self.bc_type[:, 1] == bc), 1] = bc_ID
 
 
 class RiemannProblem(Problem):
