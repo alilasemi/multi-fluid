@@ -3,7 +3,7 @@ import pathlib
 import pickle
 import sympy as sp
 
-from cache.build.interior_face_residual import (
+from cache.build.pybind_bindings import (
         compute_interior_face_residual, compute_boundary_face_residual)
 from lagrange import LagrangeSegment
 
@@ -48,15 +48,17 @@ def get_residual(data, mesh, problem):
     # TODO: is Pybind OOP a thing? Seems to not be...
     # TODO: Ditch the whole area_normals_p2 vs regular normals thing (actually
     # p1 wouldn't even work)
+    # TODO: Passing 3D numpy arrays is kinda ugly right now...
     compute_interior_face_residual(U, mesh.edge, LagrangeSegment.quad_wts,
-            mesh.quad_pts_phys, limiter, gradU, mesh.xy, mesh.area_normals_p2,
-            mesh.area, data.flux.g, residual)
+            mesh.quad_pts_phys.flatten().data, limiter, gradU.flatten().data, mesh.xy,
+            mesh.area_normals_p2.flatten().data, mesh.area, data.flux.g, residual)
 
     # Compute the boundary face residual
     compute_boundary_face_residual(U, mesh.bc_type, LagrangeSegment.quad_wts,
-            mesh.bc_quad_pts_phys, limiter, gradU, mesh.xy, mesh.bc_area_normals_p2,
-            mesh.area, data.flux.g, mesh.num_boundaries, problem.bc_data,
-            problem.__class__.__name__, data.t, residual)
+            mesh.bc_quad_pts_phys.flatten().data, limiter, gradU.flatten().data, mesh.xy,
+            mesh.bc_area_normals_p2.flatten().data, mesh.area, data.flux.g,
+            mesh.num_boundaries, problem.bc_data, problem.__class__.__name__,
+            data.t, residual)
 
     return residual
 

@@ -12,7 +12,7 @@ lib = $(src:$(src_dir)/%.cpp=$(build_dir)/%.so)
 # Paths to includes
 include_paths = ./ eigen/
 # Compiler flags
-optimization = -O3
+optimization = -g
 flags = $(foreach dir, $(include_paths), -I$(dir)) -std=c++17 $(optimization) \
 		-Wall -shared -fPIC $(shell $(python) -m pybind11 --includes)
 # Libraries and locations
@@ -21,7 +21,7 @@ ldlibs =
 empty =
 
 .PHONY: all
-all: directories $(lib) $(build_dir)/interior_face_residual.so $(build_dir)/roe.so $(build_dir)/forced_interface.so
+all: directories $(lib) $(build_dir)/interior_face_residual.so $(build_dir)/roe.so $(build_dir)/forced_interface.so $(build_dir)/pybind_bindings.so
 
 # This is purely for testing purposes
 .PHONY: print
@@ -47,3 +47,6 @@ $(build_dir)/roe.so: roe.cpp
 
 $(build_dir)/forced_interface.so: forced_interface.cpp
 	$(CXX) $(flags) -o $@ $^
+
+$(build_dir)/pybind_bindings.so: pybind_bindings.cpp
+	$(CXX) $(flags) -o $@ $^ -L./cache/build/ -Wl,-rpath=./cache/build/ -l:interior_face_residual.so

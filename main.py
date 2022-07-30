@@ -3,6 +3,7 @@ from matplotlib import rc
 import numpy as np
 import rich.traceback
 rich.traceback.install()
+from rich.progress import track, Progress
 
 from mesh import Mesh
 from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
@@ -12,10 +13,10 @@ from residual import get_residual, get_residual_phi, Roe, Upwind
 
 # Solver inputs
 Problem = CollapsingCylinder
-nx = 20
-ny = 20
-n_t = 200
-t_final = .01
+nx = 30
+ny = 30
+n_t = 1
+t_final = .01 / 200
 dt = t_final / n_t
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
@@ -31,22 +32,24 @@ update_ghost_fluid_cells = True
 linear_ghost_extrapolation = True
 hardcoded_phi = True
 levelset = True
-plot_mesh = True
+plot_profile = False
+plot_mesh = False
 plot_contour = True
-only_rho = True
+only_rho = False
 plot_ICs = False
 equal_aspect_ratio = True
 filetype = 'pdf'
 
 #t_list = [dt, .025, .05, .075, .1]
 #t_list = [dt, .0025, .005, .0075, .01]
-t_list = [dt, .0005, .001, .0015, .002]
+#t_list = [dt, .00025 ,.0005, .00075, .001]
 #t_list = [.01]
 #t_list = [dt, .004, .008]
 #t_list = [dt, 4, 8]
 #t_list = [dt, 8*dt, 16*dt, 24*dt, 32*dt, 40*dt]
 #t_list = [dt, 4*dt, 8*dt, 12*dt, 16*dt, 20*dt]
 #t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt]
+t_list = [dt]
 
 def main():
     compute_solution()
@@ -71,7 +74,9 @@ def compute_solution():
     U_list = []
     phi_list = []
     x_shock = np.empty(n_t)
-    for i in range(n_t):
+    print('---- Solving ----')
+    for i in track(range(n_t), description="Running iterations...",
+            finished_style='purple', disable=True):
         if plot_ICs:
             U_list.append(U)
             phi_list.append(phi)
@@ -202,148 +207,105 @@ def compute_solution():
         np.save(f, data.U)
 
     # Plot
+    print('---- Plotting ----')
     rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
     rc('text', usetex=True)
 
     # Density, velocity, and pressure profiles
-    if only_rho:
-        fig, axes = plt.subplots(len(t_list), 1, figsize=(10, 3), squeeze=False)
-        num_vars = 1
-    else:
-        fig, axes = plt.subplots(len(t_list), 3, figsize=(6.5, 6.5), squeeze=False)
-        num_vars = 3
-    for i in range(len(t_list)):
-        V = V_list[i]
-        phi = phi_list[i]
-        t = t_list[i]
-
-        r = V[:, 0]
-        u = V[:, 1]
-        v = V[:, 2]
-        p = V[:, 3]
-
-        # Exact solution
-        if problem.exact:
-            with open(f'data/r_exact_t_{t}.npy', 'rb') as f:
-                r_exact = np.load(f)
-            with open(f'data/u_exact_t_{t}.npy', 'rb') as f:
-                u_exact = np.load(f)
-            with open(f'data/p_exact_t_{t}.npy', 'rb') as f:
-                p_exact = np.load(f)
-            with open(f'data/x_exact_t_{t}.npy', 'rb') as f:
-                x_exact = np.load(f)
-            f_exact = [r_exact, u_exact, p_exact]
-
-        # Index of y to slice for plotting
-        j = ny // 2
-        # Plotting rho, u, and p
-        f = [r, u, p]
-        time = f'(t={t} \\textrm{{ s}})'
-        ylabels = [f'$\\rho{time}$ (kg/m$^3$)', f'$u{time}$ (m/s)', f'$p{time}$ (N/m$^2$)']
-        # Loop over rho, u, p
-        for idx in range(num_vars):
-            ax = axes[i, idx]
-            ax.plot(mesh.xy[j*nx:(j+1)*nx, 0], f[idx][j*nx:(j+1)*nx], 'k', linewidth=2)
-            # Plot phi on top of rho
-            if idx == 0:
-                # Plot phi
-                ax.plot(mesh.xy[j*nx:(j+1)*nx, 0], phi[j*nx:(j+1)*nx], 'k', linewidth=1)
-                # Find interface and plot as a vertical line
-                i_interface = np.argmin(np.abs(phi[j*nx:(j+1)*nx]))
-                # Make sure no scaling happens with this tall vertical line
-                ax.autoscale(False)
-                ax.vlines(mesh.xy[j*nx:(j+1)*nx, 0][i_interface], mesh.yL,
-                        mesh.yR, color='r', ls='--')
-            if problem.exact:
-                ax.plot(x_exact, f_exact[idx], '--k', linewidth=1)
-            if only_rho:
-                axes[i, idx].set_xlabel('x (m)', fontsize=10)
-            ax.set_ylabel(ylabels[idx], fontsize=10)
-            ax.tick_params(labelsize=10)
-            ax.grid(linestyle='--')
-            ax.set_xlim([mesh.xL, mesh.xR])
-    for idx in range(num_vars):
-        if not only_rho:
-            axes[-1, idx].set_xlabel('x (m)', fontsize=10)
-    # Save
-    plt.tight_layout()
-    plt.savefig(f'figs/result_{mesh.nx}x{mesh.ny}.{filetype}', bbox_inches='tight')
-
-    # Mesh plots
-    if plot_mesh:
-        fig, axes = plt.subplots(len(t_list), 1, figsize=(6.5, 4*len(t_list)), squeeze=False)
-        for i_iter in range(len(t_list)):
-            phi = phi_list[i_iter]
-            coords = data.coords_list[i_iter]
-
-            ax = axes[i_iter, 0]
-            if equal_aspect_ratio:
-                ax.set_aspect('equal', adjustable='box')
-            ax.set_xlim([mesh.xL, mesh.xR])
-            ax.set_ylim([mesh.yL, mesh.yR])
-            if hardcoded_phi:
-                problem.plot_exact_interface(ax, mesh, t_list[i_iter])
-            # Loop over primal cells
-            for cell_ID in range(mesh.n_primal_cells):
-                points = mesh.get_plot_points_primal_cell(cell_ID)
-                ax.plot(points[:, 0], points[:, 1], 'k', lw=.5)
-            # Loop over dual faces
-            for face_ID in range(mesh.n_faces):
-                points = mesh.get_face_point_coords(face_ID, *coords)
-                # Get dual mesh neighbors
-                i, j = mesh.edge[face_ID]
-                # Check if this is a surrogate boundary
-                is_surrogate = phi[i] * phi[j] < 0
-                if is_surrogate:
-                    options = {'color' : 'k', 'lw' : 2}
-                else:
-                    options = {'color' : 'k', 'ls' : '--', 'lw' : 1}
-                ax.plot(points[:, 0], points[:, 1], **options)
-
-        # Save
-        plt.tight_layout()
-        plt.savefig(f'figs/mesh_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
-
-    # Density, velocity, and pressure contour plots
-    if plot_contour:
+    if plot_profile:
+        print('Plotting profiles...')
         if only_rho:
+            fig, axes = plt.subplots(len(t_list), 1, figsize=(10, 3), squeeze=False)
             num_vars = 1
-        else: num_vars = 4
-        fig, axes = plt.subplots(len(t_list), num_vars, figsize=(5 * num_vars, 4*len(t_list)), squeeze=False)
-        for i_iter in range(len(t_list)):
-            V = V_list[i_iter]
-            phi = phi_list[i_iter]
-            t = t_list[i_iter]
-            coords = data.coords_list[i_iter]
+        else:
+            fig, axes = plt.subplots(len(t_list), 3, figsize=(6.5, 6.5), squeeze=False)
+            num_vars = 3
+        for i in range(len(t_list)):
+            V = V_list[i]
+            phi = phi_list[i]
+            t = t_list[i]
 
             r = V[:, 0]
             u = V[:, 1]
             v = V[:, 2]
             p = V[:, 3]
 
+            # Exact solution
+            if problem.exact:
+                with open(f'data/r_exact_t_{t}.npy', 'rb') as f:
+                    r_exact = np.load(f)
+                with open(f'data/u_exact_t_{t}.npy', 'rb') as f:
+                    u_exact = np.load(f)
+                with open(f'data/p_exact_t_{t}.npy', 'rb') as f:
+                    p_exact = np.load(f)
+                with open(f'data/x_exact_t_{t}.npy', 'rb') as f:
+                    x_exact = np.load(f)
+                f_exact = [r_exact, u_exact, p_exact]
+
+            # Index of y to slice for plotting
+            j = ny // 2
             # Plotting rho, u, and p
-            f = [r, u, v, p]
+            f = [r, u, p]
             time = f'(t={t} \\textrm{{ s}})'
-            ylabels = [f'$\\rho{time}$ (kg/m$^3$)', f'$v{time}$ (m/s)',
-                    f'$u{time}$ (m/s)', f'$p{time}$ (N/m$^2$)']
-            # Loop over variables
+            ylabels = [f'$\\rho{time}$ (kg/m$^3$)', f'$u{time}$ (m/s)', f'$p{time}$ (N/m$^2$)']
+            # Loop over rho, u, p
             for idx in range(num_vars):
-                ax = axes[i_iter, idx]
+                ax = axes[i, idx]
+                ax.plot(mesh.xy[j*nx:(j+1)*nx, 0], f[idx][j*nx:(j+1)*nx], 'k', linewidth=2)
+                # Plot phi on top of rho
+                if idx == 0:
+                    # Plot phi
+                    ax.plot(mesh.xy[j*nx:(j+1)*nx, 0], phi[j*nx:(j+1)*nx], 'k', linewidth=1)
+                    # Find interface and plot as a vertical line
+                    i_interface = np.argmin(np.abs(phi[j*nx:(j+1)*nx]))
+                    # Make sure no scaling happens with this tall vertical line
+                    ax.autoscale(False)
+                    ax.vlines(mesh.xy[j*nx:(j+1)*nx, 0][i_interface], mesh.yL,
+                            mesh.yR, color='r', ls='--')
+                if problem.exact:
+                    ax.plot(x_exact, f_exact[idx], '--k', linewidth=1)
+                if only_rho:
+                    axes[i, idx].set_xlabel('x (m)', fontsize=10)
+                ax.set_ylabel(ylabels[idx], fontsize=10)
+                ax.tick_params(labelsize=10)
+                ax.grid(linestyle='--')
+                ax.set_xlim([mesh.xL, mesh.xR])
+        for idx in range(num_vars):
+            if not only_rho:
+                axes[-1, idx].set_xlabel('x (m)', fontsize=10)
+        # Save
+        print('Saving profile plot...', end='', flush=True)
+        plt.tight_layout()
+        plt.savefig(f'figs/result_{mesh.nx}x{mesh.ny}.{filetype}', bbox_inches='tight')
+        print('Done')
+
+    # Mesh plots
+    if plot_mesh:
+        fig, axes = plt.subplots(len(t_list), 1, figsize=(6.5, 4*len(t_list)),
+                squeeze=False)
+        # Progress bar setup
+        with Progress() as progress:
+            task1 = progress.add_task('Plotting primal cells...',
+                    total=len(t_list) * mesh.n_primal_cells)
+            task2 = progress.add_task('Plotting dual faces...',
+                    total=len(t_list) * mesh.n_faces)
+
+            for i_iter in range(len(t_list)):
+                phi = phi_list[i_iter]
+                coords = data.coords_list[i_iter]
+
+                ax = axes[i_iter, 0]
                 if equal_aspect_ratio:
                     ax.set_aspect('equal', adjustable='box')
-                #TODO Make levels less jank
-                if only_rho:
-                    levels = rho_levels
-                else:
-                    levels = None
-                contourf = ax.tricontourf(mesh.xy[:, 0], mesh.xy[:, 1], f[idx],
-                        levels=levels, extend='both')
-                plt.colorbar(mappable=contourf, ax=ax)
-                ax.set_title(ylabels[idx], fontsize=10)
-                ax.tick_params(labelsize=10)
+                ax.set_xlim([mesh.xL, mesh.xR])
+                ax.set_ylim([mesh.yL, mesh.yR])
                 if hardcoded_phi:
                     problem.plot_exact_interface(ax, mesh, t_list[i_iter])
-
+                # Loop over primal cells
+                for cell_ID in range(mesh.n_primal_cells):
+                    points = mesh.get_plot_points_primal_cell(cell_ID)
+                    ax.plot(points[:, 0], points[:, 1], 'k', lw=.5)
+                    progress.update(task1, advance=1)
                 # Loop over dual faces
                 for face_ID in range(mesh.n_faces):
                     points = mesh.get_face_point_coords(face_ID, *coords)
@@ -352,15 +314,82 @@ def compute_solution():
                     # Check if this is a surrogate boundary
                     is_surrogate = phi[i] * phi[j] < 0
                     if is_surrogate:
-                        ax.plot(points[:, 0], points[:, 1], 'k', lw=2)
+                        options = {'color' : 'k', 'lw' : 2}
+                    else:
+                        options = {'color' : 'k', 'ls' : '--', 'lw' : 1}
+                    ax.plot(points[:, 0], points[:, 1], **options)
+                    progress.update(task2, advance=1)
+
+        # Save
+        print('Saving mesh plot...', end='', flush=True)
+        plt.tight_layout()
+        plt.savefig(f'figs/mesh_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
+        print('Done')
+
+    # Density, velocity, and pressure contour plots
+    if plot_contour:
+        if only_rho:
+            num_vars = 1
+        else: num_vars = 4
+        fig, axes = plt.subplots(len(t_list), num_vars, figsize=(5 * num_vars, 4*len(t_list)), squeeze=False)
+        # Progress bar setup
+        with Progress() as progress:
+            task1 = progress.add_task('Plotting contours...',
+                    total=len(t_list) * num_vars)
+            for i_iter in range(len(t_list)):
+                V = V_list[i_iter]
+                phi = phi_list[i_iter]
+                t = t_list[i_iter]
+                coords = data.coords_list[i_iter]
+
+                r = V[:, 0]
+                u = V[:, 1]
+                v = V[:, 2]
+                p = V[:, 3]
+
+                # Plotting rho, u, and p
+                f = [r, u, v, p]
+                time = f'(t={t} \\textrm{{ s}})'
+                ylabels = [f'$\\rho{time}$ (kg/m$^3$)', f'$u{time}$ (m/s)',
+                        f'$v{time}$ (m/s)', f'$p{time}$ (N/m$^2$)']
+                # Loop over variables
+                for idx in range(num_vars):
+                    ax = axes[i_iter, idx]
+                    if equal_aspect_ratio:
+                        ax.set_aspect('equal', adjustable='box')
+                    #TODO Make levels less jank
+                    if only_rho:
+                        levels = rho_levels
+                    else:
+                        levels = None
+                    contourf = ax.tricontourf(mesh.xy[:, 0], mesh.xy[:, 1], f[idx],
+                            levels=levels, extend='both')
+                    plt.colorbar(mappable=contourf, ax=ax)
+                    ax.set_title(ylabels[idx], fontsize=10)
+                    ax.tick_params(labelsize=10)
+                    if hardcoded_phi:
+                        problem.plot_exact_interface(ax, mesh, t_list[i_iter])
+
+                    # Loop over dual faces
+                    for face_ID in range(mesh.n_faces):
+                        points = mesh.get_face_point_coords(face_ID, *coords)
+                        # Get dual mesh neighbors
+                        i, j = mesh.edge[face_ID]
+                        # Check if this is a surrogate boundary
+                        is_surrogate = phi[i] * phi[j] < 0
+                        if is_surrogate:
+                            ax.plot(points[:, 0], points[:, 1], 'k', lw=2)
+                    progress.update(task1, advance=1)
 
         for idx in range(num_vars):
             axes[-1, idx].set_xlabel('x (m)', fontsize=10)
         for idx in range(len(t_list)):
             axes[idx, 0].set_ylabel('y (m)', fontsize=10)
         # Save
+        print('Saving contour plot...', end='', flush=True)
         plt.tight_layout()
         plt.savefig(f'figs/contour_{mesh.nx}x{mesh.ny}.pdf', bbox_inches='tight')
+        print('Done')
 
     print(f'Plots written to files ({mesh.nx}x{mesh.ny}).')
 
@@ -442,8 +471,6 @@ class SimulationData:
         self.flux_phi = Upwind()
 
     def new_iteration(self):
-        # Print
-        print(self.i)
         # Update iteration counter
         self.i += 1
 

@@ -6,15 +6,17 @@ using std::string;
 
 #include <defines.h>
 //TODO
+#include <face_residual.h>
 #include <roe.cpp>
 #include <forced_interface.cpp>
+
 
 // Compute the interior faces' contributions to the residual.
 void compute_interior_face_residual(matrix_ref<double> U,
         matrix_ref<long> edge, matrix_ref<double> quad_wts,
-        np_array<double> quad_pts_phys_np, matrix_ref<double> limiter,
-        np_array<double> gradU_np, matrix_ref<double> xy,
-        np_array<double> area_normals_p2_np, matrix_ref<double> area,
+        std::vector<double> quad_pts_phys, matrix_ref<double> limiter,
+        std::vector<double> gradU, matrix_ref<double> xy,
+        std::vector<double> area_normals_p2, matrix_ref<double> area,
         double g, matrix_ref<double> residual) {
     // Sizing
     auto n_faces = edge.rows();
@@ -35,9 +37,8 @@ void compute_interior_face_residual(matrix_ref<double> U,
             continue;
         }
         // Gradients for these cells
-        auto gradU_ptr = (double*) gradU_np.request().ptr;
-        matrix_map<double> gradU_L(gradU_ptr + L*4*2, 4, 2);
-        matrix_map<double> gradU_R(gradU_ptr + R*4*2, 4, 2);
+        matrix_map<double> gradU_L(&gradU[L*4*2], 4, 2);
+        matrix_map<double> gradU_R(&gradU[R*4*2], 4, 2);
 
         // Loop over quadrature points
         vector<double> F_integral = vector<double>::Zero(4);
@@ -51,10 +52,9 @@ void compute_interior_face_residual(matrix_ref<double> U,
             if (nq == 2) {
                 // Get quadrature point in physical space
                 // TODO: This looks a bit jank...issue is that Eigen cannot
-                // handle 3D arrays
-                auto ptr = (double*) quad_pts_phys_np.request().ptr;
-                quad_pt(0) = ptr[face_ID * 2 * 2 + i * 2 + 0];
-                quad_pt(1) = ptr[face_ID * 2 * 2 + i * 2 + 1];
+                // handle 3D arrays. Wrapper of vector with strides??
+                quad_pt(0) = quad_pts_phys[face_ID*2*2 + i*2 + 0];
+                quad_pt(1) = quad_pts_phys[face_ID*2*2 + i*2 + 1];
             } else {
                 // Use the midpoint
                 // TODO: This def wont work
@@ -68,9 +68,8 @@ void compute_interior_face_residual(matrix_ref<double> U,
 
             // Package the normals
             matrix<double> area_normal(2, 1);
-            auto area_normals_ptr = (double*) area_normals_p2_np.request().ptr;
-            area_normal(0, 0) = area_normals_ptr[face_ID * 2 * 2 + i * 2 + 0];
-            area_normal(1, 0) = area_normals_ptr[face_ID * 2 * 2 + i * 2 + 1];
+            area_normal(0, 0) = area_normals_p2[face_ID*2*2 + i*2 + 0];
+            area_normal(1, 0) = area_normals_p2[face_ID*2*2 + i*2 + 1];
             // Evaluate interior fluxes
             compute_flux(U_L, U_R, area_normal, g, F);
             // Add contribution to quadrature
@@ -95,13 +94,13 @@ vector<double> compute_ghost_state(vector<double> U, long bc,
 // Compute the boundary faces' contributions to the residual.
 void compute_boundary_face_residual(matrix_ref<double> U,
         matrix_ref<long> bc_type, matrix_ref<double> quad_wts,
-        np_array<double> quad_pts_phys_np, matrix_ref<double> limiter,
-        np_array<double> gradU_np, matrix_ref<double> xy,
-        np_array<double> area_normals_p2_np, matrix_ref<double> area,
+        std::vector<double> quad_pts_phys, matrix_ref<double> limiter,
+        std::vector<double> gradU, matrix_ref<double> xy,
+        std::vector<double> area_normals_p2, matrix_ref<double> area,
         double g, long num_boundaries, matrix<double> bc_data,
         string problem_name, double t, matrix_ref<double> residual) {
     // Sizing
-    auto n_faces = bc_type.rows();
+    int n_faces = bc_type.rows();
 
     // Create forced interface velocity functor
     ComputeForcedInterfaceVelocity* compute_interface_velocity = nullptr;
@@ -125,8 +124,7 @@ void compute_boundary_face_residual(matrix_ref<double> U,
         auto bc = bc_type(face_ID, 1);
 
         // Gradients for this cell
-        auto gradU_ptr = (double*) gradU_np.request().ptr;
-        matrix_map<double> gradU_L(gradU_ptr + L*4*2, 4, 2);
+        matrix_map<double> gradU_L(&gradU[L*4*2], 4, 2);
 
         // TODO: This nq thing is a hack
         int nq;
@@ -148,9 +146,8 @@ void compute_boundary_face_residual(matrix_ref<double> U,
                 // Get quadrature point in physical space
                 // TODO: This looks a bit jank...issue is that Eigen cannot
                 // handle 3D arrays
-                auto ptr = (double*) quad_pts_phys_np.request().ptr;
-                quad_pt(0) = ptr[face_ID * 2 * 2 + i * 2 + 0];
-                quad_pt(1) = ptr[face_ID * 2 * 2 + i * 2 + 1];
+                quad_pt(0) = quad_pts_phys[face_ID*2*2 + i*2 + 0];
+                quad_pt(1) = quad_pts_phys[face_ID*2*2 + i*2 + 1];
             } else {
                 // Use the midpoint
                 // TODO: This is wrong! I am using the node location when I
@@ -166,9 +163,8 @@ void compute_boundary_face_residual(matrix_ref<double> U,
 
             // Package the normals
             matrix<double> area_normal(2, 1);
-            auto area_normals_ptr = (double*) area_normals_p2_np.request().ptr;
-            area_normal(0, 0) = area_normals_ptr[face_ID * 2 * 2 + i * 2 + 0];
-            area_normal(1, 0) = area_normals_ptr[face_ID * 2 * 2 + i * 2 + 1];
+            area_normal(0, 0) = area_normals_p2[face_ID*2*2 + i*2 + 0];
+            area_normal(1, 0) = area_normals_p2[face_ID*2*2 + i*2 + 1];
 
             // TODO Get rid of this matrix vs vector thing...
             vector<double> area_normal_vec(2);
@@ -294,6 +290,7 @@ vector<double> compute_ghost_state(vector<double> U, long bc,
         auto wall_velocity = (*compute_interface_velocity)(
                 quad_pt(0), quad_pt(1), t, data);
         V_ghost = compute_ghost_interface(V, bc_area_normal, wall_velocity);
+        cout << quad_pt.transpose() << "  " << V.transpose() << "   " << V_ghost.transpose() << endl;
     // Compute wall ghost state
     } else if (bc == 1) {
         auto V = conservative_to_primitive(U, g);
@@ -307,12 +304,4 @@ vector<double> compute_ghost_state(vector<double> U, long bc,
     // Convert to conservative
     auto U_ghost = primitive_to_conservative(V_ghost, g);
     return U_ghost;
-}
-
-PYBIND11_MODULE(interior_face_residual, m) {
-    m.doc() = "doc"; // optional module docstring
-    m.def("compute_interior_face_residual", &compute_interior_face_residual,
-            "A function that computes...");
-    m.def("compute_boundary_face_residual", &compute_boundary_face_residual,
-            "A function that computes...");
 }
