@@ -424,7 +424,7 @@ def update(dt, data, mesh, problem):
     # Compute residual
     R = get_residual(data, mesh, problem)
     # Check for NaNs
-    nan_IDs = np.argwhere(np.isnan(R))[:, 0]
+    nan_IDs = np.unique(np.argwhere(np.isnan(R))[:, 0])
     if nan_IDs.size != 0:
         message = 'Oh no! NaN detected in the residual!\n'
         message += f'The following {nan_IDs.size} cell residuals are all NaN\'d out:\n'

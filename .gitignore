@@ -5,4 +5,5 @@
 *.pkl
 *.out
 __pycache__/
+build/
 cache/
