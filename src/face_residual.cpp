@@ -220,11 +220,14 @@ vector<double> compute_ghost_interface(vector<double> V, vector<double> bc_area_
     rotation(0, all) = n_hat;
     rotation(1, all) = t_hat;
     // Rotate velocity into normal - tangential frame
-    vector<double> velocity(2, 1);
+    matrix<double> velocity(2, 1);
     velocity(0) = V(1);
     velocity(1) = V(2);
     matrix<double> velocity_nt = rotation * velocity;
     matrix<double> wall_velocity_nt = rotation * wall_velocity.reshaped(2, 1);
+    //cout << "n_hat: " << endl << n_hat << endl;
+    //cout << "wall_velocity_nt: " << endl << wall_velocity_nt << endl;
+    //cout << "wall_velocity: " << endl << wall_velocity << endl;
     // The normal velocity of the fluid is set so that the mean of the normal
     // velocity of the fluid vs. the ghost will equal the wall velocity.
     // This is represented by: 1/2 (U_fluid + U_ghost) = U_wall. Solving for

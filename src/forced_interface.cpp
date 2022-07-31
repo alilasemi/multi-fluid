@@ -31,8 +31,7 @@ vector<double> ComputeCollapsingCylinderVelocity::operator() (double x,
     //        * pow(sin(a*t), 2) + pow(cos(a*t), 2);
     // r *= R;
     // Compute dr/dt
-    auto drdt = (1/3 * (2 + cos(4 * theta)))
-            * 2*a*sin(a*t) + 2*a*cos(a*t);
+    double drdt = 2./3*a*sin(a*t)*cos(a*t) * ( cos(4 * theta) - 1 );
     drdt *= R;
     // Compute dx/dt
     velocity(0) = drdt * cos(theta);
