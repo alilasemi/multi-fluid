@@ -278,8 +278,18 @@ class CollapsingCylinder(Problem):
     # Radius of cylinder
     R = .25
 
+    # Total time to collapse and return back to a cylinder
+    period = .0005
+
     # Ratio of specific heats
     g = 1.4
+
+    # Levels to use for contour plots
+    levels = [
+            np.linspace(.8, 4, 17),
+            np.linspace(-400, 400, 17),
+            np.linspace(-400, 400, 17),
+            np.linspace(1e5, 2e6, 20)]
 
     def get_initial_conditions(self):
         # Unpack
@@ -304,7 +314,7 @@ class CollapsingCylinder(Problem):
         y = coords[:, 1]
         theta = np.arctan2(y, x)
         # Compute r
-        a = 100 * np.pi
+        a = np.pi / self.period
         r = (1/3 * (2 + np.cos(4 * theta))) * np.sin(a*t)**2 + np.cos(a*t)**2
         r *= self.R
         # Compute paraboloid
@@ -319,9 +329,9 @@ class CollapsingCylinder(Problem):
         y = coords[:, 1]
         theta = np.arctan2(y, x)
         # Compute r
-        a = 100 * np.pi
+        a = np.pi / self.period
         r = (1/3 * (2 + np.cos(4 * theta))) * np.sin(a*t)**2 + np.cos(a*t)**2
-        r *= R
+        r *= self.R
         # Compute paraboloid's gradient
         gphi = np.array([
             2 * (x/r) / r,
@@ -333,7 +343,7 @@ class CollapsingCylinder(Problem):
         n_points = 100
         theta = np.linspace(0, 2*np.pi, n_points)
         # Compute r
-        a = 100 * np.pi
+        a = np.pi / self.period
         r = (1/3 * (2 + np.cos(4 * theta))) * np.sin(a*t)**2 + np.cos(a*t)**2
         r *= self.R
         # Convert to x and y
@@ -352,7 +362,7 @@ class CollapsingCylinder(Problem):
     def set_bc_data(self):
         # Set BC 0 to be the interfaces
         #TODO
-        interface_velocity_data = np.array([self.R])
+        interface_velocity_data = np.array([self.R, self.period])
         self.set_bc(0, 'interface', interface_velocity_data)
         # Set BC 1, 2, and 3 to be walls
         self.set_bc(1, 'wall')

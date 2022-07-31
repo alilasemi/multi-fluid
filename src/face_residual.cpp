@@ -293,6 +293,7 @@ vector<double> compute_ghost_state(vector<double> U, long bc,
                 quad_pt(0), quad_pt(1), t, data);
         V_ghost = compute_ghost_interface(V, bc_area_normal, wall_velocity);
         //cout << quad_pt.transpose() << "  " << V.transpose() << "   " << V_ghost.transpose() << endl;
+        //cout << quad_pt.transpose() << "  " << wall_velocity.transpose() << endl;
     // Compute wall ghost state
     } else if (bc == 1) {
         auto V = conservative_to_primitive(U, g);

@@ -13,12 +13,12 @@ from residual import get_residual, get_residual_phi, Upwind
 
 # Solver inputs
 Problem = CollapsingCylinder
-nx = 30
-ny = 30
+nx = 10
+ny = 10
 n_t = 200
-t_final = .01
+t_final = .0005
 dt = t_final / n_t
-adaptive = False
+adaptive = True
 rho_levels = np.linspace(.15, 1.05, 19)
 
 # Domain
@@ -42,8 +42,11 @@ equal_aspect_ratio = True
 filetype = 'pdf'
 
 #t_list = [dt, .025, .05, .075, .1]
-t_list = [dt, .0025, .005, .0075, .01]
+#t_list = [dt, .0025, .005, .0075, .01]
 #t_list = [dt, .00025 ,.0005, .00075, .001]
+t_list = [dt, .000125 ,.00025, .000375, .0005]
+#t_list = [dt, .000125 ,.00025, .000375, .0005,
+#        .000625, .00075, .000825, .001]
 #t_list = [.01]
 #t_list = [dt, .004, .008]
 #t_list = [dt, 4, 8]
@@ -133,8 +136,8 @@ def compute_solution():
                 # Check for lonely ghosts
                 n_points = fluid_neighbors.size
                 if n_points == 0:
-                    print('Oh no, a lone ghost fluid cell!')
-                    breakpoint()
+                    print(f'Oh no, a lone ghost fluid cell! ID = {ghost_ID}')
+                    continue
 
                 if linear_ghost_extrapolation:
                     # Loop over state variables
@@ -362,7 +365,13 @@ def compute_solution():
                     if only_rho:
                         levels = rho_levels
                     else:
-                        levels = None
+                        # Try using the problem's defined levels
+                        try:
+                            levels = problem.levels[idx]
+                        # If there aren't any defined, let the plotter choose
+                        # its own
+                        except AttributeError:
+                            levels = None
                     contourf = ax.tricontourf(mesh.xy[:, 0], mesh.xy[:, 1], f[idx],
                             levels=levels, extend='both')
                     plt.colorbar(mappable=contourf, ax=ax)

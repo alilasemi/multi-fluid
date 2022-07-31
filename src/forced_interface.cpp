@@ -21,10 +21,11 @@ vector<double> ComputeCollapsingCylinderVelocity::operator() (double x,
     vector<double> velocity(2);
     // Compute the angle of this point
     auto theta = atan2(y, x);
-    // Precompute factor
-    auto a = 100 * M_PI;
     // Radius of cylinder
     auto R = data(0);
+    // Precompute factor. data(1) stores the total time to collapse and return
+    // back to a circle
+    auto a = M_PI / data(1);
     // TODO below not needed, but document the math
     // Compute r
     //auto r = (1/3 * (2 + cos(4 * theta)))
