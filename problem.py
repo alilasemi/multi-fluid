@@ -328,14 +328,21 @@ class CollapsingCylinder(Problem):
         x = coords[:, 0]
         y = coords[:, 1]
         theta = np.arctan2(y, x)
+        # From Wikipedia: https://en.wikipedia.org/wiki/Atan2#Derivative
+        dtheta_dx = -y / (x**2 + y**2)
+        dtheta_dy =  x / (x**2 + y**2)
         # Compute r
         a = np.pi / self.period
         r = (1/3 * (2 + np.cos(4 * theta))) * np.sin(a*t)**2 + np.cos(a*t)**2
         r *= self.R
+        # Compute derivatives
+        dr_dtheta = -self.R * (4/3 * np.sin(a*t)**2) * np.sin(4 * theta)
+        dr_dx = dr_dtheta * dtheta_dx
+        dr_dy = dr_dtheta * dtheta_dy
         # Compute paraboloid's gradient
         gphi = np.array([
-            2 * (x/r) / r,
-            2 * (y/r) / r])
+            2 * (x/r) * (r - x*dr_dx)/(r**2),
+            2 * (y/r) * (r - y*dr_dy)/(r**2)])
         return gphi
 
     def plot_exact_interface(self, axis, mesh, t):
