@@ -533,8 +533,10 @@ class Mesh:
                             p0x, p0y = node_coords[0]
                             p1x, p1y = node_coords[1]
                             p2x, p2y = node_coords[2]
-                            s = p0y*p2x - p0x*p2y + (p2y - p0y)*px + (p0x - p2x)*py
-                            t = p0x*p1y - p0y*p1x + (p0y - p1y)*px + (p1x - p0x)*py
+                            # TODO: Precompute
+                            area = 0.5 *(-p1y*p2x + p0y*(-p1x + p2x) + p0x*(p1y - p2y) + p1x*p2y)
+                            s = 1/(2*area) * (p0y*p2x - p0x*p2y + (p2y - p0y)*px + (p0x - p2x)*py)
+                            t = 1/(2*area) * (p0x*p1y - p0y*p1x + (p0y - p1y)*px + (p1x - p0x)*py)
                             return np.array([s, t, 1 - s - t])
                         def constraint_jac(coords, node_coords):
                             '''
@@ -543,10 +545,11 @@ class Mesh:
                             p0x, p0y = node_coords[0]
                             p1x, p1y = node_coords[1]
                             p2x, p2y = node_coords[2]
-                            dsdx = p2y - p0y
-                            dsdy = p0x - p2x
-                            dtdx = p0y - p1y
-                            dtdy = p1x - p0x
+                            area = 0.5 *(-p1y*p2x + p0y*(-p1x + p2x) + p0x*(p1y - p2y) + p1x*p2y)
+                            dsdx = 1/(2*area) * (p2y - p0y)
+                            dsdy = 1/(2*area) * (p0x - p2x)
+                            dtdx = 1/(2*area) * (p0y - p1y)
+                            dtdy = 1/(2*area) * (p1x - p0x)
                             return np.array([
                                     [dsdx, dsdy],
                                     [dtdx, dtdy],
