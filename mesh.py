@@ -498,25 +498,31 @@ class Mesh:
                         # vector from i to j, rotated 90 degrees.
                         vector = (self.xy[j] - self.xy[i])/3
                         guess = coords + [vector[1], -vector[0]]
-                        optimization = scipy.optimize.minimize(get_phi_squared,
-                                guess, args=(data.t,), jac=get_grad_phi_squared,
-                                constraints=[{
-                                    'type': 'eq',
-                                    'fun': constraint_1,
-                                    'jac': jac_1,
-                                    'args': (self.xy[i], self.xy[j]),
-                                    }, {
-                                    'type': 'ineq',
-                                    'fun': constraint_2,
-                                    'jac': jac_2,
-                                    'args': (self.xy[i], self.xy[j]),
-                                    }, {
-                                    'type': 'ineq',
-                                    'fun': constraint_3,
-                                    'jac': jac_3,
-                                    'args': (self.xy[i], self.xy[j]),
-                                    }])
-                        if not optimization.success:
+                        constraints = [{
+                                'type': 'eq',
+                                'fun': constraint_1,
+                                'jac': jac_1,
+                                'args': (self.xy[i], self.xy[j]),
+                                }, {
+                                'type': 'ineq',
+                                'fun': constraint_2,
+                                'jac': jac_2,
+                                'args': (self.xy[i], self.xy[j]),
+                                }, {
+                                'type': 'ineq',
+                                'fun': constraint_3,
+                                'jac': jac_3,
+                                'args': (self.xy[i], self.xy[j]),
+                                }]
+#                        optimization = scipy.optimize.minimize(get_phi_squared,
+#                                guess, args=(data.t,), jac=get_grad_phi_squared,
+#                                constraints=constraints)
+                        minimizer_kwargs = {'method': 'slsqp',
+                                'jac': get_grad_phi_squared, 'args': (data.t,),
+                                'constraints': constraints, 'tol': 1e-3}
+                        optimization = scipy.optimize.basinhopping(
+                                get_phi_squared, guess, minimizer_kwargs=minimizer_kwargs)
+                        if not optimization['lowest_optimization_result'].success:
                             print(f'Oh no! Edge point of face {face_ID} failed to optimize!')
                         coords[:] = optimization.x
                     # -- Volume points -- #

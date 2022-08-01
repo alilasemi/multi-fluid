@@ -13,12 +13,12 @@ from residual import get_residual, get_residual_phi, Upwind
 
 # Solver inputs
 Problem = CollapsingCylinder
-nx = 5
-ny = 5
-n_t = 1
-t_final = .0005 / 200
+nx = 20
+ny = 20
+n_t = 4
+t_final = .0005 / 50
 dt = t_final / n_t
-adaptive = True
+adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
 # Domain
@@ -53,7 +53,8 @@ filetype = 'pdf'
 #t_list = [dt, 8*dt, 16*dt, 24*dt, 32*dt, 40*dt]
 #t_list = [dt, 4*dt, 8*dt, 12*dt, 16*dt, 20*dt]
 #t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt]
-t_list = [dt]
+t_list = [dt, 2*dt, 3*dt, 4*dt]
+#t_list = [dt]
 
 def main():
     compute_solution()
