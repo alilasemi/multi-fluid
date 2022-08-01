@@ -5,8 +5,9 @@ using std::cout, std::endl;
 #include <forced_interface.h>
 
 // Compute interface velocity for an interface advected at constant velocity.
-vector<double> ComputeAdvectionInterfaceVelocity::operator() (double x,
-        double y, double t, vector<double>& data) {
+vector<double> ComputeAdvectionInterfaceVelocity::operator() (
+        [[maybe_unused]] double x, [[maybe_unused]] double y,
+        [[maybe_unused]] double t, vector<double>& data) {
     vector<double> velocity(2);
     // data(0) stores the x-component of the advection velocity
     velocity(0) = data(0);

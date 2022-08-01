@@ -19,7 +19,14 @@ find_package(OpenMP REQUIRED)
 # Specify compiler information
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
-set(warning_flags "-Wall -Wextra")
+set(warning_flags "\
+-pedantic -Wall -Wextra -Wcast-align -Wcast-qual -Wctor-dtor-privacy \
+-Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op \
+-Wmissing-include-dirs -Wnoexcept -Wold-style-cast")# \
+#-Woverloaded-virtual -Wredundant-decls -Wshadow \
+#-Wstrict-null-sentinel -Wstrict-overflow=5 -Wswitch-default -Wundef \
+#")
+
 set(CMAKE_CXX_FLAGS_DEBUG    "-g  -DDEBUG ${warning_flags}")
 set(CMAKE_CXX_FLAGS_RELEASE  "-O3 ${warning_flags}")
 
@@ -37,12 +44,13 @@ execute_process (
 )
 STRING(REGEX REPLACE "^-I" "" pybind11_includes ${pybind11_includes})
 STRING(REGEX REPLACE " -I" ";" pybind11_includes ${pybind11_includes})
-include_directories(${pybind11_includes})
 
 # Global include
 include_directories("${CMAKE_SOURCE_DIR}/")
 include_directories("${CMAKE_SOURCE_DIR}/src")
-include_directories("${CMAKE_SOURCE_DIR}/eigen")
+# Making Eigen and Pybind SYSTEM includes makes warnings not apply to those headers
+include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/eigen")
+include_directories(SYSTEM ${pybind11_includes})
 
 # Project subdirectories
 add_subdirectory(src)
