@@ -9,14 +9,14 @@ class ComputeForcedInterfaceVelocity {
 };
 
 // Compute interface velocity for an interface advected at constant velocity.
-class ComputeAdvectionInterfaceVelocity : ComputeForcedInterfaceVelocity {
+class ComputeAdvectionInterfaceVelocity : public ComputeForcedInterfaceVelocity {
     public:
         vector<double> operator() (double x, double y, double t,
                 vector<double>& data);
 };
 
 // Compute interface velocity for a collapsing cylinder.
-class ComputeCollapsingCylinderVelocity : ComputeForcedInterfaceVelocity {
+class ComputeCollapsingCylinderVelocity : public ComputeForcedInterfaceVelocity {
     public:
         vector<double> operator() (double x, double y, double t,
                 vector<double>& data);

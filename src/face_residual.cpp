@@ -105,9 +105,9 @@ void compute_boundary_face_residual(matrix_ref<double> U,
     ComputeForcedInterfaceVelocity* compute_interface_velocity = nullptr;
     if (problem_name == "RiemannProblem" or problem_name == "AdvectedContact"
             or problem_name == "AdvectedBubble") {
-        compute_interface_velocity = (ComputeForcedInterfaceVelocity*) new ComputeAdvectionInterfaceVelocity;
+        compute_interface_velocity = new ComputeAdvectionInterfaceVelocity;
     } else if (problem_name == "CollapsingCylinder") {
-        compute_interface_velocity = (ComputeForcedInterfaceVelocity*) new ComputeCollapsingCylinderVelocity;
+        compute_interface_velocity = new ComputeCollapsingCylinderVelocity;
     } else {
         cout << "Problem name invalid! Given problem_name = " << problem_name << endl;
     }

@@ -22,10 +22,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(warning_flags "\
 -pedantic -Wall -Wextra -Wcast-align -Wcast-qual -Wctor-dtor-privacy \
 -Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op \
--Wmissing-include-dirs -Wnoexcept -Wold-style-cast")# \
-#-Woverloaded-virtual -Wredundant-decls -Wshadow \
-#-Wstrict-null-sentinel -Wstrict-overflow=5 -Wswitch-default -Wundef \
-#")
+-Wmissing-include-dirs -Wnoexcept -Wold-style-cast -Woverloaded-virtual \
+-Wredundant-decls -Wshadow -Wstrict-null-sentinel -Wswitch-default -Wundef \
+")
 
 set(CMAKE_CXX_FLAGS_DEBUG    "-g  -DDEBUG ${warning_flags}")
 set(CMAKE_CXX_FLAGS_RELEASE  "-O3 ${warning_flags}")
