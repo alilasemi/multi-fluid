@@ -15,7 +15,7 @@ from residual import get_residual, get_residual_phi
 Problem = CollapsingCylinder
 nx = 40
 ny = 40
-n_t = 1000
+n_t = 1
 t_final = .001 / 800
 dt = t_final / n_t
 adaptive = False
@@ -65,8 +65,6 @@ def compute_solution():
     global t_list
     # Create mesh
     mesh = Mesh(nx, ny, xL, xR, yL, yR)
-    original_vol_points = mesh.vol_points.copy()
-    original_edge_points = mesh.edge_points.copy()
     vol_points_copy = mesh.vol_points.copy()
     edge_points_copy = mesh.edge_points.copy()
 
@@ -97,8 +95,8 @@ def compute_solution():
             vol_points_copy = mesh.vol_points.copy()
             edge_points_copy = mesh.edge_points.copy()
             # Revert back to original face points
-            mesh.vol_points = original_vol_points.copy()
-            mesh.edge_points = original_edge_points.copy()
+            mesh.vol_points = mesh.original_vol_points.copy()
+            mesh.edge_points = mesh.original_edge_points.copy()
             # Update the mesh
             mesh.update(data, problem)
         # Update the stencil to not include points across the interface

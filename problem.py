@@ -8,7 +8,6 @@ class Problem:
     '''
     Parent class for all problem definitions.
     '''
-
     bc_data = np.empty((4, 5))
     exact = False
     def __init__(self, xy, t_list, bc_type):
@@ -56,6 +55,11 @@ class RiemannProblem(Problem):
     '''
     Class for defining ICs and BCs for a Riemann problem.
     '''
+    # Domain
+    xL = -10
+    xR = 10
+    yL = -1
+    yR = 1
 
     # In a Riemann problem, the left state is usually referred to as state 4,
     # and the right state is usually state 1. This naming is used below.
@@ -178,6 +182,11 @@ class AdvectedBubble(Problem):
     '''
     Class for a bubble advecting at constant velocity.
     '''
+    # Domain
+    xL = -1
+    xR = 1
+    yL = -1
+    yR = 1
     # Advection speed
     u = 50
     v = 0
@@ -270,6 +279,12 @@ class CollapsingCylinder(Problem):
     '''
     Class for a collapsing cylinder.
     '''
+    # Domain
+    xL = -1
+    xR = 1
+    yL = -1
+    yR = 1
+
     # Ambient state (rho, u, v, p)
     ambient = np.array([
             1, 0, 0, 1e5

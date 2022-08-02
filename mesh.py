@@ -38,9 +38,18 @@ class Mesh:
 
         self.interface_IDs = np.array([], dtype=int)
 
+        # Create components of the dual/primal meshes
         self.create_dual_faces()
         self.create_primal_cells()
+
+        # Store a copy of the original dual face points
+        original_vol_points = self.vol_points.copy()
+        original_edge_points = self.edge_points.copy()
+
+        # Create mapping of face points
         self.create_face_points()
+
+        # Compute geometric quantities
         self.compute_cell_areas()
         self.compute_face_area_normals()
 
@@ -383,7 +392,7 @@ class Mesh:
     def is_boundary(self, face_ID):
         return self.face_points[face_ID, 2] == -1
 
-    def get_face_point_coords(self, i_face, vol_points = None, edge_points = None):
+    def get_face_point_coords(self, i_face, edge_points=None, vol_points=None,):
         '''
         Get coordinates of points on a given dual mesh face.
         '''

@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 import argparse
+import rich.traceback
+rich.traceback.install()
 
-import main
+import solve, post
 
 # Command line arguments
 parser = argparse.ArgumentParser(description=
@@ -16,4 +18,8 @@ args = parser.parse_args()
 
 # Run solver
 if args.mode == 'solve' or args.mode == 'all':
-    main.main()
+    solve.main()
+
+# Run post processing
+if args.mode == 'post' or args.mode == 'all':
+    post.post_process()
