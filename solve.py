@@ -9,10 +9,10 @@ from residual import get_residual, get_residual_phi
 
 # Solver inputs
 Problem = CollapsingCylinder
-nx = 40
-ny = 40
-n_t = 1
-t_final = .001 / 800
+nx = 26
+ny = 26
+n_t = 300
+t_final = .001
 dt = t_final / n_t
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
@@ -95,11 +95,12 @@ def compute_solution():
             data.U = update(dt, data, mesh, problem)
         # If the residual NaN's, then store the current solution for plotting
         # and stop
-        except FloatingPointError:
+        except FloatingPointError as e:
+            print(e)
             data.U_list.append(data.U.copy())
             data.phi_list.append(data.phi.copy())
-            data.coords_list.append([vol_points_copy,
-                    edge_points_copy])
+            data.edge_points_list.append(edge_points_copy)
+            data.vol_points_list.append(vol_points_copy)
             data.t_list = [time for time in data.t_list if time <= data.t]
             data.t_list.append(data.t)
             break

@@ -12,7 +12,7 @@ from solve import SimulationData
 Problem = CollapsingCylinder
 file_name = 'data.npz'
 show_progress_bar = True
-plot_profile = True
+plot_profile = False
 plot_mesh = True
 plot_contour = True
 only_rho = False
@@ -219,11 +219,6 @@ def post_process():
                         if is_surrogate:
                             ax.plot(points[:, 0], points[:, 1], 'k', lw=2)
                     progress.update(task1, advance=1)
-                    # TODO: Quick hack for NaNs
-                    if i_iter == n_times - 1:
-                        nan_IDs = np.array([662, 663, 896, 936], dtype=int)
-                        points = mesh.xy[nan_IDs]
-                        ax.plot(points[:, 0], points[:, 1], 'ow', mfc='None', ms=6)
 
         for idx in range(num_vars):
             axes[-1, idx].set_xlabel('x (m)', fontsize=10)
@@ -241,8 +236,8 @@ def save_plot(plot_name, mesh):
     # Write figure to file
     plt.savefig(f'figs/{plot_file}', bbox_inches='tight')
     # Create symlink
-    os.symlink(plot_file, f'figs/new_result.{filetype}')
-    os.replace(f'figs/new_result.{filetype}', f'figs/result.{filetype}')
+    os.symlink(plot_file, f'figs/new_{plot_name}.{filetype}')
+    os.replace(f'figs/new_{plot_name}.{filetype}', f'figs/{plot_name}.{filetype}')
     print('Done')
 
 if __name__ == '__main__':
