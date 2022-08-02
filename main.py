@@ -8,15 +8,15 @@ from rich.progress import track, Progress
 from mesh import Mesh
 from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
         CollapsingCylinder, conservative_to_primitive)
-from residual import get_residual, get_residual_phi, Upwind
+from residual import get_residual, get_residual_phi
 
 
 # Solver inputs
 Problem = CollapsingCylinder
-nx = 20
-ny = 20
-n_t = 4
-t_final = .0005 / 50
+nx = 40
+ny = 40
+n_t = 1000
+t_final = .001 / 800
 dt = t_final / n_t
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
@@ -27,14 +27,14 @@ xR = 1
 yL = -1
 yR = 1
 
-show_progress_bar = False
+show_progress_bar = True
 ghost_fluid_interfaces = True
 update_ghost_fluid_cells = True
 linear_ghost_extrapolation = True
 hardcoded_phi = True
 levelset = True
 plot_profile = False
-plot_mesh = True
+plot_mesh = False
 plot_contour = True
 only_rho = False
 plot_ICs = False
@@ -45,51 +45,57 @@ filetype = 'pdf'
 #t_list = [dt, .0025, .005, .0075, .01]
 #t_list = [dt, .00025 ,.0005, .00075, .001]
 #t_list = [dt, .000125 ,.00025, .000375, .0005]
-#t_list = [dt, .000125 ,.00025, .000375, .0005,
-#        .000625, .00075, .000825, .001]
+#t_list = [dt, .000125 ,.00025]
+#t_list = [dt, .000025, .00005, .000075, .0001, .000125]
+t_list = [dt, .000125 ,.00025, .000375, .0005,
+        .000625, .00075, .000825, .001]
 #t_list = [.01]
 #t_list = [dt, .004, .008]
 #t_list = [dt, 4, 8]
 #t_list = [dt, 8*dt, 16*dt, 24*dt, 32*dt, 40*dt]
 #t_list = [dt, 4*dt, 8*dt, 12*dt, 16*dt, 20*dt]
 #t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt]
-t_list = [dt, 2*dt, 3*dt, 4*dt]
-#t_list = [dt]
+#t_list = [dt, 2*dt, 3*dt, 4*dt]
+t_list = [dt,]
 
 def main():
     compute_solution()
 
 def compute_solution():
+    global t_list
     # Create mesh
     mesh = Mesh(nx, ny, xL, xR, yL, yR)
     original_vol_points = mesh.vol_points.copy()
     original_edge_points = mesh.edge_points.copy()
+    vol_points_copy = mesh.vol_points.copy()
+    edge_points_copy = mesh.edge_points.copy()
 
     # Initial solution
     problem = Problem(mesh.xy, t_list, mesh.bc_type)
     U, phi = problem.get_initial_conditions()
 
     # Store data
-    data = SimulationData(U, phi, problem.g)
+    data = SimulationData(U, phi, t_list, problem.g)
     data.U_ghost = np.empty((mesh.bc_type.shape[0], 4))
     #TODO
     data.coords_list = []
 
     # Loop over time
-    U_list = []
-    phi_list = []
     x_shock = np.empty(n_t)
     print('---- Solving ----')
     for i in track(range(n_t), description="Running iterations...",
             finished_style='purple', disable=not show_progress_bar):
         if plot_ICs:
-            U_list.append(U)
-            phi_list.append(phi)
+            data.U_list.append(U)
+            data.phi_list.append(phi)
             break
         data.new_iteration()
 
         # -- Update Mesh -- #
         if adaptive:
+            # Store copy of original in case this iteration crashes
+            vol_points_copy = mesh.vol_points.copy()
+            edge_points_copy = mesh.edge_points.copy()
             # Revert back to original face points
             mesh.vol_points = original_vol_points.copy()
             mesh.edge_points = original_edge_points.copy()
@@ -105,7 +111,18 @@ def compute_solution():
         if ghost_fluid_interfaces:
             mesh.create_interfaces(data)
         # Update solution
-        data.U = update(dt, data, mesh, problem)
+        try:
+            data.U = update(dt, data, mesh, problem)
+        # If the residual NaN's, then store the current solution for plotting
+        # and stop
+        except FloatingPointError:
+            data.U_list.append(data.U.copy())
+            data.phi_list.append(data.phi.copy())
+            data.coords_list.append([vol_points_copy,
+                    edge_points_copy])
+            t_list = [time for time in t_list if time <= data.t]
+            t_list.append(data.t)
+            break
         data.t = (i + 1) * dt
 
         # -- Copy phi, Then Update -- #
@@ -169,8 +186,8 @@ def compute_solution():
 
         # Store data
         if np.any(np.isclose(t_list, data.t)):
-            U_list.append(data.U.copy())
-            phi_list.append(data.phi.copy())
+            data.U_list.append(data.U.copy())
+            data.phi_list.append(data.phi.copy())
             # Store the new face points, for plotting later
             data.coords_list.append([mesh.vol_points.copy(),
                     mesh.edge_points.copy()])
@@ -200,7 +217,7 @@ def compute_solution():
 
     # Final primitives
     V_list = []
-    for U in U_list:
+    for U in data.U_list:
         V = np.empty_like(U)
         for i in range(mesh.n):
             V[i] = conservative_to_primitive(
@@ -227,7 +244,7 @@ def compute_solution():
             num_vars = 3
         for i in range(len(t_list)):
             V = V_list[i]
-            phi = phi_list[i]
+            phi = data.phi_list[i]
             t = t_list[i]
 
             r = V[:, 0]
@@ -296,7 +313,7 @@ def compute_solution():
                     total=len(t_list) * mesh.n_faces)
 
             for i_iter in range(len(t_list)):
-                phi = phi_list[i_iter]
+                phi = data.phi_list[i_iter]
                 coords = data.coords_list[i_iter]
 
                 ax = axes[i_iter, 0]
@@ -343,7 +360,7 @@ def compute_solution():
                     total=len(t_list) * num_vars)
             for i_iter in range(len(t_list)):
                 V = V_list[i_iter]
-                phi = phi_list[i_iter]
+                phi = data.phi_list[i_iter]
                 t = t_list[i_iter]
                 coords = data.coords_list[i_iter]
 
@@ -391,6 +408,11 @@ def compute_solution():
                         if is_surrogate:
                             ax.plot(points[:, 0], points[:, 1], 'k', lw=2)
                     progress.update(task1, advance=1)
+                    # TODO: Quick hack for NaNs
+                    if i_iter == len(t_list) - 1:
+                        nan_IDs = np.array([662, 663, 896, 936], dtype=int)
+                        points = mesh.xy[nan_IDs]
+                        ax.plot(points[:, 0], points[:, 1], 'ow', mfc='None', ms=6)
 
         for idx in range(num_vars):
             axes[-1, idx].set_xlabel('x (m)', fontsize=10)
@@ -463,22 +485,26 @@ class SimulationData:
     U_ghost
     gradU
     phi
-    flux_phi
     i
     t
+    U_list
+    phi_list
+    t_list
     '''
     # Iteration counter
     i = 0
     # Simulation time
     t = 0
 
-    def __init__(self, U, phi, g):
+    def __init__(self, U, phi, t_list, g):
         self.U = U
         self.phi = phi
-        # Set the flux of phi to be upwind
-        self.flux_phi = Upwind()
         # Set the ratio of specific heats
         self.g = 1.4
+        # Lists of data for each stored timestep
+        self.U_list = []
+        self.phi_list = []
+        self.t_list = t_list
 
     def new_iteration(self):
         # Update iteration counter

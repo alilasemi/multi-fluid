@@ -68,6 +68,8 @@ def get_residual_phi(data, mesh, problem):
     U_ghost = data.U_ghost
     gradU = data.gradU
     phi = data.phi
+    # Flux function
+    flux_phi = Upwind()
 
     residual_phi = np.zeros_like(phi)
     # Evaluate solution at faces on left and right
@@ -76,13 +78,13 @@ def get_residual_phi(data, mesh, problem):
     phi_L = phi[mesh.edge[:, 0]]
     phi_R = phi[mesh.edge[:, 1]]
     # Evalute interior fluxes
-    F = data.flux_phi.compute_flux(U_L, U_R, phi_L, phi_R, mesh.edge_area_normal)
+    F = flux_phi.compute_flux(U_L, U_R, phi_L, phi_R, mesh.edge_area_normal)
 
     # Compute ghost phi
     phi_ghost = np.empty((mesh.bc_type.shape[0]))
     problem.compute_ghost_phi(phi, phi_ghost, mesh.bc_type)
     # Evalute boundary fluxes
-    F_bc = data.flux_phi.compute_flux(U[mesh.bc_type[:, 0]], U_ghost,
+    F_bc = flux_phi.compute_flux(U[mesh.bc_type[:, 0]], U_ghost,
             phi[mesh.bc_type[:, 0]], phi_ghost, mesh.bc_area_normal)
 
     # Update cells on the left and right sides, for interior faces

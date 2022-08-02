@@ -494,10 +494,18 @@ class Mesh:
                         # (phi = 0) while still keeping the point between nodes
                         # i and j
                         # The guess value is important - it cannot start the
-                        # guess on the edge itself. Instead, I add half the
+                        # guess on the edge itself. Instead, I add 1/3 the
                         # vector from i to j, rotated 90 degrees.
                         vector = (self.xy[j] - self.xy[i])/3
-                        guess = coords + [vector[1], -vector[0]]
+                        #guess = coords + [vector[1], -vector[0]]
+                        guesses = [
+                                coords + [vector[1], -vector[0]],
+                                coords + [-vector[1], vector[0]],
+                                coords + vector + [vector[1], -vector[0]],
+                                coords + vector + [-vector[1], vector[0]],
+                                coords - vector + [vector[1], -vector[0]],
+                                coords - vector + [-vector[1], vector[0]],
+                        ]
                         constraints = [{
                                 'type': 'eq',
                                 'fun': constraint_1,
@@ -514,17 +522,27 @@ class Mesh:
                                 'jac': jac_3,
                                 'args': (self.xy[i], self.xy[j]),
                                 }]
-#                        optimization = scipy.optimize.minimize(get_phi_squared,
-#                                guess, args=(data.t,), jac=get_grad_phi_squared,
-#                                constraints=constraints)
-                        minimizer_kwargs = {'method': 'slsqp',
-                                'jac': get_grad_phi_squared, 'args': (data.t,),
-                                'constraints': constraints, 'tol': 1e-3}
-                        optimization = scipy.optimize.basinhopping(
-                                get_phi_squared, guess, minimizer_kwargs=minimizer_kwargs)
-                        if not optimization['lowest_optimization_result'].success:
+                        success = False
+                        minimum_phi = 1e99
+                        for guess in guesses:
+                            optimization = scipy.optimize.minimize(get_phi_squared,
+                                    guess, args=(data.t,), jac=get_grad_phi_squared,
+                                    constraints=constraints)
+                            if optimization.success:
+                                success = True
+                                if optimization.fun < minimum_phi:
+                                    minimum_phi = optimization.fun
+                                    optimal_points = optimization.x.copy()
+#                        minimizer_kwargs = {'method': 'slsqp',
+#                                'jac': get_grad_phi_squared, 'args': (data.t,),
+#                                'constraints': constraints, 'tol': 1e-3}
+#                        optimization = scipy.optimize.basinhopping(
+#                                get_phi_squared, guess, minimizer_kwargs=minimizer_kwargs)
+#                        success = optimization['lowest_optimization_result'].success
+                        if success:
+                            coords[:] = optimal_points
+                        else:
                             print(f'Oh no! Edge point of face {face_ID} failed to optimize!')
-                        coords[:] = optimization.x
                     # -- Volume points -- #
                     else:
                         def constraint_func(coords, node_coords):
