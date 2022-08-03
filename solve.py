@@ -9,25 +9,24 @@ from residual import get_residual, get_residual_phi
 
 # Solver inputs
 Problem = CollapsingCylinder
-nx = 26
-ny = 26
-n_t = 300
+nx = 100
+ny = 100
+n_t = 200
 t_final = .001
 dt = t_final / n_t
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
 file_name = 'data.npz'
-show_progress_bar = True
 ghost_fluid_interfaces = True
 update_ghost_fluid_cells = True
-linear_ghost_extrapolation = True
+linear_ghost_extrapolation = False
 hardcoded_phi = True
 levelset = True
 
 #t_list = [dt, .025, .05, .075, .1]
 #t_list = [dt, .0025, .005, .0075, .01]
-#t_list = [dt, .00025 ,.0005, .00075, .001]
+t_list = [dt, .00025 ,.0005, .00075, .001]
 #t_list = [dt, .000125 ,.00025, .000375, .0005]
 #t_list = [dt, .000125 ,.00025]
 #t_list = [dt, .000025, .00005, .000075, .0001, .000125]
@@ -40,12 +39,9 @@ levelset = True
 #t_list = [dt, 4*dt, 8*dt, 12*dt, 16*dt, 20*dt]
 #t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt]
 #t_list = [dt, 2*dt, 3*dt, 4*dt]
-t_list = [0, dt,]
+#t_list = [0, dt,]
 
-def main():
-    compute_solution()
-
-def compute_solution():
+def main(show_progress_bar=True):
     # Create mesh
     mesh = Mesh(nx, ny, Problem.xL, Problem.xR, Problem.yL, Problem.yR)
     vol_points_copy = mesh.vol_points.copy()
@@ -91,19 +87,7 @@ def compute_solution():
         if ghost_fluid_interfaces:
             mesh.create_interfaces(data)
         # Update solution
-        try:
-            data.U = update(dt, data, mesh, problem)
-        # If the residual NaN's, then store the current solution for plotting
-        # and stop
-        except FloatingPointError as e:
-            print(e)
-            data.U_list.append(data.U.copy())
-            data.phi_list.append(data.phi.copy())
-            data.edge_points_list.append(edge_points_copy)
-            data.vol_points_list.append(vol_points_copy)
-            data.t_list = [time for time in data.t_list if time <= data.t]
-            data.t_list.append(data.t)
-            break
+        data.U = update(dt, data, mesh, problem)
         data.t = (i + 1) * dt
 
         # -- Copy phi, Then Update -- #
@@ -163,7 +147,25 @@ def compute_solution():
                         data.U[ghost_ID, k] = np.dot(c[:-1], mesh.xy[ghost_ID]) + c[-1]
                 else:
                     # Use constant extrapolation
-                    U[ghost_ID] = np.mean(data.U[fluid_neighbors], axis=0)
+                    data.U[ghost_ID] = np.mean(data.U[fluid_neighbors], axis=0)
+
+        # If the solution NaN's, then store the current solution for plotting
+        # and stop. It is important to do this after the ghost fluid update,
+        # since in in a ghost fluid method, the cells that have seemingly
+        # NaN'd their residuals might actually be replaced by ghost fluid.
+        # This is one of the advantages of ghost fluid methods, giving
+        # robustness (for example, in large density jump regions, this can
+        # really save you).
+        nan_IDs = np.unique(np.argwhere(np.isnan(data.U))[:, 0])
+        if nan_IDs.size != 0:
+            data.save_current_state(mesh)
+            data.t_list = [time for time in data.t_list if time <= data.t]
+            data.t_list.append(data.t)
+            # Raise error
+            message = f'Oh no! NaN detected in the residual! Iteration = {data.i}\n'
+            message += f'The following {nan_IDs.size} cells are all NaN\'d out:\n'
+            message += f'{nan_IDs}'
+            raise FloatingPointError(message)
 
         # Store data
         if np.any(np.isclose(data.t_list, data.t)):
@@ -226,13 +228,6 @@ def update(dt, data, mesh, problem):
     U_new = data.U.copy()
     # Compute residual
     R = get_residual(data, mesh, problem)
-    # Check for NaNs
-    nan_IDs = np.unique(np.argwhere(np.isnan(R))[:, 0])
-    if nan_IDs.size != 0:
-        message = 'Oh no! NaN detected in the residual!\n'
-        message += f'The following {nan_IDs.size} cell residuals are all NaN\'d out:\n'
-        message += f'{nan_IDs}'
-        raise FloatingPointError(message)
     # Forward euler
     U_new += dt * R
     return U_new

@@ -18,7 +18,18 @@ args = parser.parse_args()
 
 # Run solver
 if args.mode == 'solve' or args.mode == 'all':
-    solve.main()
+    print('Checking for breakpoints...', end='', flush=True)
+    show_progress_bar = True
+    files = ['solve.py', 'residual.py']
+    # Check to see if the code contains any breakpoints
+    for fname in files:
+        with open(fname) as f:
+            if 'breakpoint()' in f.read():
+                # If so, turn off the progress bar - it conflicts with Pdb
+                show_progress_bar = False
+                break
+    print('done')
+    solve.main(show_progress_bar)
 
 # Run post processing
 if args.mode == 'post' or args.mode == 'all':

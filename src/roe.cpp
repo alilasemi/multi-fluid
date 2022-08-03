@@ -74,4 +74,12 @@ void compute_flux(matrix<double>& U_L,
     F = length * (
             .5 * (convective_fluxes(U_L, g) + convective_fluxes(U_R, g)) * unit_normals
             - .5 * (abs_A_RL * (U_R - U_L)));
+    //cout << "Printing flux stuff" << endl;
+    //cout << uRL << "  " << vRL << "  " << hRL << endl;
+    //cout << A_RL << endl;
+    //cout << Lambda << endl;
+    //cout << Q_inv << endl;
+    //cout << Q << endl;
+    //cout << convective_fluxes(U_L, g) << endl;
+    //cout << convective_fluxes(U_R, g) << endl;
 }

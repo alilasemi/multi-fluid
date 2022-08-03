@@ -59,6 +59,7 @@ def get_residual(data, mesh, problem):
             mesh.bc_area_normals_p2.flatten().data, mesh.area, data.g,
             mesh.num_boundaries, problem.bc_data, problem.__class__.__name__,
             data.t, residual)
+    #if data.i == 221: breakpoint(
 
     return residual
 

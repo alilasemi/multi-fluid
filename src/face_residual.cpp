@@ -184,6 +184,12 @@ void compute_boundary_face_residual(matrix_ref<double> U,
             } else {
                 F_integral += F;
             }
+            if (face_ID == 126 or face_ID == 128 or face_ID == 130) {
+                //cout << "Face " << face_ID << ", quad pt " << i << endl;
+                //cout << U_ghost_vec << endl;
+                //cout << F << endl;
+                //cout << F_integral << endl;
+            }
         }
         // Update residual of cell on the left
         residual(L, all) += -1 / area(L, 0) * F_integral;

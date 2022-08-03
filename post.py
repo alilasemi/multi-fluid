@@ -13,7 +13,7 @@ Problem = CollapsingCylinder
 file_name = 'data.npz'
 show_progress_bar = True
 plot_profile = False
-plot_mesh = True
+plot_mesh = False
 plot_contour = True
 only_rho = False
 equal_aspect_ratio = True
@@ -238,7 +238,7 @@ def save_plot(plot_name, mesh):
     # Create symlink
     os.symlink(plot_file, f'figs/new_{plot_name}.{filetype}')
     os.replace(f'figs/new_{plot_name}.{filetype}', f'figs/{plot_name}.{filetype}')
-    print('Done')
+    print('done')
 
 if __name__ == '__main__':
     post_process()
