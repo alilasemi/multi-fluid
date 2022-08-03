@@ -43,8 +43,8 @@ class Mesh:
         self.create_primal_cells()
 
         # Store a copy of the original dual face points
-        original_vol_points = self.vol_points.copy()
-        original_edge_points = self.edge_points.copy()
+        self.original_vol_points = self.vol_points.copy()
+        self.original_edge_points = self.edge_points.copy()
 
         # Create mapping of face points
         self.create_face_points()
@@ -472,6 +472,19 @@ class Mesh:
                             grad_c2 = 2*(coords - xy2)
                             grad_a = (coords - xy1) / a
                             return grad_a2 - grad_c2 - 2*b*grad_a
+#                        def constraint_1(coords, xy1, xy2):
+#                            a = coords - xy1
+#                            b = xy2 - xy1
+#                            return (a[0]*b[1] - a[1]*b[0]) / (
+#                                    np.linalg.norm(a) * np.linalg.norm(b))
+#                        def jac_1(coords, xy1, xy2):
+#                            a = coords - xy1
+#                            b = xy2 - xy1
+#                            norm_a = np.linalg.norm(a)
+#                            a_cross_b = (a[0]*b[1] - a[1]*b[0])
+#                            return (1 / np.linalg.norm(b)) * (
+#                                    norm_a * b[::-1] - a_cross_b * a / norm_a
+#                                    ) / (norm_a**2)
                         def constraint_2(coords, xy1, xy2):
                             '''
                             Coords must be after xy1.
@@ -504,7 +517,9 @@ class Mesh:
                         # i and j
                         # The guess value is important - it cannot start the
                         # guess on the edge itself. Instead, I add 1/3 the
-                        # vector from i to j, rotated 90 degrees.
+                        # vector from i to j, rotated 90 degrees. Some other
+                        # combinations are tried as well, and the minimum
+                        # across all guesses is taken as the final answer.
                         vector = (self.xy[j] - self.xy[i])/3
                         #guess = coords + [vector[1], -vector[0]]
                         guesses = [
@@ -533,23 +548,29 @@ class Mesh:
                                 }]
                         success = False
                         minimum_phi = 1e99
+                        nfev = 0
+                        min_x = np.min([self.xy[i, 0], self.xy[j, 0]])
+                        max_x = np.max([self.xy[i, 0], self.xy[j, 0]])
+                        min_y = np.min([self.xy[i, 1], self.xy[j, 1]])
+                        max_y = np.max([self.xy[i, 1], self.xy[j, 1]])
+                        bounds = ((min_x, max_x), (min_y, max_y))
+                        #tol = 1e-2
+                        #tol = rtol * get_phi_squared(coords, data.t)
                         for guess in guesses:
                             optimization = scipy.optimize.minimize(get_phi_squared,
                                     guess, args=(data.t,), jac=get_grad_phi_squared,
-                                    constraints=constraints)
+                                    constraints=constraints)# bounds=bounds, tol=tol)
                             if optimization.success:
                                 success = True
                                 if optimization.fun < minimum_phi:
                                     minimum_phi = optimization.fun
                                     optimal_points = optimization.x.copy()
-#                        minimizer_kwargs = {'method': 'slsqp',
-#                                'jac': get_grad_phi_squared, 'args': (data.t,),
-#                                'constraints': constraints, 'tol': 1e-3}
-#                        optimization = scipy.optimize.basinhopping(
-#                                get_phi_squared, guess, minimizer_kwargs=minimizer_kwargs)
-#                        success = optimization['lowest_optimization_result'].success
+                            #if optimization.nfev > 100: breakpoint(
+                            nfev += optimization.nfev
+                        #print(nfev)
+                        #if data.i == 25: breakpoint(
                         if success:
-                            coords[:] = optimal_points
+                            coords[:] = optimal_points.copy()
                         else:
                             print(f'Oh no! Edge point of face {face_ID} failed to optimize!')
                     # -- Volume points -- #
@@ -592,18 +613,36 @@ class Mesh:
                         # Get primal cell nodes
                         nodes = self.primal_cell_to_nodes[cell_ID]
                         node_coords = self.xy[nodes]
+                        # Various guesses around the primal cell
+                        guesses = [
+                                coords,
+                                .5*(coords + node_coords[0]),
+                                .5*(coords + node_coords[1]),
+                                .5*(coords + node_coords[2]),
+                        ]
                         # Solve optimization problem for the new node locations,
                         # by moving them as close as possible to the interface
                         # (phi = 0) while still keeping the point within the
                         # triangle
-                        optimization = scipy.optimize.minimize(get_phi_squared,
-                                coords, args=(data.t,), jac=get_grad_phi_squared,
-                                constraints=[{
-                                    'type': 'ineq',
-                                    'fun': constraint_func,
-                                    'jac': constraint_jac,
-                                    'args': (node_coords,)}])
-                        coords[:] = optimization.x
+                        success = False
+                        minimum_phi = 1e99
+                        for guess in guesses:
+                            optimization = scipy.optimize.minimize(get_phi_squared,
+                                    coords, args=(data.t,), jac=get_grad_phi_squared,
+                                    constraints=[{
+                                        'type': 'ineq',
+                                        'fun': constraint_func,
+                                        'jac': constraint_jac,
+                                        'args': (node_coords,)}])
+                            if optimization.success:
+                                success = True
+                                if optimization.fun < minimum_phi:
+                                    minimum_phi = optimization.fun
+                                    optimal_points = optimization.x.copy()
+                        if success:
+                            coords[:] = optimal_points.copy()
+                        else:
+                            print(f'Oh no! Volume point of primal cell {cell_ID} failed to optimize!')
 
         # Now that the face points have moved, the area of each dual mesh cell
         # has changed, and so have the face area normals. They must now be

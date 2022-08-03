@@ -9,12 +9,12 @@ from residual import get_residual, get_residual_phi
 
 # Solver inputs
 Problem = CollapsingCylinder
-nx = 100
-ny = 100
-n_t = 200
-t_final = .001
+nx = 40
+ny = 40
+n_t = 15
+t_final = .001 / 8
 dt = t_final / n_t
-adaptive = False
+adaptive = True
 rho_levels = np.linspace(.15, 1.05, 19)
 
 file_name = 'data.npz'
@@ -26,9 +26,9 @@ levelset = True
 
 #t_list = [dt, .025, .05, .075, .1]
 #t_list = [dt, .0025, .005, .0075, .01]
-t_list = [dt, .00025 ,.0005, .00075, .001]
+#t_list = [dt, .00025 ,.0005, .00075, .001]
 #t_list = [dt, .000125 ,.00025, .000375, .0005]
-#t_list = [dt, .000125 ,.00025]
+#t_list = [dt, .00025]
 #t_list = [dt, .000025, .00005, .000075, .0001, .000125]
 #t_list = [dt, .000125 ,.00025, .000375, .0005,
 #        .000625, .00075, .000825, .001]
@@ -37,7 +37,8 @@ t_list = [dt, .00025 ,.0005, .00075, .001]
 #t_list = [dt, 4, 8]
 #t_list = [dt, 8*dt, 16*dt, 24*dt, 32*dt, 40*dt]
 #t_list = [dt, 4*dt, 8*dt, 12*dt, 16*dt, 20*dt]
-#t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt]
+t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt, 8*dt, 9*dt, 10*dt, 11*dt,
+        12*dt, 13*dt, 14*dt, 15*dt]
 #t_list = [dt, 2*dt, 3*dt, 4*dt]
 #t_list = [0, dt,]
 
@@ -161,6 +162,8 @@ def main(show_progress_bar=True):
             data.save_current_state(mesh)
             data.t_list = [time for time in data.t_list if time <= data.t]
             data.t_list.append(data.t)
+            # Save solution
+            data.write_to_file()
             # Raise error
             message = f'Oh no! NaN detected in the residual! Iteration = {data.i}\n'
             message += f'The following {nan_IDs.size} cells are all NaN\'d out:\n'
@@ -169,6 +172,13 @@ def main(show_progress_bar=True):
 
         # Store data
         if np.any(np.isclose(data.t_list, data.t)):
+            # TODO: I do a mesh update before writing, to sync up phi with the
+            # mesh. Is this the best solution?
+            # Revert back to original face points
+            mesh.vol_points = mesh.original_vol_points.copy()
+            mesh.edge_points = mesh.original_edge_points.copy()
+            # Update the mesh
+            mesh.update(data, problem)
             data.save_current_state(mesh)
         # Find shock
         if Problem == RiemannProblem:

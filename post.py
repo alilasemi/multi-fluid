@@ -13,7 +13,7 @@ Problem = CollapsingCylinder
 file_name = 'data.npz'
 show_progress_bar = True
 plot_profile = False
-plot_mesh = False
+plot_mesh = True
 plot_contour = True
 only_rho = False
 equal_aspect_ratio = True
@@ -112,6 +112,7 @@ def post_process():
         save_plot('profile', mesh)
 
     # Mesh plots
+    lw_scale = .25
     if plot_mesh:
         fig, axes = plt.subplots(n_times, 1, figsize=(6.5, 4*n_times),
                 squeeze=False)
@@ -133,11 +134,12 @@ def post_process():
                 ax.set_xlim([mesh.xL, mesh.xR])
                 ax.set_ylim([mesh.yL, mesh.yR])
                 if has_exact_phi:
-                    problem.plot_exact_interface(ax, mesh, data.t_list[i_iter])
+                    problem.plot_exact_interface(ax, mesh, data.t_list[i_iter],
+                            lw_scale)
                 # Loop over primal cells
                 for cell_ID in range(mesh.n_primal_cells):
                     points = mesh.get_plot_points_primal_cell(cell_ID)
-                    ax.plot(points[:, 0], points[:, 1], 'k', lw=.5)
+                    ax.plot(points[:, 0], points[:, 1], 'k', lw=.5*lw_scale)
                     progress.update(task1, advance=1)
                 # Loop over dual faces
                 for face_ID in range(mesh.n_faces):
@@ -148,9 +150,9 @@ def post_process():
                     # Check if this is a surrogate boundary
                     is_surrogate = phi[i] * phi[j] < 0
                     if is_surrogate:
-                        options = {'color' : 'k', 'lw' : 2}
+                        options = {'color' : 'k', 'lw' : 2*lw_scale}
                     else:
-                        options = {'color' : 'k', 'ls' : '--', 'lw' : 1}
+                        options = {'color' : 'k', 'ls' : '--', 'lw' : 1*lw_scale}
                     ax.plot(points[:, 0], points[:, 1], **options)
                     progress.update(task2, advance=1)
 
@@ -206,7 +208,8 @@ def post_process():
                     ax.set_title(ylabels[idx], fontsize=10)
                     ax.tick_params(labelsize=10)
                     if has_exact_phi:
-                        problem.plot_exact_interface(ax, mesh, data.t_list[i_iter])
+                        problem.plot_exact_interface(ax, mesh,
+                                data.t_list[i_iter], .5)
 
                     # Loop over dual faces
                     for face_ID in range(mesh.n_faces):

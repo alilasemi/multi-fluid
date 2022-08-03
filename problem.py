@@ -360,7 +360,7 @@ class CollapsingCylinder(Problem):
             2 * (y/r) * (r - y*dr_dy)/(r**2)])
         return gphi
 
-    def plot_exact_interface(self, axis, mesh, t):
+    def plot_exact_interface(self, axis, mesh, t, lw_scale):
         # Range of theta
         n_points = 100
         theta = np.linspace(0, 2*np.pi, n_points)
@@ -379,7 +379,7 @@ class CollapsingCylinder(Problem):
         x_loop[-1] = x[0]
         y_loop[-1] = y[0]
         # Plot
-        axis.plot(x_loop, y_loop, 'r')
+        axis.plot(x_loop, y_loop, 'r', 3*lw_scale)
 
     def set_bc_data(self):
         # Set BC 0 to be the interfaces
