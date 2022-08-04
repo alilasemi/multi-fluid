@@ -41,3 +41,22 @@ vector<double> ComputeCollapsingCylinderVelocity::operator() (double x,
     velocity(1) = drdt * sin(theta);
     return velocity;
 }
+
+vector<double> ComputeStarVelocity::operator() (double x,
+        double y, double t, vector<double>& data) {
+    vector<double> velocity(2);
+    // Frequency
+    auto f = data(0);
+    // Compute A
+    auto sign_x = copysign(1.0, x);
+    auto sign_y = copysign(1.0, y);
+    auto norm = sqrt(x*x + y*y);
+    auto A = abs(x) + abs(y) - norm;
+    // Compute dB/dt
+    auto dB_dt = -2 * M_PI * f * sin(2 * M_PI * f * t);
+    // Compute dx/dt
+    velocity(0) = .5 * A * sign_x * dB_dt;
+    // Compute dy/dt
+    velocity(1) = .5 * A * sign_y * dB_dt;
+    return velocity;
+}

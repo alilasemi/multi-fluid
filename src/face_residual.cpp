@@ -108,6 +108,8 @@ void compute_boundary_face_residual(matrix_ref<double> U,
         compute_interface_velocity = new ComputeAdvectionInterfaceVelocity;
     } else if (problem_name == "CollapsingCylinder") {
         compute_interface_velocity = new ComputeCollapsingCylinderVelocity;
+    } else if (problem_name == "Star") {
+        compute_interface_velocity = new ComputeStarVelocity;
     } else {
         cout << "Problem name invalid! Given problem_name = " << problem_name << endl;
     }

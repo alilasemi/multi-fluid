@@ -21,3 +21,10 @@ class ComputeCollapsingCylinderVelocity : public ComputeForcedInterfaceVelocity 
         vector<double> operator() (double x, double y, double t,
                 vector<double>& data);
 };
+
+// Compute interface velocity for the star problem.
+class ComputeStarVelocity : public ComputeForcedInterfaceVelocity {
+    public:
+        vector<double> operator() (double x, double y, double t,
+                vector<double>& data);
+};

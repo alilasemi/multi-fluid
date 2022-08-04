@@ -6,10 +6,10 @@ from rich.progress import track, Progress
 
 from mesh import Mesh
 from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
-        CollapsingCylinder, conservative_to_primitive)
+        CollapsingCylinder, Star, conservative_to_primitive)
 from solve import SimulationData
 
-Problem = CollapsingCylinder
+Problem = Star
 file_name = 'data.npz'
 show_progress_bar = True
 plot_profile = False
@@ -112,7 +112,7 @@ def post_process():
         save_plot('profile', mesh)
 
     # Mesh plots
-    lw_scale = .25
+    lw_scale = 1
     if plot_mesh:
         fig, axes = plt.subplots(n_times, 1, figsize=(6.5, 4*n_times),
                 squeeze=False)
@@ -207,6 +207,8 @@ def post_process():
                     plt.colorbar(mappable=contourf, ax=ax)
                     ax.set_title(ylabels[idx], fontsize=10)
                     ax.tick_params(labelsize=10)
+                    ax.set_xlim([mesh.xL, mesh.xR])
+                    ax.set_ylim([mesh.yL, mesh.yR])
                     if has_exact_phi:
                         problem.plot_exact_interface(ax, mesh,
                                 data.t_list[i_iter], .5)

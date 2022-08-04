@@ -394,6 +394,163 @@ class CollapsingCylinder(Problem):
     def compute_ghost_phi(self, phi, phi_ghost, bc_type):
         print('compute_ghost_phi not implemented for CollapsingCylinder!')
 
+class Star(Problem):
+    '''
+    Class for the star problem.
+    '''
+    # Diameter
+    D = 1
+    # Domain
+    xL = -1*D
+    xR = 1*D
+    yL = -1*D
+    yR = 1*D
+
+    # Ambient state (rho, u, v, p)
+    ambient = np.array([
+            1, 0, 0, 1e4
+    ])
+
+    # Frequency
+    f = 100
+
+    # Ratio of specific heats
+    g = 1.4
+
+    # Levels to use for contour plots
+    #levels = [
+    #        np.linspace(.8, 4, 17),
+    #        np.linspace(-400, 400, 17),
+    #        np.linspace(-400, 400, 17),
+    #        np.linspace(1e5, 2e6, 20)]
+
+    def get_initial_conditions(self):
+        # Unpack
+        r, u, v, p = self.ambient
+        g = self.g
+
+        # Get initial conditions as conservatives
+        W = primitive_to_conservative(r, u, v, p, g)
+
+        # Set whole domain to have this solution
+        U = W * np.ones((self.n, 4))
+        # Compute initial phi
+        phi = self.compute_exact_phi(self.xy, 0)
+        return U, phi
+
+    def compute_exact_phi(self, coords, t):
+        '''
+        Compute the exact phi, which is a deformed paraboloid following the
+        interface.
+        '''
+        x = coords[:, 0]
+        y = coords[:, 1]
+        theta = np.arctan2(y, x)
+        # Convert to x and y
+        x_int = self.D/2 * np.cos(theta)
+        y_int = self.D/2 * np.sin(theta)
+        # From slides that Prof. Farhat gave me
+        A = np.abs(x_int) + np.abs(y_int) - np.sqrt(
+                x_int**2 + y_int**2)
+        B = np.cos(2 * np.pi * self.f * t) - 1
+        displacement = .5 * A * B * np.sign([x_int, y_int])
+        x_disp = x_int + displacement[0, :]
+        y_disp = y_int + displacement[1, :]
+        r = np.sqrt(x_disp**2 + y_disp**2)
+        # Compute paraboloid
+        phi = (x/r)**2 + (y/r)**2 - 1
+        return phi
+
+    def compute_exact_phi_gradient(self, coords, t):
+        '''
+        Compute the gradient of the exact phi.
+        '''
+        x = coords[:, 0]
+        y = coords[:, 1]
+        theta = np.arctan2(y, x)
+        # Convert to x and y
+        x_int = self.D/2 * np.cos(theta)
+        y_int = self.D/2 * np.sin(theta)
+        # From Wikipedia: https://en.wikipedia.org/wiki/Atan2#Derivative
+        dtheta_dx = -y / (x**2 + y**2)
+        dtheta_dy =  x / (x**2 + y**2)
+        # From slides that Prof. Farhat gave me
+        A = np.abs(x_int) + np.abs(y_int) - np.sqrt(
+                x_int**2 + y_int**2)
+        B = np.cos(2 * np.pi * self.f * t) - 1
+        # Compute grad A
+        norm = np.sqrt(x_int**2 + y_int**2)
+        dx_int_dx = self.D/2 * (-np.sin(theta))*dtheta_dx
+        dx_int_dy = self.D/2 * (-np.sin(theta))*dtheta_dy
+        dy_int_dx = self.D/2 * ( np.cos(theta))*dtheta_dx
+        dy_int_dy = self.D/2 * ( np.cos(theta))*dtheta_dy
+        dA_dx_int = np.sign(x_int) - x_int / norm;
+        dA_dy_int = np.sign(y_int) - y_int / norm;
+        dA_dx = dA_dx_int * dx_int_dx + dA_dy_int * dy_int_dx
+        dA_dy = dA_dx_int * dx_int_dy + dA_dy_int * dy_int_dy
+        # Compute r
+        displacement = .5 * A * B * np.sign([x_int, y_int])
+        dd0_dx = .5 * dA_dx * B * np.sign(x_int)
+        dd0_dy = .5 * dA_dy * B * np.sign(x_int)
+        dd1_dx = .5 * dA_dx * B * np.sign(y_int)
+        dd1_dy = .5 * dA_dy * B * np.sign(y_int)
+        x_disp = x_int + displacement[0, :]
+        y_disp = y_int + displacement[1, :]
+        # Compute derivatives
+        r = np.sqrt(x_disp**2 + y_disp**2)
+        dr_dx_disp = x_disp / r
+        dr_dy_disp = y_disp / r
+        dx_disp_dx = dx_int_dx + dd0_dx
+        dx_disp_dy = dx_int_dy + dd0_dy
+        dy_disp_dx = dy_int_dx + dd1_dx
+        dy_disp_dy = dy_int_dy + dd1_dy
+        dr_dx = dr_dx_disp * dx_disp_dx + dr_dy_disp * dy_disp_dx
+        dr_dy = dr_dx_disp * dx_disp_dy + dr_dy_disp * dy_disp_dy
+        # Compute paraboloid's gradient
+        gphi = np.array([
+            2 * (x/r) * (r - x*dr_dx)/(r**2),
+            2 * (y/r) * (r - y*dr_dy)/(r**2)])
+        return gphi
+
+    def plot_exact_interface(self, axis, mesh, t, lw_scale):
+        # Range of theta
+        n_points = 100
+        theta = np.linspace(0, 2*np.pi, n_points)
+        # Convert to x and y
+        x = self.D/2 * np.cos(theta)
+        y = self.D/2 * np.sin(theta)
+        # Compute displacements: From slides that Prof. Farhat gave me
+        norm = np.sqrt(x**2 + y**2)
+        A = np.abs(x) + np.abs(y) - norm
+        B = np.cos(2 * np.pi * self.f * t) - 1
+        dx = .5 * A * B * np.sign(x)
+        dy = .5 * A * B * np.sign(y)
+        # Displace
+        x += dx
+        y += dy
+        # "loop" the array back onto itself for plotting
+        x_loop = np.empty(n_points + 1)
+        y_loop = np.empty(n_points + 1)
+        x_loop[:-1] = x
+        y_loop[:-1] = y
+        x_loop[-1] = x[0]
+        y_loop[-1] = y[0]
+        # Plot
+        axis.plot(x_loop, y_loop, 'r', 3*lw_scale)
+
+    def set_bc_data(self):
+        # Set BC 0 to be the interfaces
+        #TODO
+        interface_velocity_data = np.array([self.f])
+        self.set_bc(0, 'interface', interface_velocity_data)
+        # Set BC 1, 2, and 3 to be walls
+        self.set_bc(1, 'wall')
+        self.set_bc(2, 'wall')
+        self.set_bc(3, 'wall')
+
+    def compute_ghost_phi(self, phi, phi_ghost, bc_type):
+        print('compute_ghost_phi not implemented for Star!')
+
 
 # TODO: These are marked for removal. Point to the C++ functions instead.
 def primitive_to_conservative(r, u, v, p, g):

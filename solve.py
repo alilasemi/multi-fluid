@@ -3,18 +3,18 @@ from rich.progress import track, Progress
 
 from mesh import Mesh
 from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
-        CollapsingCylinder)
+        CollapsingCylinder, Star)
 from residual import get_residual, get_residual_phi
 
 
 # Solver inputs
-Problem = CollapsingCylinder
-nx = 40
-ny = 40
-n_t = 15
-t_final = .001 / 8
+Problem = Star
+nx = 41
+ny = 41
+n_t = 100
+t_final = .01
 dt = t_final / n_t
-adaptive = True
+adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
 file_name = 'data.npz'
@@ -25,7 +25,8 @@ hardcoded_phi = True
 levelset = True
 
 #t_list = [dt, .025, .05, .075, .1]
-#t_list = [dt, .0025, .005, .0075, .01]
+#t_list = [dt, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1]
+t_list = [dt, .0025, .005, .0075, .01]
 #t_list = [dt, .00025 ,.0005, .00075, .001]
 #t_list = [dt, .000125 ,.00025, .000375, .0005]
 #t_list = [dt, .00025]
@@ -37,10 +38,11 @@ levelset = True
 #t_list = [dt, 4, 8]
 #t_list = [dt, 8*dt, 16*dt, 24*dt, 32*dt, 40*dt]
 #t_list = [dt, 4*dt, 8*dt, 12*dt, 16*dt, 20*dt]
-t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt, 8*dt, 9*dt, 10*dt, 11*dt,
-        12*dt, 13*dt, 14*dt, 15*dt]
+#t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt, 8*dt, 9*dt, 10*dt, 11*dt,
+#        12*dt, 13*dt, 14*dt, 15*dt]
 #t_list = [dt, 2*dt, 3*dt, 4*dt]
 #t_list = [0, dt,]
+#t_list = [0, 1, 2, 3, 4, 5]
 
 def main(show_progress_bar=True):
     # Create mesh
@@ -87,7 +89,8 @@ def main(show_progress_bar=True):
         # Create ghost fluid interfaces
         if ghost_fluid_interfaces:
             mesh.create_interfaces(data)
-        # Update solution
+        # -- Copy solution, then update -- #
+        U_old = data.U.copy()
         data.U = update(dt, data, mesh, problem)
         data.t = (i + 1) * dt
 
@@ -159,6 +162,8 @@ def main(show_progress_bar=True):
         # really save you).
         nan_IDs = np.unique(np.argwhere(np.isnan(data.U))[:, 0])
         if nan_IDs.size != 0:
+            data.U = U_old
+            data.phi = phi_old
             data.save_current_state(mesh)
             data.t_list = [time for time in data.t_list if time <= data.t]
             data.t_list.append(data.t)
@@ -174,11 +179,12 @@ def main(show_progress_bar=True):
         if np.any(np.isclose(data.t_list, data.t)):
             # TODO: I do a mesh update before writing, to sync up phi with the
             # mesh. Is this the best solution?
-            # Revert back to original face points
-            mesh.vol_points = mesh.original_vol_points.copy()
-            mesh.edge_points = mesh.original_edge_points.copy()
-            # Update the mesh
-            mesh.update(data, problem)
+            if adaptive:
+                # Revert back to original face points
+                mesh.vol_points = mesh.original_vol_points.copy()
+                mesh.edge_points = mesh.original_edge_points.copy()
+                # Update the mesh
+                mesh.update(data, problem)
             data.save_current_state(mesh)
         # Find shock
         if Problem == RiemannProblem:
