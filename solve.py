@@ -9,12 +9,12 @@ from residual import get_residual, get_residual_phi
 
 # Solver inputs
 Problem = Star
-nx = 41
-ny = 41
+nx = 11
+ny = 11
 n_t = 100
 t_final = .01
 dt = t_final / n_t
-adaptive = False
+adaptive = True
 rho_levels = np.linspace(.15, 1.05, 19)
 
 file_name = 'data.npz'

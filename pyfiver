@@ -20,7 +20,7 @@ args = parser.parse_args()
 if args.mode == 'solve' or args.mode == 'all':
     print('Checking for breakpoints...', end='', flush=True)
     show_progress_bar = True
-    files = ['solve.py', 'residual.py', 'mesh.py']
+    files = ['solve.py', 'residual.py', 'mesh.py', 'problem.py']
     # Check to see if the code contains any breakpoints
     for fname in files:
         with open(fname) as f:

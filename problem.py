@@ -2,6 +2,9 @@ import numpy as np
 
 from exact_solution import exact_solution
 import matplotlib.patches
+import scipy
+import scipy.special
+import scipy.interpolate
 
 
 class Problem:
@@ -443,73 +446,126 @@ class Star(Problem):
         Compute the exact phi, which is a deformed paraboloid following the
         interface.
         '''
+        f = self.f
+#        theta = np.arctan2(y, x)
+#        # Convert to x and y
+#        x_int = self.D/2 * np.cos(theta)
+#        y_int = self.D/2 * np.sin(theta)
+#        # From slides that Prof. Farhat gave me
+#        A = np.abs(x_int) + np.abs(y_int) - np.sqrt(
+#                x_int**2 + y_int**2)
+#        B = np.cos(2 * np.pi * self.f * t) - 1
+#        displacement = .5 * A * B * np.sign([x_int, y_int])
+#        x_disp = x_int + displacement[0, :]
+#        y_disp = y_int + displacement[1, :]
+#        r = np.sqrt(x_disp**2 + y_disp**2)
+#        # Compute paraboloid
+#        phi = (x/r)**2 + (y/r)**2 - 1
+        remainder = (t - 1/(4*f)) % (1/f)
+        if remainder < 1/(2*f):
+            x = np.array([0, .3, .4, .47, .495, .5])
+        else:
+            x = np.array([0, .05, .12, .22, .35, .5])
+        # Get y at this point for a circle of radius 1/2
+        y = np.sqrt(1/4 - x**2)
+        # From slides that Prof. Farhat gave me
+        A = np.abs(x) + np.abs(y) - np.sqrt(
+                x**2 + y**2)
+        B = np.cos(2 * np.pi * f * t) - 1
+        displacement = .5 * A * B * np.sign([x, y])
+        xq = x + displacement[0, :]
+        yq = y + displacement[1, :]
+        # Basis eval'd at quad points
+        nb = nq = 6
+        phi = np.empty((nb, nq))
+        for i in range(nb):
+            phi[i] = scipy.special.eval_legendre(i, xq)
+        # Compute coefficients
+        Uc = np.linalg.solve(phi.T, yq)
+        # Compute solution at given points
         x = coords[:, 0]
         y = coords[:, 1]
-        theta = np.arctan2(y, x)
-        # Convert to x and y
-        x_int = self.D/2 * np.cos(theta)
-        y_int = self.D/2 * np.sin(theta)
-        # From slides that Prof. Farhat gave me
-        A = np.abs(x_int) + np.abs(y_int) - np.sqrt(
-                x_int**2 + y_int**2)
-        B = np.cos(2 * np.pi * self.f * t) - 1
-        displacement = .5 * A * B * np.sign([x_int, y_int])
-        x_disp = x_int + displacement[0, :]
-        y_disp = y_int + displacement[1, :]
-        r = np.sqrt(x_disp**2 + y_disp**2)
-        # Compute paraboloid
-        phi = (x/r)**2 + (y/r)**2 - 1
+        phi = np.abs(y) - np.polynomial.legendre.legval(np.abs(x), Uc)
         return phi
 
     def compute_exact_phi_gradient(self, coords, t):
         '''
         Compute the gradient of the exact phi.
         '''
+        f = self.f
+#        x = coords[:, 0]
+#        y = coords[:, 1]
+#        theta = np.arctan2(y, x)
+#        # Convert to x and y
+#        x_int = self.D/2 * np.cos(theta)
+#        y_int = self.D/2 * np.sin(theta)
+#        # From Wikipedia: https://en.wikipedia.org/wiki/Atan2#Derivative
+#        dtheta_dx = -y / (x**2 + y**2)
+#        dtheta_dy =  x / (x**2 + y**2)
+#        # From slides that Prof. Farhat gave me
+#        A = np.abs(x_int) + np.abs(y_int) - np.sqrt(
+#                x_int**2 + y_int**2)
+#        B = np.cos(2 * np.pi * self.f * t) - 1
+#        # Compute grad A
+#        norm = np.sqrt(x_int**2 + y_int**2)
+#        dx_int_dx = self.D/2 * (-np.sin(theta))*dtheta_dx
+#        dx_int_dy = self.D/2 * (-np.sin(theta))*dtheta_dy
+#        dy_int_dx = self.D/2 * ( np.cos(theta))*dtheta_dx
+#        dy_int_dy = self.D/2 * ( np.cos(theta))*dtheta_dy
+#        dA_dx_int = np.sign(x_int) - x_int / norm;
+#        dA_dy_int = np.sign(y_int) - y_int / norm;
+#        dA_dx = dA_dx_int * dx_int_dx + dA_dy_int * dy_int_dx
+#        dA_dy = dA_dx_int * dx_int_dy + dA_dy_int * dy_int_dy
+#        # Compute r
+#        displacement = .5 * A * B * np.sign([x_int, y_int])
+#        dd0_dx = .5 * dA_dx * B * np.sign(x_int)
+#        dd0_dy = .5 * dA_dy * B * np.sign(x_int)
+#        dd1_dx = .5 * dA_dx * B * np.sign(y_int)
+#        dd1_dy = .5 * dA_dy * B * np.sign(y_int)
+#        x_disp = x_int + displacement[0, :]
+#        y_disp = y_int + displacement[1, :]
+#        # Compute derivatives
+#        r = np.sqrt(x_disp**2 + y_disp**2)
+#        dr_dx_disp = x_disp / r
+#        dr_dy_disp = y_disp / r
+#        dx_disp_dx = dx_int_dx + dd0_dx
+#        dx_disp_dy = dx_int_dy + dd0_dy
+#        dy_disp_dx = dy_int_dx + dd1_dx
+#        dy_disp_dy = dy_int_dy + dd1_dy
+#        dr_dx = dr_dx_disp * dx_disp_dx + dr_dy_disp * dy_disp_dx
+#        dr_dy = dr_dx_disp * dx_disp_dy + dr_dy_disp * dy_disp_dy
+#        # Compute paraboloid's gradient
+#        gphi = np.array([
+#            2 * (x/r) * (r - x*dr_dx)/(r**2),
+#            2 * (y/r) * (r - y*dr_dy)/(r**2)])
+        remainder = (t - 1/(4*f)) % (1/f)
+        if remainder < 1/(2*f):
+            x = np.array([0, .3, .4, .47, .495, .5])
+        else:
+            x = np.array([0, .05, .12, .22, .35, .5])
+        # Get y at this point for a circle of radius 1/2
+        y = np.sqrt(1/4 - x**2)
+        # From slides that Prof. Farhat gave me
+        A = np.abs(x) + np.abs(y) - np.sqrt(
+                x**2 + y**2)
+        B = np.cos(2 * np.pi * f * t) - 1
+        displacement = .5 * A * B * np.sign([x, y])
+        xq = x + displacement[0, :]
+        yq = y + displacement[1, :]
+        # Basis eval'd at quad points
+        nb = nq = 6
+        phi = np.empty((nb, nq))
+        for i in range(nb):
+            phi[i] = scipy.special.eval_legendre(i, xq)
+        # Compute coefficients
+        Uc = np.linalg.solve(phi.T, yq)
+        # Compute solution at given points
         x = coords[:, 0]
         y = coords[:, 1]
-        theta = np.arctan2(y, x)
-        # Convert to x and y
-        x_int = self.D/2 * np.cos(theta)
-        y_int = self.D/2 * np.sin(theta)
-        # From Wikipedia: https://en.wikipedia.org/wiki/Atan2#Derivative
-        dtheta_dx = -y / (x**2 + y**2)
-        dtheta_dy =  x / (x**2 + y**2)
-        # From slides that Prof. Farhat gave me
-        A = np.abs(x_int) + np.abs(y_int) - np.sqrt(
-                x_int**2 + y_int**2)
-        B = np.cos(2 * np.pi * self.f * t) - 1
-        # Compute grad A
-        norm = np.sqrt(x_int**2 + y_int**2)
-        dx_int_dx = self.D/2 * (-np.sin(theta))*dtheta_dx
-        dx_int_dy = self.D/2 * (-np.sin(theta))*dtheta_dy
-        dy_int_dx = self.D/2 * ( np.cos(theta))*dtheta_dx
-        dy_int_dy = self.D/2 * ( np.cos(theta))*dtheta_dy
-        dA_dx_int = np.sign(x_int) - x_int / norm;
-        dA_dy_int = np.sign(y_int) - y_int / norm;
-        dA_dx = dA_dx_int * dx_int_dx + dA_dy_int * dy_int_dx
-        dA_dy = dA_dx_int * dx_int_dy + dA_dy_int * dy_int_dy
-        # Compute r
-        displacement = .5 * A * B * np.sign([x_int, y_int])
-        dd0_dx = .5 * dA_dx * B * np.sign(x_int)
-        dd0_dy = .5 * dA_dy * B * np.sign(x_int)
-        dd1_dx = .5 * dA_dx * B * np.sign(y_int)
-        dd1_dy = .5 * dA_dy * B * np.sign(y_int)
-        x_disp = x_int + displacement[0, :]
-        y_disp = y_int + displacement[1, :]
-        # Compute derivatives
-        r = np.sqrt(x_disp**2 + y_disp**2)
-        dr_dx_disp = x_disp / r
-        dr_dy_disp = y_disp / r
-        dx_disp_dx = dx_int_dx + dd0_dx
-        dx_disp_dy = dx_int_dy + dd0_dy
-        dy_disp_dx = dy_int_dx + dd1_dx
-        dy_disp_dy = dy_int_dy + dd1_dy
-        dr_dx = dr_dx_disp * dx_disp_dx + dr_dy_disp * dy_disp_dx
-        dr_dy = dr_dx_disp * dx_disp_dy + dr_dy_disp * dy_disp_dy
-        # Compute paraboloid's gradient
+        Uc_derivative = np.polynomial.legendre.legder(Uc)
         gphi = np.array([
-            2 * (x/r) * (r - x*dr_dx)/(r**2),
-            2 * (y/r) * (r - y*dr_dy)/(r**2)])
+            -np.sign(x) * np.polynomial.legendre.legval(np.abs(x), Uc_derivative),
+            np.sign(y)])
         return gphi
 
     def plot_exact_interface(self, axis, mesh, t, lw_scale):
