@@ -430,13 +430,24 @@ class Mesh:
         self.edge = self.original_edge.copy()
         # TODO: This is with a hardcoded/exact phi. This is because I want to
         # neglect error in phi for now.
+        def xi_to_xy(xi, xy1, xy2):
+            return xi*xy2 + (1 - xi) * xy1
         def get_phi_squared(coords, t):
             coords = coords.reshape(1, -1)
+            return problem.compute_exact_phi(coords, t)**2
+        def get_phi_squared_edge(xi, xy1, xy2, t):
+            coords = xi_to_xy(xi, xy1, xy2).reshape(1, -1)
             return problem.compute_exact_phi(coords, t)**2
         def get_grad_phi_squared(coords, t):
             coords = coords.reshape(1, -1)
             return (2 * problem.compute_exact_phi(coords, t)
                     * problem.compute_exact_phi_gradient(coords, t))
+        def get_grad_phi_squared_edge(xi, xy1, xy2, t):
+            coords = xi_to_xy(xi, xy1, xy2).reshape(1, -1)
+            dphi_dxy = (2 * problem.compute_exact_phi(coords, t)
+                    * problem.compute_exact_phi_gradient(coords, t))
+            dxy_dxi = xy2 - xy1
+            return np.dot(dphi_dxy[:, 0], dxy_dxi)
 
         for face_ID in range(self.n_faces):
             # TODO: Only works for interior faces
@@ -522,14 +533,7 @@ class Mesh:
                         # across all guesses is taken as the final answer.
                         vector = (self.xy[j] - self.xy[i])/3
                         #guess = coords + [vector[1], -vector[0]]
-                        guesses = [
-                                coords + [vector[1], -vector[0]],
-                                coords + [-vector[1], vector[0]],
-                                coords + vector + [vector[1], -vector[0]],
-                                coords + vector + [-vector[1], vector[0]],
-                                coords - vector + [vector[1], -vector[0]],
-                                coords - vector + [-vector[1], vector[0]],
-                        ]
+                        guesses = [.25, .5, .75]
                         constraints = [{
                                 'type': 'eq',
                                 'fun': constraint_1,
@@ -557,24 +561,38 @@ class Mesh:
                         #tol = 1e-2
                         #tol = rtol * get_phi_squared(coords, data.t)
                         for guess in guesses:
-                            optimization = scipy.optimize.minimize(get_phi_squared,
-                                    guess, args=(data.t,), jac=get_grad_phi_squared,
-                                    constraints=constraints)# bounds=bounds, tol=tol)
+                            optimization = scipy.optimize.minimize(
+                                    get_phi_squared_edge, guess,
+                                    args=(self.xy[i], self.xy[j], data.t,),
+                                    jac=get_grad_phi_squared_edge,
+                                    #constraints=constraints)# bounds=bounds, tol=tol)
+                                    bounds=((0, 1),))
                             if optimization.success:
                                 success = True
                                 if optimization.fun < minimum_phi:
                                     minimum_phi = optimization.fun
-                                    optimal_points = optimization.x.copy()
+                                    optimal_xi = optimization.x.copy()
                             #if optimization.nfev > 100: breakpoint(
                             nfev += optimization.nfev
                         #print(nfev)
-                        #if data.i == 25: breakpoint(
                         if success:
-                            coords[:] = optimal_points.copy()
+                            coords[:] = xi_to_xy(optimal_xi, self.xy[i],
+                                    self.xy[j])
                         else:
                             print(f'Oh no! Edge point of face {face_ID} failed to optimize!')
                     # -- Volume points -- #
                     else:
+                        # TODO: Just get rid of this honestly
+                        def get_triangle_dense_points(node_coords):
+                            xy1 = node_coords[0].reshape(1, -1)
+                            xy2 = node_coords[1].reshape(1, -1)
+                            xy3 = node_coords[2].reshape(1, -1)
+                            n = 3
+                            s, t = np.meshgrid(np.linspace(0, 1, n),
+                                    np.linspace(0, 1, n))
+                            s = s.reshape(-1, 1)
+                            t = t.reshape(-1, 1)
+                            return s*xy1 + t*xy2 + (1 - s - t)*xy3
                         def constraint_func(coords, node_coords):
                             '''
                             Constraint to keep the coords within the triangle.
@@ -587,7 +605,8 @@ class Mesh:
                             p0x, p0y = node_coords[0]
                             p1x, p1y = node_coords[1]
                             p2x, p2y = node_coords[2]
-                            # TODO: Precompute
+                            # TODO: Precompute the barycentric coords (what you
+                            # can atleast)
                             area = 0.5 *(-p1y*p2x + p0y*(-p1x + p2x) + p0x*(p1y - p2y) + p1x*p2y)
                             s = 1/(2*area) * (p0y*p2x - p0x*p2y + (p2y - p0y)*px + (p0x - p2x)*py)
                             t = 1/(2*area) * (p0x*p1y - p0y*p1x + (p0y - p1y)*px + (p1x - p0x)*py)
@@ -634,11 +653,14 @@ class Mesh:
                                         'fun': constraint_func,
                                         'jac': constraint_jac,
                                         'args': (node_coords,)}])
+                            if np.all(np.isclose(coords, np.array([-4/30, 1/30]))):
+                                print(optimization)
                             if optimization.success:
                                 success = True
                                 if optimization.fun < minimum_phi:
                                     minimum_phi = optimization.fun
                                     optimal_points = optimization.x.copy()
+                        if np.all(np.isclose(coords, np.array([-4/30, 1/30]))): breakpoint()
                         if success:
                             coords[:] = optimal_points.copy()
                         else:

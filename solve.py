@@ -8,11 +8,11 @@ from residual import get_residual, get_residual_phi
 
 
 # Solver inputs
-Problem = Star
-nx = 11
-ny = 11
-n_t = 100
-t_final = .01
+Problem = CollapsingCylinder
+nx = 80
+ny = 80
+n_t = 1
+t_final = .00025
 dt = t_final / n_t
 adaptive = True
 rho_levels = np.linspace(.15, 1.05, 19)
@@ -26,7 +26,7 @@ levelset = True
 
 #t_list = [dt, .025, .05, .075, .1]
 #t_list = [dt, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1]
-t_list = [dt, .0025, .005, .0075, .01]
+#t_list = [dt, .0025, .005, .0075, .01]
 #t_list = [dt, .00025 ,.0005, .00075, .001]
 #t_list = [dt, .000125 ,.00025, .000375, .0005]
 #t_list = [dt, .00025]
@@ -42,6 +42,7 @@ t_list = [dt, .0025, .005, .0075, .01]
 #        12*dt, 13*dt, 14*dt, 15*dt]
 #t_list = [dt, 2*dt, 3*dt, 4*dt]
 #t_list = [0, dt,]
+t_list = [dt,]
 #t_list = [0, 1, 2, 3, 4, 5]
 
 def main(show_progress_bar=True):

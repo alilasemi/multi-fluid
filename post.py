@@ -9,7 +9,7 @@ from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
         CollapsingCylinder, Star, conservative_to_primitive)
 from solve import SimulationData
 
-Problem = Star
+Problem = CollapsingCylinder
 file_name = 'data.npz'
 show_progress_bar = True
 plot_profile = False
@@ -17,6 +17,7 @@ plot_mesh = True
 plot_contour = True
 only_rho = False
 equal_aspect_ratio = True
+mesh_legend = False
 filetype = 'pdf'
 
 
@@ -112,7 +113,7 @@ def post_process():
         save_plot('profile', mesh)
 
     # Mesh plots
-    lw_scale = 1
+    lw_scale = .25
     if plot_mesh:
         fig, axes = plt.subplots(n_times, 1, figsize=(6.5, 4*n_times),
                 squeeze=False)
@@ -150,13 +151,19 @@ def post_process():
                     # Check if this is a surrogate boundary
                     is_surrogate = phi[i] * phi[j] < 0
                     if is_surrogate:
-                        options = {'color' : 'k', 'lw' : 2*lw_scale}
+                        options = {'color': 'k', 'lw': 3*lw_scale}
                     else:
-                        options = {'color' : 'k', 'ls' : '--', 'lw' : 1*lw_scale}
+                        options = {'color': 'k', 'ls': '--', 'lw': 1*lw_scale}
                     ax.plot(points[:, 0], points[:, 1], **options)
                     progress.update(task2, advance=1)
 
         # Save
+        if mesh_legend:
+            plt.plot(0, 0, 'k', lw=.5*lw_scale, label='Primal Mesh')
+            plt.plot(0, 0, '--k', lw=1*lw_scale, label='Dual Mesh')
+            plt.plot(0, 0, 'k', lw=3*lw_scale, label='Surrogate Interface')
+            plt.plot(0, 0, 'r', lw=3*lw_scale, label='True Interface')
+            plt.legend(fontsize=10, loc='lower right', framealpha=.9)
         save_plot('mesh', mesh)
 
     # Density, velocity, and pressure contour plots
