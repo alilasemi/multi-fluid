@@ -430,18 +430,29 @@ class Mesh:
         self.edge = self.original_edge.copy()
         # TODO: This is with a hardcoded/exact phi. This is because I want to
         # neglect error in phi for now.
+        def get_coords_from_barycentric(bary, node_coords):
+            xy1 = node_coords[0]
+            xy2 = node_coords[1]
+            xy3 = node_coords[2]
+            return bary[0]*xy1 + bary[1]*xy2 + (1 - bary[0] -
+                    bary[1])*xy3
         def xi_to_xy(xi, xy1, xy2):
             return xi*xy2 + (1 - xi) * xy1
-        def get_phi_squared(coords, t):
-            coords = coords.reshape(1, -1)
+        def get_phi_squared(bary, node_coords, t):
+            coords = get_coords_from_barycentric(bary, node_coords).reshape(1, -1)
             return problem.compute_exact_phi(coords, t)**2
         def get_phi_squared_edge(xi, xy1, xy2, t):
             coords = xi_to_xy(xi, xy1, xy2).reshape(1, -1)
             return problem.compute_exact_phi(coords, t)**2
-        def get_grad_phi_squared(coords, t):
-            coords = coords.reshape(1, -1)
-            return (2 * problem.compute_exact_phi(coords, t)
+        def get_grad_phi_squared(bary, node_coords, t):
+            coords = get_coords_from_barycentric(bary, node_coords).reshape(1, -1)
+            xy1 = node_coords[0]
+            xy2 = node_coords[1]
+            xy3 = node_coords[2]
+            dphi_dxy = (2 * problem.compute_exact_phi(coords, t)
                     * problem.compute_exact_phi_gradient(coords, t))
+            dxy_dbary = np.array([xy1 - xy3, xy2 - xy3])
+            return dxy_dbary @ dphi_dxy
         def get_grad_phi_squared_edge(xi, xy1, xy2, t):
             coords = xi_to_xy(xi, xy1, xy2).reshape(1, -1)
             dphi_dxy = (2 * problem.compute_exact_phi(coords, t)
@@ -582,51 +593,22 @@ class Mesh:
                             print(f'Oh no! Edge point of face {face_ID} failed to optimize!')
                     # -- Volume points -- #
                     else:
-                        # TODO: Just get rid of this honestly
-                        def get_triangle_dense_points(node_coords):
-                            xy1 = node_coords[0].reshape(1, -1)
-                            xy2 = node_coords[1].reshape(1, -1)
-                            xy3 = node_coords[2].reshape(1, -1)
-                            n = 3
-                            s, t = np.meshgrid(np.linspace(0, 1, n),
-                                    np.linspace(0, 1, n))
-                            s = s.reshape(-1, 1)
-                            t = t.reshape(-1, 1)
-                            return s*xy1 + t*xy2 + (1 - s - t)*xy3
-                        def constraint_func(coords, node_coords):
+                        def constraint_func(bary, node_coords):
                             '''
-                            Constraint to keep the coords within the triangle.
+                            All barycentric coordinates need to be positive.
+                            Since s and t are already positive by the bounds
+                            given, then only 1 - s - t needs to be constrained
+                            to be positive.
 
                             Thank you to andreasdr on Stack Overflow:
                             https://stackoverflow.com/questions/2049582/how-to-determine-if-a-point-is-in-a-2d-triangle
                             '''
-                            # Compute Barycentric coordinate parameters
-                            px, py = coords
-                            p0x, p0y = node_coords[0]
-                            p1x, p1y = node_coords[1]
-                            p2x, p2y = node_coords[2]
-                            # TODO: Precompute the barycentric coords (what you
-                            # can atleast)
-                            area = 0.5 *(-p1y*p2x + p0y*(-p1x + p2x) + p0x*(p1y - p2y) + p1x*p2y)
-                            s = 1/(2*area) * (p0y*p2x - p0x*p2y + (p2y - p0y)*px + (p0x - p2x)*py)
-                            t = 1/(2*area) * (p0x*p1y - p0y*p1x + (p0y - p1y)*px + (p1x - p0x)*py)
-                            return np.array([s, t, 1 - s - t])
+                            return 1 - bary[0] - bary[1]
                         def constraint_jac(coords, node_coords):
                             '''
                             Compute the Jacobian of the constraint.
                             '''
-                            p0x, p0y = node_coords[0]
-                            p1x, p1y = node_coords[1]
-                            p2x, p2y = node_coords[2]
-                            area = 0.5 *(-p1y*p2x + p0y*(-p1x + p2x) + p0x*(p1y - p2y) + p1x*p2y)
-                            dsdx = 1/(2*area) * (p2y - p0y)
-                            dsdy = 1/(2*area) * (p0x - p2x)
-                            dtdx = 1/(2*area) * (p0y - p1y)
-                            dtdy = 1/(2*area) * (p1x - p0x)
-                            return np.array([
-                                    [dsdx, dsdy],
-                                    [dtdx, dtdy],
-                                    [-dsdx - dtdx, -dsdy - dtdy]])
+                            return np.array([-1, -1])
                         cell_ID = self.face_points[face_ID, i_point]
                         coords = self.vol_points[cell_ID]
                         # Get primal cell nodes
@@ -634,10 +616,10 @@ class Mesh:
                         node_coords = self.xy[nodes]
                         # Various guesses around the primal cell
                         guesses = [
-                                coords,
-                                .5*(coords + node_coords[0]),
-                                .5*(coords + node_coords[1]),
-                                .5*(coords + node_coords[2]),
+                                np.array([1/3, 1/3]),
+                                np.array([0, 0]),
+                                np.array([1, 0]),
+                                np.array([0, 1]),
                         ]
                         # Solve optimization problem for the new node locations,
                         # by moving them as close as possible to the interface
@@ -647,20 +629,18 @@ class Mesh:
                         minimum_phi = 1e99
                         for guess in guesses:
                             optimization = scipy.optimize.minimize(get_phi_squared,
-                                    coords, args=(data.t,), jac=get_grad_phi_squared,
-                                    constraints=[{
+                                    coords, args=(node_coords, data.t,),
+                                    jac=get_grad_phi_squared, constraints=[{
                                         'type': 'ineq',
                                         'fun': constraint_func,
                                         'jac': constraint_jac,
-                                        'args': (node_coords,)}])
-                            if np.all(np.isclose(coords, np.array([-4/30, 1/30]))):
-                                print(optimization)
+                                        'args': (node_coords,)}],
+                                        bounds=((0, None), (0, None)))
                             if optimization.success:
                                 success = True
                                 if optimization.fun < minimum_phi:
                                     minimum_phi = optimization.fun
                                     optimal_points = optimization.x.copy()
-                        if np.all(np.isclose(coords, np.array([-4/30, 1/30]))): breakpoint()
                         if success:
                             coords[:] = optimal_points.copy()
                         else:

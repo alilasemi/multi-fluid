@@ -9,8 +9,8 @@ from residual import get_residual, get_residual_phi
 
 # Solver inputs
 Problem = CollapsingCylinder
-nx = 80
-ny = 80
+nx = 21
+ny = 21
 n_t = 1
 t_final = .00025
 dt = t_final / n_t
