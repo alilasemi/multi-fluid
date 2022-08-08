@@ -5,15 +5,16 @@ rich.traceback.install()
 
 import solve, post
 
+profile=True
+
 # Command line arguments
 parser = argparse.ArgumentParser(description=
         'A Python CFD solver based on the FIVER algorithm.')
 parser.add_argument('mode', default='all', nargs='?',
         help="Mode of operation. Options are 'solve', 'post', and "
         "'all'. (Default: 'all')")
-parser.add_argument('--sum', dest='accumulate',
-        help=
-        'placeholder')
+parser.add_argument('-p', '--profile', dest='profile', action='store_true',
+        help= 'Profile the solver using cProfile.')
 args = parser.parse_args()
 
 # Run solver
@@ -29,7 +30,20 @@ if args.mode == 'solve' or args.mode == 'all':
                 show_progress_bar = False
                 break
     print('done')
+
+    if args.profile:
+        # Begin profiler
+        import cProfile
+        import pstats
+        profiler = cProfile.Profile()
+        profiler.enable()
+
     solve.main(show_progress_bar)
+
+    if args.profile:
+        # End profiler and write to file
+        profiler.disable()
+        profiler.dump_stats('prof.out')
 
 # Run post processing
 if args.mode == 'post' or args.mode == 'all':

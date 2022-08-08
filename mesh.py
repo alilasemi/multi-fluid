@@ -473,119 +473,34 @@ class Mesh:
                     # -- Edge points -- #
                     if i_point == 1:
                         coords = self.edge_points[self.face_points[face_ID, i_point]]
-                        def constraint_1(coords, xy1, xy2):
-                            '''
-                            Coords must be on the line between xy1 and xy2.
-
-                            This constraint comes from the law of cosines, with
-                            the angle set to 0.
-                            '''
-                            a = np.linalg.norm(coords - xy1)
-                            b = np.linalg.norm(xy2 - xy1)
-                            c = np.linalg.norm(coords - xy2)
-                            return a**2 + b**2 - c**2 - 2*a*b
-                        def jac_1(coords, xy1, xy2):
-                            '''
-                            Jacobian of constraint 1.
-                            '''
-                            a = np.linalg.norm(coords - xy1)
-                            b = np.linalg.norm(xy2 - xy1)
-                            grad_a2 = 2*(coords - xy1)
-                            grad_c2 = 2*(coords - xy2)
-                            grad_a = (coords - xy1) / a
-                            return grad_a2 - grad_c2 - 2*b*grad_a
-#                        def constraint_1(coords, xy1, xy2):
-#                            a = coords - xy1
-#                            b = xy2 - xy1
-#                            return (a[0]*b[1] - a[1]*b[0]) / (
-#                                    np.linalg.norm(a) * np.linalg.norm(b))
-#                        def jac_1(coords, xy1, xy2):
-#                            a = coords - xy1
-#                            b = xy2 - xy1
-#                            norm_a = np.linalg.norm(a)
-#                            a_cross_b = (a[0]*b[1] - a[1]*b[0])
-#                            return (1 / np.linalg.norm(b)) * (
-#                                    norm_a * b[::-1] - a_cross_b * a / norm_a
-#                                    ) / (norm_a**2)
-                        def constraint_2(coords, xy1, xy2):
-                            '''
-                            Coords must be after xy1.
-
-                            This constraint comes from keeping the dot product
-                            positive.
-                            '''
-                            return np.dot( coords - xy1, xy2 - xy1 )
-                        def jac_2(coords, xy1, xy2):
-                            '''
-                            Jacobian of constraint 2.
-                            '''
-                            return xy2 - xy1
-                        def constraint_3(coords, xy1, xy2):
-                            '''
-                            Coords must be before xy2.
-
-                            This constraint comes from keeping the dot product
-                            positive.
-                            '''
-                            return np.dot( coords - xy2, xy1 - xy2 )
-                        def jac_3(coords, xy1, xy2):
-                            '''
-                            Jacobian of constraint 3.
-                            '''
-                            return xy1 - xy2
                         # Solve optimization problem for the new node locations,
                         # by moving them as close as possible to the interface
                         # (phi = 0) while still keeping the point between nodes
                         # i and j
-                        # The guess value is important - it cannot start the
-                        # guess on the edge itself. Instead, I add 1/3 the
-                        # vector from i to j, rotated 90 degrees. Some other
-                        # combinations are tried as well, and the minimum
-                        # across all guesses is taken as the final answer.
-                        vector = (self.xy[j] - self.xy[i])/3
-                        #guess = coords + [vector[1], -vector[0]]
-                        guesses = [.25, .5, .75]
-                        constraints = [{
-                                'type': 'eq',
-                                'fun': constraint_1,
-                                'jac': jac_1,
-                                'args': (self.xy[i], self.xy[j]),
-                                }, {
-                                'type': 'ineq',
-                                'fun': constraint_2,
-                                'jac': jac_2,
-                                'args': (self.xy[i], self.xy[j]),
-                                }, {
-                                'type': 'ineq',
-                                'fun': constraint_3,
-                                'jac': jac_3,
-                                'args': (self.xy[i], self.xy[j]),
-                                }]
+                        # The guess value is important - several values are
+                        # tried and the minimum across all guesses is taken as
+                        # the final answer.
+                        #guesses = [0, .25, .5, .75, 1]
+                        guesses = np.linspace(0, 1, 5)
                         success = False
                         minimum_phi = 1e99
-                        nfev = 0
                         min_x = np.min([self.xy[i, 0], self.xy[j, 0]])
                         max_x = np.max([self.xy[i, 0], self.xy[j, 0]])
                         min_y = np.min([self.xy[i, 1], self.xy[j, 1]])
                         max_y = np.max([self.xy[i, 1], self.xy[j, 1]])
                         bounds = ((min_x, max_x), (min_y, max_y))
-                        #tol = 1e-2
-                        #tol = rtol * get_phi_squared(coords, data.t)
                         for guess in guesses:
                             optimization = scipy.optimize.minimize(
                                     get_phi_squared_edge, guess,
                                     args=(self.xy[i], self.xy[j], data.t,),
                                     jac=get_grad_phi_squared_edge,
-                                    #constraints=constraints)# bounds=bounds, tol=tol)
-                                    bounds=((0, 1),))
+                                    bounds=((0, 1),), method='slsqp')
                             if optimization.success:
                                 success = True
+                                best_opt = optimization
                                 if optimization.fun < minimum_phi:
                                     minimum_phi = optimization.fun
                                     optimal_xi = optimization.x.copy()
-                            #if optimization.nfev > 100: breakpoint(
-                            nfev += optimization.nfev
-                        #print(nfev)
                         if success:
                             coords[:] = xi_to_xy(optimal_xi, self.xy[i],
                                     self.xy[j])
@@ -603,12 +518,14 @@ class Mesh:
                             Thank you to andreasdr on Stack Overflow:
                             https://stackoverflow.com/questions/2049582/how-to-determine-if-a-point-is-in-a-2d-triangle
                             '''
-                            return 1 - bary[0] - bary[1]
-                        def constraint_jac(coords, node_coords):
+                            constraint = 1 - bary[0] - bary[1]
+                            return constraint
+                        def constraint_jac(bary, node_coords):
                             '''
                             Compute the Jacobian of the constraint.
                             '''
-                            return np.array([-1, -1])
+                            jac = np.array([-1, -1])
+                            return jac
                         cell_ID = self.face_points[face_ID, i_point]
                         coords = self.vol_points[cell_ID]
                         # Get primal cell nodes
@@ -617,9 +534,9 @@ class Mesh:
                         # Various guesses around the primal cell
                         guesses = [
                                 np.array([1/3, 1/3]),
-                                np.array([0, 0]),
-                                np.array([1, 0]),
-                                np.array([0, 1]),
+                                np.array([2/3, 1/6]),
+                                np.array([1/6, 2/3]),
+                                np.array([1/6, 1/6]),
                         ]
                         # Solve optimization problem for the new node locations,
                         # by moving them as close as possible to the interface
@@ -627,22 +544,26 @@ class Mesh:
                         # triangle
                         success = False
                         minimum_phi = 1e99
+                        constraints = [{
+                                'type': 'ineq',
+                                'fun': constraint_func,
+                                'jac': constraint_jac,
+                                'args': (node_coords,)}]
                         for guess in guesses:
-                            optimization = scipy.optimize.minimize(get_phi_squared,
-                                    coords, args=(node_coords, data.t,),
-                                    jac=get_grad_phi_squared, constraints=[{
-                                        'type': 'ineq',
-                                        'fun': constraint_func,
-                                        'jac': constraint_jac,
-                                        'args': (node_coords,)}],
-                                        bounds=((0, None), (0, None)))
+                            optimization = scipy.optimize.minimize(
+                                    get_phi_squared, guess,
+                                    args=(node_coords, data.t,),
+                                    jac=get_grad_phi_squared,
+                                    constraints=constraints,
+                                    bounds=((0, None), (0, None)))
                             if optimization.success:
                                 success = True
+                                best_opt = optimization
                                 if optimization.fun < minimum_phi:
                                     minimum_phi = optimization.fun
-                                    optimal_points = optimization.x.copy()
+                                    optimal_bary = optimization.x.copy()
                         if success:
-                            coords[:] = optimal_points.copy()
+                            coords[:] = get_coords_from_barycentric(optimal_bary, node_coords)
                         else:
                             print(f'Oh no! Volume point of primal cell {cell_ID} failed to optimize!')
 

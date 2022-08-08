@@ -382,7 +382,7 @@ class CollapsingCylinder(Problem):
         x_loop[-1] = x[0]
         y_loop[-1] = y[0]
         # Plot
-        axis.plot(x_loop, y_loop, 'r', 3*lw_scale)
+        axis.plot(x_loop, y_loop, 'r', 2*lw_scale)
 
     def set_bc_data(self):
         # Set BC 0 to be the interfaces
@@ -592,7 +592,7 @@ class Star(Problem):
         x_loop[-1] = x[0]
         y_loop[-1] = y[0]
         # Plot
-        axis.plot(x_loop, y_loop, 'r', 3*lw_scale)
+        axis.plot(x_loop, y_loop, 'r', 2*lw_scale)
 
     def set_bc_data(self):
         # Set BC 0 to be the interfaces

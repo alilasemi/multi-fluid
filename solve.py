@@ -9,10 +9,10 @@ from residual import get_residual, get_residual_phi
 
 # Solver inputs
 Problem = CollapsingCylinder
-nx = 21
-ny = 21
-n_t = 1
-t_final = .00025
+nx = 40
+ny = 40
+n_t = 200
+t_final = .001
 dt = t_final / n_t
 adaptive = True
 rho_levels = np.linspace(.15, 1.05, 19)
@@ -31,8 +31,8 @@ levelset = True
 #t_list = [dt, .000125 ,.00025, .000375, .0005]
 #t_list = [dt, .00025]
 #t_list = [dt, .000025, .00005, .000075, .0001, .000125]
-#t_list = [dt, .000125 ,.00025, .000375, .0005,
-#        .000625, .00075, .000825, .001]
+t_list = [dt, .000125 ,.00025, .000375, .0005,
+        .000625, .00075, .000825, .001]
 #t_list = [.01]
 #t_list = [dt, .004, .008]
 #t_list = [dt, 4, 8]
@@ -42,7 +42,7 @@ levelset = True
 #        12*dt, 13*dt, 14*dt, 15*dt]
 #t_list = [dt, 2*dt, 3*dt, 4*dt]
 #t_list = [0, dt,]
-t_list = [dt,]
+#t_list = [dt,]
 #t_list = [0, 1, 2, 3, 4, 5]
 
 def main(show_progress_bar=True):

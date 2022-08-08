@@ -15,6 +15,7 @@ show_progress_bar = True
 plot_profile = False
 plot_mesh = True
 plot_contour = True
+mark_volume_points = True
 only_rho = False
 equal_aspect_ratio = True
 mesh_legend = False
@@ -113,7 +114,7 @@ def post_process():
         save_plot('profile', mesh)
 
     # Mesh plots
-    lw_scale = .25
+    lw_scale = .1
     if plot_mesh:
         fig, axes = plt.subplots(n_times, 1, figsize=(6.5, 4*n_times),
                 squeeze=False)
@@ -155,6 +156,15 @@ def post_process():
                     else:
                         options = {'color': 'k', 'ls': '--', 'lw': 1*lw_scale}
                     ax.plot(points[:, 0], points[:, 1], **options)
+                    if mark_volume_points:
+                        options = {'color': 'purple', 'marker': 'x',
+                                'ls': 'None', 'ms': 10*lw_scale,
+                                'mew': 2*lw_scale}
+                        if points.shape[0] == 3:
+                            indices = [0, 2]
+                        else:
+                            indices = [0,]
+                        ax.plot(points[indices, 0], points[indices, 1], **options)
                     progress.update(task2, advance=1)
 
         # Save
