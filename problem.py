@@ -13,6 +13,7 @@ class Problem:
     '''
     bc_data = np.empty((4, 5))
     exact = False
+    advected = False
     def __init__(self, xy, t_list, bc_type):
         self.xy = xy
         self.t_list = t_list
@@ -23,8 +24,8 @@ class Problem:
     def set_bc(self, bc, bc_name, data=None):
         # All BCs store gamma in the last entry
         self.bc_data[bc, -1] = self.g
-        # Nothing special needed for walls
-        if bc_name == 'wall':
+        # Nothing special needed for walls or advected interfaces
+        if bc_name == 'wall' or bc_name == 'advected interface':
             pass
         # For interfaces, need to pass some data for computing the interface
         # velocity later on. For full state BCs, store the state.
@@ -51,6 +52,8 @@ class Problem:
             bc_ID = 1
         elif bc_name == 'full state':
             bc_ID = 2
+        elif bc_name == 'advected interface':
+            bc_ID = 3
         self.bc_type[np.nonzero(self.bc_type[:, 1] == bc), 1] = bc_ID
 
 
@@ -606,6 +609,120 @@ class Star(Problem):
 
     def compute_ghost_phi(self, phi, phi_ghost, bc_type):
         print('compute_ghost_phi not implemented for Star!')
+
+
+class Cavitation(Problem):
+    '''
+    Class for the Rayleigh-Plesset problem.
+
+    https://en.wikipedia.org/wiki/Rayleigh%E2%80%93Plesset_equation
+    '''
+    advected = True
+    # Domain
+    xL = -1
+    xR = 1
+    yL = -1
+    yR = 1
+
+    # Ambient state (rho, u, v, p)
+    ambient = np.array([
+            2, 0, 0, 1e4
+    ])
+
+    # Bubble state (rho, u, v, p)
+    bubble = np.array([
+            1, 0, 0, 2e4
+    ])
+
+    # Initial radius
+    radius = .25
+
+    # Ratio of specific heats
+    g = 1.4
+
+    # Levels to use for contour plots
+    #levels = [
+    #        np.linspace(.8, 4, 17),
+    #        np.linspace(-400, 400, 17),
+    #        np.linspace(-400, 400, 17),
+    #        np.linspace(1e5, 2e6, 20)]
+
+    def get_initial_conditions(self):
+        g = self.g
+
+        # Get initial conditions as conservatives
+        r, u, v, p = self.ambient
+        W_ambient = primitive_to_conservative(r, u, v, p, g)
+        r, u, v, p = self.bubble
+        W_bubble = primitive_to_conservative(r, u, v, p, g)
+
+        # Set bubble in the center of the domain
+        U = W_ambient * np.ones((self.n, 4))
+        indices = np.nonzero(self.xy[:, 0]**2 + self.xy[:, 1]**2 <
+                self.radius**2)
+        U[indices] = W_bubble
+        # Compute initial phi
+        phi = self.compute_exact_phi(self.xy, 0)
+        return U, phi
+
+    def compute_exact_phi(self, coords, t):
+        '''
+        Compute the exact phi, which is a deformed paraboloid following the
+        interface.
+        '''
+        if np.isclose(t, 0):
+            x = coords[:, 0]
+            y = coords[:, 1]
+            phi = x**2 + y**2 - self.radius**2
+            return phi
+        else:
+            raise NotImplementedError('compute_exact_phi not implemented for Cavitation!')
+
+    def compute_exact_phi_gradient(self, coords, t):
+        '''
+        Compute the gradient of the exact phi.
+        '''
+
+    def plot_exact_interface(self, axis, mesh, t, lw_scale):
+        # Range of theta
+        n_points = 100
+        theta = np.linspace(0, 2*np.pi, n_points)
+        # Convert to x and y
+        x = self.radius * np.cos(theta)
+        y = self.radius * np.sin(theta)
+        # "loop" the array back onto itself for plotting
+        x_loop = np.empty(n_points + 1)
+        y_loop = np.empty(n_points + 1)
+        x_loop[:-1] = x
+        y_loop[:-1] = y
+        x_loop[-1] = x[0]
+        y_loop[-1] = y[0]
+        # Plot
+        axis.plot(x_loop, y_loop, 'r', 2*lw_scale)
+
+    def set_bc_data(self):
+        # Set BC 0 to be the interfaces
+        self.set_bc(0, 'advected interface')
+        # Set BC 1, 2, and 3 to be walls
+        self.set_bc(1, 'wall')
+        self.set_bc(2, 'wall')
+        self.set_bc(3, 'wall')
+
+    def compute_ghost_phi(self, phi, phi_ghost, bc_type):
+        # Loop over each boundary cell
+        for i in range(phi_ghost.shape[0]):
+            cell_ID, bc = bc_type[i]
+            # Compute wall ghost state
+            if bc == 1:
+                # Just use the initial value as the boundary value
+                phi_ghost[i] = (self.xy[cell_ID, 0]**2 + self.xy[cell_ID, 1]**2
+                        - self.radius**2)
+            # Compute advected interface ghost state
+            elif bc == 3:
+                # Just use the nodal value of phi
+                phi_ghost[i] = phi[cell_ID]
+            else:
+                print(f'ERROR: Invalid BC type given! bc = {bc}')
 
 
 # TODO: These are marked for removal. Point to the C++ functions instead.

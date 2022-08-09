@@ -110,6 +110,8 @@ void compute_boundary_face_residual(matrix_ref<double> U,
         compute_interface_velocity = new ComputeCollapsingCylinderVelocity;
     } else if (problem_name == "Star") {
         compute_interface_velocity = new ComputeStarVelocity;
+    } else if (problem_name == "Cavitation") {
+        // Cavitation does not use a forced interface
     } else {
         cout << "Problem name invalid! Given problem_name = " << problem_name << endl;
     }
@@ -257,6 +259,14 @@ vector<double> compute_ghost_wall(vector<double> V, vector<double> bc_area_norma
     return compute_ghost_interface(V, bc_area_normal, wall_velocity);
 }
 
+vector<double> compute_ghost_advected_interface(
+        vector<double> V, vector<double> bc_area_normal) {
+    // An advected interface has the same wall velocity as the fluid velocity
+    auto wall_velocity = vector<double>(2);
+    wall_velocity << V[1], V[2];
+    return compute_ghost_interface(V, bc_area_normal, wall_velocity);
+}
+
 vector<double> conservative_to_primitive(vector<double> U, double g) {
     // Unpack
     auto& r = U(0);
@@ -309,6 +319,9 @@ vector<double> compute_ghost_state(vector<double> U, long bc,
     // Compute full state ghost state
     } else if (bc == 2) {
         V_ghost = bc_data(bc, seq(0, 3));
+    } else if (bc == 3) {
+        auto V = conservative_to_primitive(U, g);
+        V_ghost = compute_ghost_advected_interface(V, bc_area_normal);
     } else {
         printf("ERROR: Invalid BC type given! bc = %li\n", bc);
     }

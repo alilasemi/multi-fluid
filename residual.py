@@ -11,7 +11,6 @@ from lagrange import LagrangeSegment
 def get_residual(data, mesh, problem):
     # Unpack
     U = data.U
-    U_ghost = data.U_ghost
     gradU = data.gradU
 
     residual = np.zeros_like(U)
@@ -59,14 +58,12 @@ def get_residual(data, mesh, problem):
             mesh.bc_area_normals_p2.flatten().data, mesh.area, data.g,
             mesh.num_boundaries, problem.bc_data, problem.__class__.__name__,
             data.t, residual)
-    #if data.i == 221: breakpoint(
 
     return residual
 
 def get_residual_phi(data, mesh, problem):
     # Unpack
     U = data.U
-    U_ghost = data.U_ghost
     gradU = data.gradU
     phi = data.phi
     # Flux function
@@ -85,6 +82,8 @@ def get_residual_phi(data, mesh, problem):
     phi_ghost = np.empty((mesh.bc_type.shape[0]))
     problem.compute_ghost_phi(phi, phi_ghost, mesh.bc_type)
     # Evalute boundary fluxes
+    # TODO: Is U_ghost really needed here? For now, setting it equal to U.
+    U_ghost = U[mesh.bc_type[:, 0]]
     F_bc = flux_phi.compute_flux(U[mesh.bc_type[:, 0]], U_ghost,
             phi[mesh.bc_type[:, 0]], phi_ghost, mesh.bc_area_normal)
 

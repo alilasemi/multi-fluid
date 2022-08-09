@@ -6,16 +6,17 @@ from rich.progress import track, Progress
 
 from mesh import Mesh
 from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
-        CollapsingCylinder, Star, conservative_to_primitive)
+        CollapsingCylinder, Star, Cavitation, conservative_to_primitive)
 from solve import SimulationData
 
-Problem = CollapsingCylinder
+Problem = Cavitation
 file_name = 'data.npz'
 show_progress_bar = True
 plot_profile = False
-plot_mesh = True
+plot_mesh = False
 plot_contour = True
-mark_volume_points = True
+mark_volume_points = False
+plot_phi_contours = True
 only_rho = False
 equal_aspect_ratio = True
 mesh_legend = False
@@ -114,7 +115,7 @@ def post_process():
         save_plot('profile', mesh)
 
     # Mesh plots
-    lw_scale = .1
+    lw_scale = .5
     if plot_mesh:
         fig, axes = plt.subplots(n_times, 1, figsize=(6.5, 4*n_times),
                 squeeze=False)
@@ -229,6 +230,15 @@ def post_process():
                     if has_exact_phi:
                         problem.plot_exact_interface(ax, mesh,
                                 data.t_list[i_iter], .5)
+
+                    # Plot phi contours on top of density plot
+                    if plot_phi_contours and idx == 0:
+                        contour = ax.tricontour(mesh.xy[:, 0], mesh.xy[:, 1],
+                                phi, colors='k', extend='both',
+                                linewidths=1*lw_scale, linestyles='dashed')
+                        zero_contour = ax.tricontour(mesh.xy[:, 0], mesh.xy[:, 1],
+                                phi, levels = [0,], colors='purple',
+                                linewidths=2*lw_scale, linestyles='dashed')
 
                     # Loop over dual faces
                     for face_ID in range(mesh.n_faces):

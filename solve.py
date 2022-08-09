@@ -3,25 +3,25 @@ from rich.progress import track, Progress
 
 from mesh import Mesh
 from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
-        CollapsingCylinder, Star)
+        CollapsingCylinder, Star, Cavitation)
 from residual import get_residual, get_residual_phi
 
 
 # Solver inputs
-Problem = CollapsingCylinder
-nx = 40
-ny = 40
-n_t = 200
+Problem = Cavitation
+nx = 11
+ny = 11
+n_t = 4
 t_final = .001
 dt = t_final / n_t
-adaptive = True
+adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
 file_name = 'data.npz'
 ghost_fluid_interfaces = True
 update_ghost_fluid_cells = True
 linear_ghost_extrapolation = False
-hardcoded_phi = True
+hardcoded_phi = False
 levelset = True
 
 #t_list = [dt, .025, .05, .075, .1]
@@ -31,8 +31,8 @@ levelset = True
 #t_list = [dt, .000125 ,.00025, .000375, .0005]
 #t_list = [dt, .00025]
 #t_list = [dt, .000025, .00005, .000075, .0001, .000125]
-t_list = [dt, .000125 ,.00025, .000375, .0005,
-        .000625, .00075, .000825, .001]
+#t_list = [dt, .000125 ,.00025, .000375, .0005,
+#        .000625, .00075, .000825, .001]
 #t_list = [.01]
 #t_list = [dt, .004, .008]
 #t_list = [dt, 4, 8]
@@ -40,7 +40,7 @@ t_list = [dt, .000125 ,.00025, .000375, .0005,
 #t_list = [dt, 4*dt, 8*dt, 12*dt, 16*dt, 20*dt]
 #t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt, 8*dt, 9*dt, 10*dt, 11*dt,
 #        12*dt, 13*dt, 14*dt, 15*dt]
-#t_list = [dt, 2*dt, 3*dt, 4*dt]
+t_list = [dt, 2*dt, 3*dt, 4*dt]
 #t_list = [0, dt,]
 #t_list = [dt,]
 #t_list = [0, 1, 2, 3, 4, 5]
@@ -89,7 +89,7 @@ def main(show_progress_bar=True):
         data.gradU = compute_gradient(data.U, mesh)
         # Create ghost fluid interfaces
         if ghost_fluid_interfaces:
-            mesh.create_interfaces(data)
+            mesh.create_interfaces(data, problem.advected)
         # -- Copy solution, then update -- #
         U_old = data.U.copy()
         data.U = update(dt, data, mesh, problem)
@@ -250,7 +250,7 @@ def update(dt, data, mesh, problem):
     return U_new
 
 def update_phi(dt, data, mesh, problem):
-    phi_new = phi.copy()
+    phi_new = data.phi.copy()
     # Compute residual
     R = get_residual_phi(data, mesh, problem)
     # Forward euler

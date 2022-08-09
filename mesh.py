@@ -721,7 +721,7 @@ class Mesh:
             self.bc_quad_pts_phys[self.num_boundaries + 1::2] = self.quad_pts_phys[
                     self.interface_IDs]
 
-    def create_interfaces(self, data):
+    def create_interfaces(self, data, advected=False):
         '''
         Create interface faces.
 
@@ -745,11 +745,15 @@ class Mesh:
         bc_type[:num_boundaries] = self.bc_type[:num_boundaries]
         bc_area_normal[:num_boundaries] = self.bc_area_normal[:num_boundaries]
 
+        if advected:
+            bc_type_ID = 3
+        else:
+            bc_type_ID = 0
         # Loop over interfaces
         for i, interface_ID in enumerate(self.interface_IDs):
             # Add to BCs
-            bc_type[num_boundaries + 2*i + 0] = [self.edge[interface_ID, 0], 0]
-            bc_type[num_boundaries + 2*i + 1] = [self.edge[interface_ID, 1], 0]
+            bc_type[num_boundaries + 2*i + 0] = [self.edge[interface_ID, 0], bc_type_ID]
+            bc_type[num_boundaries + 2*i + 1] = [self.edge[interface_ID, 1], bc_type_ID]
             bc_area_normal[num_boundaries + 2*i + 0] =  self.edge_area_normal[interface_ID]
             bc_area_normal[num_boundaries + 2*i + 1] = -self.edge_area_normal[interface_ID]
 
