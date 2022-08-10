@@ -227,6 +227,7 @@ def post_process():
                     ax.tick_params(labelsize=10)
                     ax.set_xlim([mesh.xL, mesh.xR])
                     ax.set_ylim([mesh.yL, mesh.yR])
+                    # Plot exact interface location
                     if has_exact_phi:
                         problem.plot_exact_interface(ax, mesh,
                                 data.t_list[i_iter], .5)

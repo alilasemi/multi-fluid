@@ -752,8 +752,20 @@ class Mesh:
         # Loop over interfaces
         for i, interface_ID in enumerate(self.interface_IDs):
             # Add to BCs
-            bc_type[num_boundaries + 2*i + 0] = [self.edge[interface_ID, 0], bc_type_ID]
-            bc_type[num_boundaries + 2*i + 1] = [self.edge[interface_ID, 1], bc_type_ID]
+            if advected:
+                # Store the ghost cell ID in the bctype
+                # TODO This is kinda hacky
+                bc_type[num_boundaries + 2*i + 0] = [
+                        self.edge[interface_ID, 0],
+                        3 + self.edge[interface_ID, 1]]
+                bc_type[num_boundaries + 2*i + 1] = [
+                        self.edge[interface_ID, 1],
+                        3 + self.edge[interface_ID, 0]]
+            else:
+                bc_type[num_boundaries + 2*i + 0] = [
+                        self.edge[interface_ID, 0], 0]
+                bc_type[num_boundaries + 2*i + 1] = [
+                        self.edge[interface_ID, 1], 0]
             bc_area_normal[num_boundaries + 2*i + 0] =  self.edge_area_normal[interface_ID]
             bc_area_normal[num_boundaries + 2*i + 1] = -self.edge_area_normal[interface_ID]
 

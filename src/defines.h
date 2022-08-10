@@ -22,5 +22,6 @@ template <class T> using matrix_map = Eigen::Map<
 // Custom type for matrices using Eigen::Ref. This must be used when passing in
 // Numpy arrays as function arguments.
 template <class T> using matrix_ref = Eigen::Ref<matrix<T>>;
+template <class T> using vector_ref = Eigen::Ref<vector<T>>;
 
 #endif

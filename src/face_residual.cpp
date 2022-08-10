@@ -86,8 +86,8 @@ void compute_interior_face_residual(matrix_ref<double> U,
 
 // Forward declare
 // TODO: Header files!! Organize!!
-vector<double> compute_ghost_state(vector<double> U, long bc,
-        matrix<double> quad_pt, double t,
+vector<double> compute_ghost_state(vector<double> U, matrix_ref<double> U_global,
+        long bc, matrix<double> quad_pt, double t,
         vector<double> bc_area_normal, matrix<double> bc_data,
         ComputeForcedInterfaceVelocity*);
 // Compute the boundary faces' contributions to the residual.
@@ -174,7 +174,7 @@ void compute_boundary_face_residual(matrix_ref<double> U,
             area_normal_vec(0) = area_normal(0, 0);
             area_normal_vec(1) = area_normal(1, 0);
             // Compute ghost state
-            auto U_ghost_vec = compute_ghost_state(U_L, bc, quad_pt, t,
+            auto U_ghost_vec = compute_ghost_state(U_L, U, bc, quad_pt, t,
                     area_normal_vec, bc_data, compute_interface_velocity);
             // TODO: Fix matrix vs vector!
             matrix<double> U_ghost(4, 1);
@@ -202,7 +202,8 @@ void compute_boundary_face_residual(matrix_ref<double> U,
 
 
 vector<double> compute_ghost_interface(vector<double> V, vector<double> bc_area_normal,
-        vector<double> wall_velocity) {
+        vector<double> wall_velocity, double ghost_u = 0, double ghost_v = 0,
+        double ghost_pressure = -1) {
     /*
     Compute the ghost state for a wall/interface BC.
 
@@ -216,40 +217,46 @@ vector<double> compute_ghost_interface(vector<double> V, vector<double> bc_area_
     --------
     V_ghost - array of primitive ghost state (4,)
     */
-    // The density and pressure are kept the same in the ghost state
-    auto r = V[0];
-    auto p = V[3];
-    // Compute unit normal vector
-    vector<double> n_hat = bc_area_normal.normalized();
-    // Tangent vector is normal vector, rotated 90 degrees
-    vector<double> t_hat(2);
-    t_hat(0) = -n_hat(1);
-    t_hat(1) =  n_hat(0);
-    // Create rotation matrix
-    matrix<double> rotation(2, 2);
-    rotation(0, all) = n_hat;
-    rotation(1, all) = t_hat;
-    // Rotate velocity into normal - tangential frame
-    matrix<double> velocity(2, 1);
-    velocity(0) = V(1);
-    velocity(1) = V(2);
-    matrix<double> velocity_nt = rotation * velocity;
-    matrix<double> wall_velocity_nt = rotation * wall_velocity.reshaped(2, 1);
-    //cout << "n_hat: " << endl << n_hat << endl;
-    //cout << "wall_velocity_nt: " << endl << wall_velocity_nt << endl;
-    //cout << "wall_velocity: " << endl << wall_velocity << endl;
-    // The normal velocity of the fluid is set so that the mean of the normal
-    // velocity of the fluid vs. the ghost will equal the wall velocity.
-    // This is represented by: 1/2 (U_fluid + U_ghost) = U_wall. Solving for
-    // U_ghost gives:
-    velocity_nt(0) = 2 * wall_velocity_nt(0) - velocity_nt(0);
-    // Rotate back to original frame
-    matrix<double> velocity_new = rotation.transpose() * velocity_nt;
     vector<double> V_ghost(4);
-    V_ghost(0) = r;
-    V_ghost(1) = velocity_new(0);
-    V_ghost(2) = velocity_new(1);
-    V_ghost(3) = p;
+    // The density is kept the same in the ghost state
+    V_ghost(0) = V[0];
+    // If this is an advected interface
+    if (ghost_pressure >= 0) {
+        // Use the velocity of the ghost fluid
+        V_ghost(1) = ghost_u;
+        V_ghost(2) = ghost_v;
+        // Use the pressure of the ghost fluid
+        V_ghost(3) = ghost_pressure;
+    } else {
+        // -- Compute ghost velocity for forced interface -- #
+        // Compute unit normal vector
+        vector<double> n_hat = bc_area_normal.normalized();
+        // Tangent vector is normal vector, rotated 90 degrees
+        vector<double> t_hat(2);
+        t_hat(0) = -n_hat(1);
+        t_hat(1) =  n_hat(0);
+        // Create rotation matrix
+        matrix<double> rotation(2, 2);
+        rotation(0, all) = n_hat;
+        rotation(1, all) = t_hat;
+        // Rotate velocity into normal - tangential frame
+        matrix<double> velocity(2, 1);
+        velocity(0) = V(1);
+        velocity(1) = V(2);
+        matrix<double> velocity_nt = rotation * velocity;
+        matrix<double> wall_velocity_nt = rotation * wall_velocity.reshaped(2, 1);
+        // The normal velocity of the fluid is set so that the mean of the normal
+        // velocity of the fluid vs. the ghost will equal the wall velocity.
+        // This is represented by: 1/2 (U_fluid + U_ghost) = U_wall. Solving for
+        // U_ghost gives:
+        velocity_nt(0) = 2 * wall_velocity_nt(0) - velocity_nt(0);
+        // Rotate back to original frame
+        matrix<double> velocity_new = rotation.transpose() * velocity_nt;
+        V_ghost(1) = velocity_new(0);
+        V_ghost(2) = velocity_new(1);
+        // Pressure is kept the same for a forced interface
+        V_ghost(3) = V[3];
+    }
     return V_ghost;
 }
 
@@ -260,11 +267,13 @@ vector<double> compute_ghost_wall(vector<double> V, vector<double> bc_area_norma
 }
 
 vector<double> compute_ghost_advected_interface(
-        vector<double> V, vector<double> bc_area_normal) {
+        vector<double> V, vector<double> V_ghost_cell,
+        vector<double> bc_area_normal) {
     // An advected interface has the same wall velocity as the fluid velocity
     auto wall_velocity = vector<double>(2);
     wall_velocity << V[1], V[2];
-    return compute_ghost_interface(V, bc_area_normal, wall_velocity);
+    return compute_ghost_interface(V, bc_area_normal, wall_velocity,
+            V_ghost_cell[1], V_ghost_cell[2], V_ghost_cell[3]);
 }
 
 vector<double> conservative_to_primitive(vector<double> U, double g) {
@@ -296,12 +305,14 @@ vector<double> primitive_to_conservative(vector<double> V, double g) {
     return U;
 }
 
-vector<double> compute_ghost_state(vector<double> U, long bc,
-        matrix<double> quad_pt, double t, vector<double> bc_area_normal,
-        matrix<double> bc_data,
+vector<double> compute_ghost_state(vector<double> U, matrix_ref<double> U_global,
+        long bc, matrix<double> quad_pt, double t,
+        vector<double> bc_area_normal, matrix<double> bc_data,
         ComputeForcedInterfaceVelocity* compute_interface_velocity) {
-    // Compute interface ghost state
-    auto g = bc_data(bc, 4);
+    // Get gamma
+    // TODO: bc_data is not storing what you think...the initial bc_type vs.
+    // after being modified are different!
+    auto g = bc_data(1, 4);
     vector<double> V_ghost(4);
     // Compute interface ghost state
     if (bc == 0) {
@@ -319,9 +330,15 @@ vector<double> compute_ghost_state(vector<double> U, long bc,
     // Compute full state ghost state
     } else if (bc == 2) {
         V_ghost = bc_data(bc, seq(0, 3));
-    } else if (bc == 3) {
+    } else if (bc > 2) {
         auto V = conservative_to_primitive(U, g);
-        V_ghost = compute_ghost_advected_interface(V, bc_area_normal);
+        // Get ghost cell ID
+        auto ghost_cell_ID = bc - 3;
+        // Get ghost cell's state
+        vector<double> U_ghost_cell = U_global(ghost_cell_ID, all).transpose();
+        auto V_ghost_cell = conservative_to_primitive(U_ghost_cell, g);
+        // Pass the ghost fluid state in to compute the ghost state
+        V_ghost = compute_ghost_advected_interface(V, V_ghost_cell, bc_area_normal);
     } else {
         printf("ERROR: Invalid BC type given! bc = %li\n", bc);
     }

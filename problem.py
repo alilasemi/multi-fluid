@@ -188,6 +188,7 @@ class AdvectedBubble(Problem):
     '''
     Class for a bubble advecting at constant velocity.
     '''
+    advected = True
     # Domain
     xL = -1
     xR = 1
@@ -250,14 +251,13 @@ class AdvectedBubble(Problem):
             2 * y])
         return gphi
 
-    def plot_exact_interface(self, axis, mesh, t):
+    def plot_exact_interface(self, axis, mesh, t, lw_scale):
         axis.add_patch(matplotlib.patches.Circle((self.u * t, 0), self.radius,
             color='r', fill=False))
 
     def set_bc_data(self):
         # Set BC 0 to be the interfaces
-        interface_velocity = np.array([self.u, self.v])
-        self.set_bc(0, 'interface', interface_velocity)
+        self.set_bc(0, 'advected interface')
         # Set BC 1 to be the walls
         self.set_bc(1, 'wall')
         # Set BC 2 and 3 to be the ambient state
@@ -273,10 +273,15 @@ class AdvectedBubble(Problem):
             cell_ID, bc = bc_type[i]
             # Compute wall ghost state, regardless of if it's marked as a wall,
             # inflow or outflow
-            if bc in [0, 1, 2, 3]:
+            if bc in [0, 1, 2]:
                 # Just use the initial value as the boundary value
                 phi_ghost[i] = (self.xy[cell_ID, 0]**2 + self.xy[cell_ID, 1]**2
                         - self.radius**2)
+            # Compute advected interface ghost state
+            elif bc > 2:
+                # Just use the ghost fluid value of phi
+                ghost_cell_ID = bc - 3
+                phi_ghost[i] = phi[ghost_cell_ID]
             else:
                 print(f'ERROR: Invalid BC type given! bc = {bc}')
 
@@ -626,16 +631,16 @@ class Cavitation(Problem):
 
     # Ambient state (rho, u, v, p)
     ambient = np.array([
-            2, 0, 0, 1e4
+            1000, 0, 0, 1e3
     ])
 
     # Bubble state (rho, u, v, p)
     bubble = np.array([
-            1, 0, 0, 2e4
+            1, 0, 0, 1e0
     ])
 
     # Initial radius
-    radius = .25
+    radius = .5
 
     # Ratio of specific heats
     g = 1.4
@@ -718,9 +723,10 @@ class Cavitation(Problem):
                 phi_ghost[i] = (self.xy[cell_ID, 0]**2 + self.xy[cell_ID, 1]**2
                         - self.radius**2)
             # Compute advected interface ghost state
-            elif bc == 3:
-                # Just use the nodal value of phi
-                phi_ghost[i] = phi[cell_ID]
+            elif bc > 2:
+                # Just use the ghost fluid value of phi
+                ghost_cell_ID = bc - 3
+                phi_ghost[i] = phi[ghost_cell_ID]
             else:
                 print(f'ERROR: Invalid BC type given! bc = {bc}')
 

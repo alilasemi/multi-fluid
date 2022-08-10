@@ -70,13 +70,18 @@ def get_residual_phi(data, mesh, problem):
     flux_phi = Upwind()
 
     residual_phi = np.zeros_like(phi)
+    # Get interior faces only, ignoring "deactivated" interfaces
+    interior_face_IDs = mesh.edge[:, 0] != -1
+    edge_interior = mesh.edge[interior_face_IDs]
     # Evaluate solution at faces on left and right
-    U_L = U[mesh.edge[:, 0]]
-    U_R = U[mesh.edge[:, 1]]
-    phi_L = phi[mesh.edge[:, 0]]
-    phi_R = phi[mesh.edge[:, 1]]
+
+    U_L = U[edge_interior[:, 0]]
+    U_R = U[edge_interior[:, 1]]
+    phi_L = phi[edge_interior[:, 0]]
+    phi_R = phi[edge_interior[:, 1]]
     # Evalute interior fluxes
-    F = flux_phi.compute_flux(U_L, U_R, phi_L, phi_R, mesh.edge_area_normal)
+    F = flux_phi.compute_flux(U_L, U_R, phi_L, phi_R,
+            mesh.edge_area_normal[interior_face_IDs])
 
     # Compute ghost phi
     phi_ghost = np.empty((mesh.bc_type.shape[0]))
@@ -88,8 +93,8 @@ def get_residual_phi(data, mesh, problem):
             phi[mesh.bc_type[:, 0]], phi_ghost, mesh.bc_area_normal)
 
     # Update cells on the left and right sides, for interior faces
-    cellL_ID = mesh.edge[:, 0]
-    cellR_ID = mesh.edge[:, 1]
+    cellL_ID = edge_interior[:, 0]
+    cellR_ID = edge_interior[:, 1]
     np.add.at(residual_phi, cellL_ID, -1 / mesh.area[cellL_ID] * F)
     np.add.at(residual_phi, cellR_ID,  1 / mesh.area[cellR_ID] * F)
     # Incorporate boundary faces
@@ -126,14 +131,12 @@ class Upwind:
         # Check if velocity points from left to right
         vel_dot_normal_L = np.einsum('ij, ij -> i', vel_L, unit_normals)
         vel_dot_normal_R = np.einsum('ij, ij -> i', vel_R, unit_normals)
-        # TODO vectorize
-        # Loop
-        F = np.empty(n_faces)
         # If velocity points left to right, then the left state is upwind.
         # Otherwise, the right state is upwind
         upwindL = vel_dot_normal_L >= 0
         upwindR = vel_dot_normal_L < 0
         # Compute the upwind flux in both cases
+        F = np.empty(n_faces)
         F[upwindL] = length[upwindL, 0] * phi_L[upwindL] * vel_dot_normal_L[upwindL]
         F[upwindR] = length[upwindR, 0] * phi_R[upwindR] * vel_dot_normal_R[upwindR]
         return F
