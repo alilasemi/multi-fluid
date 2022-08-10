@@ -6,14 +6,15 @@ from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
         CollapsingCylinder, Star, Cavitation, conservative_to_primitive,
         primitive_to_conservative)
 from residual import get_residual, get_residual_phi
+from build.src.libpybind_bindings import compute_gradient
 
 
 # Solver inputs
 Problem = Cavitation
-nx = 61
-ny = 61
-n_t = 1000
-t_final = .05
+nx = 21
+ny = 21
+n_t = 2000
+t_final = 4
 dt = t_final / n_t
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
@@ -88,12 +89,13 @@ def main(show_progress_bar=True):
         # Update the stencil to not include points across the interface
         mesh.update_stencil(data.phi)
 
-        # -- Update Solution -- #
         # Compute gradients
-        data.gradU = compute_gradient(data.U, mesh)
+        compute_gradient(data.U, mesh.xy, mesh.stencil,
+                data.gradU.reshape(-1))
         # Create ghost fluid interfaces
         if ghost_fluid_interfaces:
             mesh.create_interfaces(data, problem.advected)
+
         # -- Copy solution, then update -- #
         U_old = data.U.copy()
         data.U = update(dt, data, mesh, problem)
@@ -225,33 +227,6 @@ def main(show_progress_bar=True):
     # Save solution
     data.write_to_file()
 
-
-def compute_gradient(U, mesh):
-    gradU = np.empty((mesh.n, 4, 2))
-    # Loop over all cells
-    for i in range(mesh.n):
-        n_points = len(mesh.stencil[i])
-        # If there are no other points in the stencil, then set the gradient to
-        # zero
-        if n_points == 1:
-            gradU[i] = 0
-        # Otherwise, solve with least squares
-        else:
-            # Construct A matrix: [x_i, y_i, 1]
-            A = np.ones((n_points, 3))
-            A[:, :-1] = mesh.xy[mesh.stencil[i]]
-            # We desired [x_i, y_i, 1] @ [c0, c1, c2] = U[i], therefore Ax=b.
-            # However, there are more equations than unknowns (for most points)
-            # so instead, solve the normal equations: A.T @ A x = A.T @ b
-            try:
-                c = np.linalg.solve(A.T @ A, A.T @ U[mesh.stencil[i]])
-                # Since U = c0 x + c1 y + c2, then dU/dx = c0 and dU/dy = c1.
-                gradU[i] = c[:-1].T
-            except:
-                print(f'Gradient calculation failed! Stencil = {mesh.stencil[i]}')
-                gradU[i] = 0
-    return gradU
-
 def update(dt, data, mesh, problem):
     U_new = data.U.copy()
     # Compute residual
@@ -295,7 +270,7 @@ class SimulationData:
         self.U = U
         self.phi = phi
         self.U_ghost = U_ghost
-        self.gradU = None
+        self.gradU = np.empty((nx*ny, 4, 2))
         # Lists of data for each stored timestep
         self.U_list = []
         self.phi_list = []

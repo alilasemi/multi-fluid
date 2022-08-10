@@ -636,21 +636,21 @@ class Cavitation(Problem):
 
     # Bubble state (rho, u, v, p)
     bubble = np.array([
-            1, 0, 0, 1e0
+            1, 0, 0, 1e-3
     ])
 
     # Initial radius
-    radius = .5
+    radius = .25
 
     # Ratio of specific heats
     g = 1.4
 
     # Levels to use for contour plots
-    #levels = [
-    #        np.linspace(.8, 4, 17),
-    #        np.linspace(-400, 400, 17),
-    #        np.linspace(-400, 400, 17),
-    #        np.linspace(1e5, 2e6, 20)]
+    levels = [
+            np.linspace(0, 1000, 11),
+            None,#np.linspace(-400, 400, 17),
+            None,#np.linspace(-400, 400, 17),
+            np.linspace(0, 1.5*ambient[3], 16)]
 
     def get_initial_conditions(self):
         g = self.g
@@ -708,17 +708,17 @@ class Cavitation(Problem):
     def set_bc_data(self):
         # Set BC 0 to be the interfaces
         self.set_bc(0, 'advected interface')
-        # Set BC 1, 2, and 3 to be walls
-        self.set_bc(1, 'wall')
-        self.set_bc(2, 'wall')
-        self.set_bc(3, 'wall')
+        # Set BC 1, 2, and 3 to be ambient state
+        self.set_bc(1, 'full state', self.ambient)
+        self.set_bc(2, 'full state', self.ambient)
+        self.set_bc(3, 'full state', self.ambient)
 
     def compute_ghost_phi(self, phi, phi_ghost, bc_type):
         # Loop over each boundary cell
         for i in range(phi_ghost.shape[0]):
             cell_ID, bc = bc_type[i]
-            # Compute wall ghost state
-            if bc == 1:
+            # Compute ambient ghost state
+            if bc == 2:
                 # Just use the initial value as the boundary value
                 phi_ghost[i] = (self.xy[cell_ID, 0]**2 + self.xy[cell_ID, 1]**2
                         - self.radius**2)
