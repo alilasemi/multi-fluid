@@ -312,10 +312,10 @@ class CollapsingCylinder(Problem):
 
     # Levels to use for contour plots
     levels = [
-            np.linspace(.8, 4, 17),
+            np.linspace(.8, 2, 17),
             np.linspace(-400, 400, 17),
             np.linspace(-400, 400, 17),
-            np.linspace(1e5, 2e6, 20)]
+            np.linspace(1e4, 2e5, 20)]
 
     def get_initial_conditions(self):
         # Unpack

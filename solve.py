@@ -10,11 +10,11 @@ from build.src.libpybind_bindings import compute_gradient
 
 
 # Solver inputs
-Problem = Cavitation
-nx = 21
-ny = 21
-n_t = 2000
-t_final = 4
+Problem = CollapsingCylinder
+nx = 60
+ny = 60
+n_t = 800
+t_final = .001
 dt = t_final / n_t
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
@@ -23,7 +23,6 @@ file_name = 'data.npz'
 ghost_fluid_interfaces = True
 update_ghost_fluid_cells = True
 linear_ghost_extrapolation = False
-hardcoded_phi = False
 levelset = True
 
 #t_list = [dt, .025, .05, .075, .1]
@@ -103,11 +102,11 @@ def main(show_progress_bar=True):
 
         # -- Copy phi, Then Update -- #
         phi_old = data.phi.copy()
-        if hardcoded_phi:
-            data.phi = problem.compute_exact_phi(mesh.xy, data.t)
-        else:
+        if problem.advected:
             if levelset:
                 data.phi = update_phi(dt, data, mesh, problem)
+        else:
+            data.phi = problem.compute_exact_phi(mesh.xy, data.t)
 
         # -- Update Ghost Fluid Cells -- #
         if ghost_fluid_interfaces and update_ghost_fluid_cells:
@@ -133,39 +132,33 @@ def main(show_progress_bar=True):
                     print(f'Oh no, a lone ghost fluid cell! ID = {ghost_ID}')
                     continue
 
-                # Convert to primitive
-                V = conservative_to_primitive(*data.U[ghost_ID], data.g)
-                # Perform extrapolation of the ghost fluid state. Only the
-                # density is extrapolated - velocity and pressure stay the same.
+                # Perform extrapolation of the ghost fluid state
                 if linear_ghost_extrapolation:
-                    # Construct A matrix:
-                    # [x_i, y_i, 1]
-                    # [1,   0,   0]
-                    # [0,   1,   0]
-                    A = np.zeros((3 * n_points, 3))
-                    gradients = data.gradU[fluid_neighbors, 0]
-                    A[:n_points, :-1] = mesh.xy[fluid_neighbors]
-                    A[:n_points, -1] = 1
-                    A[n_points:2*n_points, 0] = 1
-                    A[2*n_points:, 1] = 1
-                    b = np.empty(3 * n_points)
-                    b[:n_points] = data.U[fluid_neighbors, 0]
-                    b[n_points:2*n_points] = gradients[:, 0]
-                    b[2*n_points:] = gradients[:, 1]
-                    # We desired [x_i, y_i, 1] @ [c0, c1, c2] = U[i], therefore Ax=b.
-                    # However, there are more equations than unknowns (for most points)
-                    # so instead, solve the normal equations: A.T @ A x = A.T @ b
-                    c = np.linalg.solve(A.T @ A, A.T @ b)
-                    # Evaluate extrapolant, U = c0 x + c1 y + c2.
-                    V[3] = np.dot(c[:-1], mesh.xy[ghost_ID]) + c[-1]
+                    # Loop over state variables
+                    for k in range(4):
+                        # Construct A matrix:
+                        # [x_i, y_i, 1]
+                        # [1,   0,   0]
+                        # [0,   1,   0]
+                        A = np.zeros((3 * n_points, 3))
+                        gradients = data.gradU[fluid_neighbors, k]
+                        A[:n_points, :-1] = mesh.xy[fluid_neighbors]
+                        A[:n_points, -1] = 1
+                        A[n_points:2*n_points, 0] = 1
+                        A[2*n_points:, 1] = 1
+                        b = np.empty(3 * n_points)
+                        b[:n_points] = data.U[fluid_neighbors, k]
+                        b[n_points:2*n_points] = gradients[:, 0]
+                        b[2*n_points:] = gradients[:, 1]
+                        # We desired [x_i, y_i, 1] @ [c0, c1, c2] = U[i], therefore Ax=b.
+                        # However, there are more equations than unknowns (for most points)
+                        # so instead, solve the normal equations: A.T @ A x = A.T @ b
+                        c = np.linalg.solve(A.T @ A, A.T @ b)
+                        # Evaluate extrapolant, U = c0 x + c1 y + c2.
+                        data.U[ghost_ID, k] = np.dot(c[:-1], mesh.xy[ghost_ID]) + c[-1]
                 else:
-                    # Use constant extrapolation, which is an area-weighted
-                    # average of the neighbor densities
-                    areas = mesh.area[fluid_neighbors]
-                    V[3] = np.dot(
-                            data.U[fluid_neighbors, 0], areas) / np.sum(areas)
-                # Convert to conservative
-                data.U[ghost_ID] = primitive_to_conservative(*V, data.g)
+                    # Use constant extrapolation
+                    data.U[ghost_ID] = np.mean(data.U[fluid_neighbors], axis=0)
 
         # If the solution NaN's, then store the current solution for plotting
         # and stop. It is important to do this after the ghost fluid update,
