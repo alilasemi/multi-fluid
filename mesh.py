@@ -26,6 +26,8 @@ class Mesh:
         self.dy = (yR - yL) / (ny - 1)
         # Number of faces (formula given in assignment)
         self.n_faces = int( (nx - 1)*ny + (ny - 1)*nx + (nx - 1)*(ny - 1) )
+        # Initially, all faces are interior faces
+        self.interior_face_IDs = np.arange(self.n_faces)
         # Number of primal mesh cells
         self.n_primal_cells = 2 * (nx - 1) * (ny - 1)
         # Compute nodes
@@ -71,7 +73,7 @@ class Mesh:
         self.limiter_stencil = np.empty((self.n, self.max_limiter_stencil_size),
                 dtype=int)
         self.edge = np.empty((self.n_faces, 2), dtype=int)
-        self.edge_area_normal = np.empty((self.n_faces, 2))
+        self.area_normals_p1 = np.empty((self.n_faces, 2))
         self.bc_type = np.empty((2*nx + 2*ny, 2), dtype=int)
         self.bc_area_normal = np.empty((2*nx + 2*ny, 2))
         face_ID = 0
@@ -91,14 +93,14 @@ class Mesh:
                     above_ID = (j + 1)*nx + i
                     stencil.append(above_ID)
                     self.edge[face_ID] = [cell_ID, above_ID]
-                    self.edge_area_normal[face_ID] = rotation90 @ np.array([2*dx/3, dy/3])
+                    self.area_normals_p1[face_ID] = rotation90 @ np.array([2*dx/3, dy/3])
                     # If this is a left/right boundary, cut it in half
-                    if i == 0 or i == nx - 1: self.edge_area_normal[face_ID] /= 2
+                    if i == 0 or i == nx - 1: self.area_normals_p1[face_ID] /= 2
                     # If this is a left boundary, flip the order to preserve
                     # outward normals
                     if i == 0:
                         self.edge[face_ID] = self.edge[face_ID][::-1]
-                        self.edge_area_normal[face_ID] *= -1
+                        self.area_normals_p1[face_ID] *= -1
                     face_ID += 1
 
                 # Make face to the right
@@ -106,14 +108,14 @@ class Mesh:
                     right_ID = j*nx + i + 1
                     stencil.append(right_ID)
                     self.edge[face_ID] = [cell_ID, right_ID]
-                    self.edge_area_normal[face_ID] = rotation90 @ np.array([-dx/3, -2*dy/3])
+                    self.area_normals_p1[face_ID] = rotation90 @ np.array([-dx/3, -2*dy/3])
                     # If this is a top/bottom boundary, cut it in half
-                    if j == 0 or j == ny - 1: self.edge_area_normal[face_ID] /= 2
+                    if j == 0 or j == ny - 1: self.area_normals_p1[face_ID] /= 2
                     # If this is a top boundary, flip the order to preserve
                     # outward normals
                     if j == ny - 1:
                         self.edge[face_ID] = self.edge[face_ID][::-1]
-                        self.edge_area_normal[face_ID] *= -1
+                        self.area_normals_p1[face_ID] *= -1
                     face_ID += 1
 
                 # Make face diagonally above and to the right
@@ -121,7 +123,7 @@ class Mesh:
                     diag_ID = (j + 1)*nx + i + 1
                     stencil.append(diag_ID)
                     self.edge[face_ID] = [cell_ID, diag_ID]
-                    self.edge_area_normal[face_ID] = rotation90 @ np.array([dx/3, -dy/3])
+                    self.area_normals_p1[face_ID] = rotation90 @ np.array([dx/3, -dy/3])
                     face_ID += 1
 
                 # Also check left and bottom side (not needed for faces since
@@ -174,10 +176,6 @@ class Mesh:
 
         # Store the number of real boundaries, not counting interfaces
         self.num_boundaries = self.bc_type.shape[0]
-
-        # Make a copy of the original edge array. This array gets modified by
-        # interfaces, but needs to be reverted to the original.
-        self.original_edge = self.edge.copy()
 
         # Loop over faces
         for face_ID in range(self.n_faces):
@@ -426,8 +424,6 @@ class Mesh:
         '''
         Update the dual mesh to fit the interface better.
         '''
-        # Copy the original edge back
-        self.edge = self.original_edge.copy()
         # TODO: This is with a hardcoded/exact phi. This is because I want to
         # neglect error in phi for now.
         def get_coords_from_barycentric(bary, node_coords):
@@ -721,7 +717,7 @@ class Mesh:
             self.bc_quad_pts_phys[self.num_boundaries + 1::2] = self.quad_pts_phys[
                     self.interface_IDs]
 
-    def create_interfaces(self, data, advected=False):
+    def create_interfaces(self, data, fluid_solid=True):
         '''
         Create interface faces.
 
@@ -731,11 +727,12 @@ class Mesh:
         instead.
         '''
         num_boundaries = self.num_boundaries
-        # Copy the original edge back
-        self.edge = self.original_edge.copy()
         # Find interfaces
         is_surrogate = data.phi[self.edge[:, 0]] * data.phi[self.edge[:, 1]] < 0
         self.interface_IDs = np.argwhere(is_surrogate)[:, 0]
+        # Remove these from the interior faces
+        self.interior_face_IDs = self.interior_face_IDs[
+                ~np.isin(self.interior_face_IDs, self.interface_IDs)]
 
         # Create new arrays for boundary faces
         num_interfaces = self.interface_IDs.size
@@ -744,16 +741,15 @@ class Mesh:
         # Copy the old data in
         bc_type[:num_boundaries] = self.bc_type[:num_boundaries]
         bc_area_normal[:num_boundaries] = self.bc_area_normal[:num_boundaries]
-        breakpoint()
 
-        if advected:
-            bc_type_ID = 3
-        else:
+        if fluid_solid:
             bc_type_ID = 0
+        else:
+            bc_type_ID = 3
         # Loop over interfaces
         for i, interface_ID in enumerate(self.interface_IDs):
             # Add to BCs
-            if advected:
+            if not fluid_solid:
                 # Store the ghost cell ID in the bctype
                 # TODO This is kinda hacky
                 bc_type[num_boundaries + 2*i + 0] = [
@@ -767,11 +763,8 @@ class Mesh:
                         self.edge[interface_ID, 0], 0]
                 bc_type[num_boundaries + 2*i + 1] = [
                         self.edge[interface_ID, 1], 0]
-            bc_area_normal[num_boundaries + 2*i + 0] =  self.edge_area_normal[interface_ID]
-            bc_area_normal[num_boundaries + 2*i + 1] = -self.edge_area_normal[interface_ID]
-
-        # "turn off" those interior faces
-        self.edge[self.interface_IDs] = [-1, -1]
+            bc_area_normal[num_boundaries + 2*i + 0] =  self.area_normals_p1[interface_ID]
+            bc_area_normal[num_boundaries + 2*i + 1] = -self.area_normals_p1[interface_ID]
 
         # Switch to using these new arrays
         self.bc_type = bc_type

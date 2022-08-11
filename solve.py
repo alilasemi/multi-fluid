@@ -11,9 +11,9 @@ from build.src.libpybind_bindings import compute_gradient
 
 # Solver inputs
 Problem = Cavitation
-nx = 61
-ny = 61
-n_t = 2000
+nx = 5
+ny = 5
+n_t = 100
 t_final = 3.7e-5
 dt = t_final / n_t
 adaptive = False
@@ -93,7 +93,7 @@ def main(show_progress_bar=True):
                 data.gradU.reshape(-1))
         # Create ghost fluid interfaces
         if ghost_fluid_interfaces:
-            mesh.create_interfaces(data, problem.advected)
+            mesh.create_interfaces(data, problem.fluid_solid)
 
         # -- Copy solution, then update -- #
         U_old = data.U.copy()
@@ -102,11 +102,11 @@ def main(show_progress_bar=True):
 
         # -- Copy phi, Then Update -- #
         phi_old = data.phi.copy()
-        if problem.advected:
+        if problem.fluid_solid:
+            data.phi = problem.compute_exact_phi(mesh.xy, data.t)
+        else:
             if levelset:
                 data.phi = update_phi(dt, data, mesh, problem)
-        else:
-            data.phi = problem.compute_exact_phi(mesh.xy, data.t)
 
         # -- Update Ghost Fluid Cells -- #
         if ghost_fluid_interfaces and update_ghost_fluid_cells:
@@ -204,9 +204,6 @@ def main(show_progress_bar=True):
                 if delta_u > .01 * u4:
                     x_shock[i] = mesh.xy[nx - 1 - j, 0]
                     break
-
-    # Copy the original edge back. This is to make plotting not skip interfaces
-    mesh.edge = mesh.original_edge.copy()
 
     # Fit a line to the shock location
     if Problem == RiemannProblem:

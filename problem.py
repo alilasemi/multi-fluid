@@ -13,7 +13,7 @@ class Problem:
     '''
     bc_data = np.empty((4, 5))
     exact = False
-    advected = False
+    fluid_solid = True
     def __init__(self, xy, t_list, bc_type):
         self.xy = xy
         self.t_list = t_list
@@ -188,7 +188,7 @@ class AdvectedBubble(Problem):
     '''
     Class for a bubble advecting at constant velocity.
     '''
-    advected = True
+    fluid_solid = False
     # Domain
     xL = -1
     xR = 1
@@ -622,7 +622,7 @@ class Cavitation(Problem):
 
     https://en.wikipedia.org/wiki/Rayleigh%E2%80%93Plesset_equation
     '''
-    advected = True
+    fluid_solid = False
     # Domain
     xL = -2e-3
     xR = 2e-3

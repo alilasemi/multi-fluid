@@ -12,14 +12,55 @@ using std::string;
 
 // Compute the interior faces' contributions to the residual.
 void compute_interior_face_residual(matrix_ref<double> U,
-        matrix_ref<long> edge, matrix_ref<double> quad_wts,
-        std::vector<double> quad_pts_phys, matrix_ref<double> limiter,
-        std::vector<double> gradU, matrix_ref<double> xy,
-        std::vector<double> area_normals_p2, matrix_ref<double> area,
-        double g, matrix_ref<double> residual) {
-    // Sizing
-    auto n_faces = edge.rows();
+        vector_ref<long> interior_face_IDs, matrix_ref<long> edge,
+        matrix_ref<double> limiter, std::vector<double> gradU,
+        matrix_ref<double> xy, matrix_ref<double> area_normals_p1,
+        matrix_ref<double> area, double g, matrix_ref<double> residual) {
+    // Create buffers
+    matrix<double> U_L(4, 1);
+    matrix<double> U_R(4, 1);
+    vector<double> F(4);
+    // Loop over faces
+    for (const auto face_ID : interior_face_IDs) {
+        // Left and right cell IDs
+        auto L = edge(face_ID, 0);
+        auto R = edge(face_ID, 1);
 
+        // Gradients for these cells
+        matrix_map<double> gradU_L(&gradU[L*4*2], 4, 2);
+        matrix_map<double> gradU_R(&gradU[R*4*2], 4, 2);
+
+        // Evaluate solution at faces on left and right
+        // -- First order component -- #
+        U_L = U(L, all).transpose();
+        U_R = U(R, all).transpose();
+
+        // -- Second order component -- #
+        matrix<double> edge_point = .5 * (xy(L, all) + xy(R, all)).transpose();
+        // TODO: There has to be a cleaner way...
+        for (int k = 0; k < 4; k++) {
+            U_L(k) += limiter(L, k) * (gradU_L(k, all).transpose().cwiseProduct(edge_point - xy(L, all).transpose()).sum());
+            U_R(k) += limiter(R, k) * (gradU_R(k, all).transpose().cwiseProduct(edge_point - xy(R, all).transpose()).sum());
+        }
+
+        // Evaluate fluxes
+        matrix<double> area_normals = area_normals_p1(face_ID, all).transpose();
+        compute_flux(U_L, U_R, area_normals, g, F);
+
+        // Update residual of cells on the left and right
+        residual(L, all) += -1 / area(L, 0) * F;
+        residual(R, all) +=  1 / area(R, 0) * F;
+    }
+}
+
+
+// Compute the fluid-fluid faces' contributions to the residual.
+void compute_fluid_fluid_face_residual(matrix_ref<double> U,
+        vector_ref<long> interior_face_IDs, matrix_ref<long> edge,
+        matrix_ref<double> quad_wts, std::vector<double> quad_pts_phys,
+        matrix_ref<double> limiter, std::vector<double> gradU,
+        matrix_ref<double> xy, std::vector<double> area_normals_p2,
+        matrix_ref<double> area, double g, matrix_ref<double> residual) {
     // Create buffers
     // TODO: This nq thing is a hack
     int nq = 2;
@@ -27,14 +68,11 @@ void compute_interior_face_residual(matrix_ref<double> U,
     matrix<double> U_R(4, 1);
     vector<double> F(4);
     // Loop over faces
-    for (auto face_ID = 0; face_ID < n_faces; face_ID++) {
+    for (const auto face_ID : interior_face_IDs) {
         // Left and right cell IDs
         auto L = edge(face_ID, 0);
         auto R = edge(face_ID, 1);
-        // Skip interfaces - those are handled seperately
-        if (L == -1 and R == -1) {
-            continue;
-        }
+
         // Gradients for these cells
         matrix_map<double> gradU_L(&gradU[L*4*2], 4, 2);
         matrix_map<double> gradU_R(&gradU[R*4*2], 4, 2);
@@ -83,6 +121,7 @@ void compute_interior_face_residual(matrix_ref<double> U,
         residual(R, all) +=  1 / area(R, 0) * F_integral;
     }
 }
+
 
 // Forward declare
 // TODO: Header files!! Organize!!
