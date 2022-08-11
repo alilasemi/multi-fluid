@@ -624,23 +624,23 @@ class Cavitation(Problem):
     '''
     advected = True
     # Domain
-    xL = -1
-    xR = 1
-    yL = -1
-    yR = 1
+    xL = -2e-3
+    xR = 2e-3
+    yL = -2e-3
+    yR = 2e-3
 
     # Ambient state (rho, u, v, p)
     ambient = np.array([
-            1000, 0, 0, 1e3
+            1000, 0, 0, 1e5
     ])
 
     # Bubble state (rho, u, v, p)
     bubble = np.array([
-            1, 0, 0, 1e-3
+            1, 0, 0, .02e5
     ])
 
     # Initial radius
-    radius = .25
+    radius = .4e-3
 
     # Ratio of specific heats
     g = 1.4

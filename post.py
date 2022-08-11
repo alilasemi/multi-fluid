@@ -9,7 +9,7 @@ from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
         CollapsingCylinder, Star, Cavitation, conservative_to_primitive)
 from solve import SimulationData
 
-Problem = CollapsingCylinder
+Problem = Cavitation
 file_name = 'data.npz'
 show_progress_bar = True
 plot_profile = False

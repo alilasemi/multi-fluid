@@ -744,6 +744,7 @@ class Mesh:
         # Copy the old data in
         bc_type[:num_boundaries] = self.bc_type[:num_boundaries]
         bc_area_normal[:num_boundaries] = self.bc_area_normal[:num_boundaries]
+        breakpoint()
 
         if advected:
             bc_type_ID = 3

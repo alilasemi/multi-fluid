@@ -10,11 +10,11 @@ from build.src.libpybind_bindings import compute_gradient
 
 
 # Solver inputs
-Problem = CollapsingCylinder
-nx = 60
-ny = 60
-n_t = 800
-t_final = .001
+Problem = Cavitation
+nx = 61
+ny = 61
+n_t = 2000
+t_final = 3.7e-5
 dt = t_final / n_t
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
