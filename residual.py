@@ -4,7 +4,8 @@ import pickle
 import sympy as sp
 
 from build.src.libpybind_bindings import (
-        compute_interior_face_residual, compute_boundary_face_residual)
+        compute_interior_face_residual, compute_fluid_fluid_face_residual,
+        compute_boundary_face_residual)
 from lagrange import LagrangeSegment
 
 
@@ -94,7 +95,7 @@ def get_residual_phi(data, mesh, problem):
     phi_R = phi[edge_interior[:, 1]]
     # Evalute interior fluxes
     F = flux_phi.compute_flux(U_L, U_R, phi_L, phi_R,
-            mesh.edge_area_normal[interior_face_IDs])
+            mesh.area_normals_p1[interior_face_IDs])
 
     # Compute ghost phi
     phi_ghost = np.empty((mesh.bc_type.shape[0]))

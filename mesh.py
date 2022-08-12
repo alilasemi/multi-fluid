@@ -721,10 +721,10 @@ class Mesh:
         '''
         Create interface faces.
 
-        Interfaces are implemented in the same way as wall boundary faces are.
-        Therefore, this function finds the interfaces, removes them from the
-        interior face calculations, and adds boundary faces (on either side)
-        instead.
+        Fluid-solid interfaces are implemented in the same way as wall boundary
+        faces are.  Therefore, this function finds the interfaces, removes them
+        from the interior face calculations, and adds boundary faces (on either
+        side) instead, if needed.
         '''
         num_boundaries = self.num_boundaries
         # Find interfaces
@@ -734,42 +734,33 @@ class Mesh:
         self.interior_face_IDs = self.interior_face_IDs[
                 ~np.isin(self.interior_face_IDs, self.interface_IDs)]
 
-        # Create new arrays for boundary faces
-        num_interfaces = self.interface_IDs.size
-        bc_type = np.empty((num_boundaries + 2*num_interfaces, 2), dtype=int)
-        bc_area_normal = np.empty((num_boundaries + 2*num_interfaces, 2))
-        # Copy the old data in
-        bc_type[:num_boundaries] = self.bc_type[:num_boundaries]
-        bc_area_normal[:num_boundaries] = self.bc_area_normal[:num_boundaries]
-
+        # If running fluid-solid, then the BC information needs to be updated as
+        # well
         if fluid_solid:
-            bc_type_ID = 0
-        else:
-            bc_type_ID = 3
-        # Loop over interfaces
-        for i, interface_ID in enumerate(self.interface_IDs):
-            # Add to BCs
-            if not fluid_solid:
-                # Store the ghost cell ID in the bctype
-                # TODO This is kinda hacky
-                bc_type[num_boundaries + 2*i + 0] = [
-                        self.edge[interface_ID, 0],
-                        3 + self.edge[interface_ID, 1]]
-                bc_type[num_boundaries + 2*i + 1] = [
-                        self.edge[interface_ID, 1],
-                        3 + self.edge[interface_ID, 0]]
-            else:
+            # Create new arrays for boundary faces
+            num_interfaces = self.interface_IDs.size
+            bc_type = np.empty((num_boundaries + 2*num_interfaces, 2), dtype=int)
+            bc_area_normal = np.empty((num_boundaries + 2*num_interfaces, 2))
+            # Copy the old data in
+            bc_type[:num_boundaries] = self.bc_type[:num_boundaries]
+            bc_area_normal[:num_boundaries] = self.bc_area_normal[:num_boundaries]
+
+            # Loop over interfaces
+            for i, interface_ID in enumerate(self.interface_IDs):
+                # Add to BCs
                 bc_type[num_boundaries + 2*i + 0] = [
                         self.edge[interface_ID, 0], 0]
                 bc_type[num_boundaries + 2*i + 1] = [
                         self.edge[interface_ID, 1], 0]
-            bc_area_normal[num_boundaries + 2*i + 0] =  self.area_normals_p1[interface_ID]
-            bc_area_normal[num_boundaries + 2*i + 1] = -self.area_normals_p1[interface_ID]
+                #TODO: WTF this wont work, why are we using p1 bc area
+                # normals??? Big bug
+                bc_area_normal[num_boundaries + 2*i + 0] =  self.area_normals_p2[interface_ID]
+                bc_area_normal[num_boundaries + 2*i + 1] = -self.area_normals_p2[interface_ID]
 
-        # Switch to using these new arrays
-        self.bc_type = bc_type
-        self.bc_area_normal = bc_area_normal
-        # Resize ghost data
-        data.U_ghost = np.empty((self.bc_type.shape[0], 4))
-        # Copy over the face information into the BCs with the new interfaces
-        self.copy_bc_face_area_normals()
+            # Switch to using these new arrays
+            self.bc_type = bc_type
+            self.bc_area_normal = bc_area_normal
+            # Resize ghost data
+            data.U_ghost = np.empty((self.bc_type.shape[0], 4))
+            # Copy over the face information into the BCs with the new interfaces
+            self.copy_bc_face_area_normals()

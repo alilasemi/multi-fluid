@@ -56,19 +56,17 @@ void compute_interior_face_residual(matrix_ref<double> U,
 
 // Compute the fluid-fluid faces' contributions to the residual.
 void compute_fluid_fluid_face_residual(matrix_ref<double> U,
-        vector_ref<long> interior_face_IDs, matrix_ref<long> edge,
+        vector_ref<long> interface_IDs, matrix_ref<long> edge,
         matrix_ref<double> quad_wts, std::vector<double> quad_pts_phys,
         matrix_ref<double> limiter, std::vector<double> gradU,
         matrix_ref<double> xy, std::vector<double> area_normals_p2,
         matrix_ref<double> area, double g, matrix_ref<double> residual) {
     // Create buffers
-    // TODO: This nq thing is a hack
-    int nq = 2;
     matrix<double> U_L(4, 1);
     matrix<double> U_R(4, 1);
     vector<double> F(4);
     // Loop over faces
-    for (const auto face_ID : interior_face_IDs) {
+    for (const auto face_ID : interface_IDs) {
         // Left and right cell IDs
         auto L = edge(face_ID, 0);
         auto R = edge(face_ID, 1);
@@ -79,24 +77,19 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
 
         // Loop over quadrature points
         vector<double> F_integral = vector<double>::Zero(4);
-        for (auto i = 0; i < nq; i++) {
+        for (auto i = 0; i < 2; i++) {
             // Evaluate solution at faces on left and right
             // -- First order component -- #
             U_L = U(L, all).transpose();
             U_R = U(R, all).transpose();
+
             // -- Second order component -- #
+            // Get quadrature point in physical space
+            // TODO: This looks a bit jank...issue is that Eigen cannot
+            // handle 3D arrays. Wrapper of vector with strides??
             matrix<double> quad_pt(2, 1);
-            if (nq == 2) {
-                // Get quadrature point in physical space
-                // TODO: This looks a bit jank...issue is that Eigen cannot
-                // handle 3D arrays. Wrapper of vector with strides??
-                quad_pt(0) = quad_pts_phys[face_ID*2*2 + i*2 + 0];
-                quad_pt(1) = quad_pts_phys[face_ID*2*2 + i*2 + 1];
-            } else {
-                // Use the midpoint
-                // TODO: This def wont work
-                printf("nq = 1 is bugged!\n");
-            }
+            quad_pt(0) = quad_pts_phys[face_ID*2*2 + i*2 + 0];
+            quad_pt(1) = quad_pts_phys[face_ID*2*2 + i*2 + 1];
             // TODO: There has to be a cleaner way...
             for (int k = 0; k < 4; k++) {
                 U_L(k) += limiter(L, k) * (gradU_L(k, all).transpose().cwiseProduct(quad_pt - xy(L, all).transpose()).sum());
@@ -110,12 +103,9 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             // Evaluate interior fluxes
             compute_flux(U_L, U_R, area_normal, g, F);
             // Add contribution to quadrature
-            if (nq == 2) {
-                F_integral += F * quad_wts(i, 0);
-            } else {
-                F_integral += F;
-            }
+            F_integral += F * quad_wts(i, 0);
         }
+
         // Update residual of cells on the left and right
         residual(L, all) += -1 / area(L, 0) * F_integral;
         residual(R, all) +=  1 / area(R, 0) * F_integral;
