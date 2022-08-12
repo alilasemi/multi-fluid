@@ -5,7 +5,7 @@ import scipy.optimize
 
 def exact_solution(
         r4, p4, u4, v4, r1, p1, u1, v1, g, t_list):
-    make_plots = False
+    make_plots = True
     # Domain
     n_points = 1601
     x = np.linspace(-10, 10, n_points)
@@ -137,3 +137,10 @@ def exact_solution(
         plt.tick_params(labelsize=12)
         plt.grid(linestyle='--')
         plt.savefig('p_exact.pdf', bbox_inches='tight')
+        plt.show()
+
+if __name__ == "__main__":
+    r4, u4, v4, p4 = 1, 100, 0, 1e5
+    r1, u1, v1, p1 = .125, 50, 0, 1e4
+    g = 1.4
+    exact_solution(r4, p4, u4, v4, r1, p1, u1, v1, g, [1e-2])

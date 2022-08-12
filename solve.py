@@ -10,12 +10,12 @@ from build.src.libpybind_bindings import compute_gradient
 
 
 # Solver inputs
-Problem = Cavitation
+Problem = AdvectedBubble
 nx = 21
 ny = 21
-#n_t = 30000
-cfl = .02
-t_final = 1e-4#3.7e-5
+n_t = 10
+#cfl = .1
+t_final = .001#1e-4#3.7e-5
 max_n_t = 99999999999
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
@@ -199,6 +199,7 @@ def main(show_progress_bar=True):
                             data.U[ghost_ID, k] = np.dot(c[:-1], mesh.xy[ghost_ID]) + c[-1]
                     else:
                         # Use constant extrapolation
+                        breakpoint()
                         data.U[ghost_ID] = np.mean(data.U[fluid_neighbors], axis=0)
 
             # If the solution NaN's, then store the current solution for plotting
@@ -257,7 +258,7 @@ def main(show_progress_bar=True):
             # Update progress bar
             progress.update(task, advance=dt)
             # If it's hit the final time, then stop iterating
-            if data.t == t_final: break
+            if np.isclose(data.t, t_final): break
 
     # Fit a line to the shock location
     if Problem == RiemannProblem:
