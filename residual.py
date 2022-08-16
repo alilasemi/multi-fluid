@@ -71,7 +71,7 @@ def get_residual(data, mesh, problem):
         compute_fluid_fluid_face_residual(U, mesh.interface_IDs, mesh.edge,
                 LagrangeSegment.quad_wts, mesh.quad_pts_phys.flatten().data,
                 limiter, gradU.flatten().data, mesh.xy,
-                mesh.area_normals_p2.flatten().data, mesh.area, data.g,
+                mesh.area_normals_p2.flatten().data, mesh.area, data.g, data.dt,
                 residual)
 
     return residual
@@ -159,7 +159,7 @@ class Upwind:
 
 
 def exact_riemann_problem(
-        r4, p4, u4, v4, r1, p1, u1, v1, g, xL, xR, t):
+        r4, p4, u4, r1, p1, u1, g, xL, xR, t):
     # Points at which to evaluate Riemann problem
     x = np.array([xL, xR])
 
@@ -178,8 +178,8 @@ def exact_riemann_problem(
                 )
             )
         )**(-(2 * g) / (g - 1)) - p4/p1
-    p2p1 = scipy.optimize.fsolve(p_rhs, p4/p1, args=(u1, u4, c1, c4, p1, p4, g)
-            )[0]
+    p2p1 = scipy.optimize.fsolve(p_rhs, p4/p1, args=(
+            u1, u4, c1, c4, p1, p4, g))[0]
     p2 = p2p1 * p1
 
     # Compute u2
@@ -221,7 +221,7 @@ def exact_riemann_problem(
     r = np.empty_like(x)
     u = np.empty_like(x)
     p = np.empty_like(x)
-    for i in range(n_points):
+    for i in range(x.size):
         xt = x[i] / t
         # Left of expansion
         if xt < (u4 - c4):
@@ -248,6 +248,7 @@ def exact_riemann_problem(
             r[i] = r1
             u[i] = u1
             p[i] = p1
+    return r, u, p
 
 
 def convective_fluxes(U, g):
@@ -268,6 +269,3 @@ def convective_fluxes(U, g):
     F[:, 2, 1] = rv**2 / r + p
     F[:, 3, 1] = (re + p) * rv / r
     return F
-
-if __name__ == '__main__':
-    main()

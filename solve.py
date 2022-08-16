@@ -11,8 +11,8 @@ from build.src.libpybind_bindings import compute_gradient
 
 # Solver inputs
 Problem = AdvectedBubble
-nx = 21
-ny = 21
+nx = 11
+ny = 11
 n_t = 10
 #cfl = .1
 t_final = .001#1e-4#3.7e-5
@@ -114,6 +114,7 @@ def main(show_progress_bar=True):
             else:
                 raise ValueError('Neither a CFL nor a number of timesteps was '
                         'provided!')
+            data.dt = dt
 
 
             # -- Update Mesh -- #
@@ -199,7 +200,6 @@ def main(show_progress_bar=True):
                             data.U[ghost_ID, k] = np.dot(c[:-1], mesh.xy[ghost_ID]) + c[-1]
                     else:
                         # Use constant extrapolation
-                        breakpoint()
                         data.U[ghost_ID] = np.mean(data.U[fluid_neighbors], axis=0)
 
             # If the solution NaN's, then store the current solution for plotting
@@ -304,6 +304,8 @@ class SimulationData:
     i = 0
     # Simulation time
     t = 0
+    # Current timestep
+    dt = 0
 
     def __init__(self, nx, ny, U, phi, U_ghost, t_list, g, file_name):
         # Save mesh sizing

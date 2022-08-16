@@ -4,6 +4,8 @@
 using std::cout, std::endl;
 using std::string;
 
+#include <unsupported/Eigen/NonLinearOptimization>
+
 #include <defines.h>
 #include <face_residual.h>
 #include <forced_interface.h>
@@ -54,13 +56,167 @@ void compute_interior_face_residual(matrix_ref<double> U,
 }
 
 
+// A functor that computes the RHS of the nonlinear pressure equation in the
+// Riemann problem.
+struct PressureFunctor {
+    // ----- Info needed for Eigen's nonlinear solver ----- #
+    using Scalar = double;
+    enum {
+      InputsAtCompileTime = 1,
+      ValuesAtCompileTime = 1
+    };
+    using InputType = Scalar;
+    using ValueType = Scalar;
+    using JacobianType = Scalar;
+    int inputs() const { return InputsAtCompileTime; }
+    int values() const { return ValuesAtCompileTime; }
+
+    // ----- Inputs that define the Riemann problem ----- #
+    const double u1; const double u4;
+    const double c1; const double c4;
+    const double p1; const double p4;
+    const double g;
+
+    // Set the input values
+    PressureFunctor(double _u1, double _u4, double _c1, double _c4,
+            double _p1, double _p4, double _g) : u1(_u1), u4(_u4), c1(_c1),
+            c4(_c4), p1(_p1), p4(_p4), g(_g) {}
+
+    // Compute the RHS of the nonlinear pressure equation
+    int operator() (const vector<double>& p2p1_vec, vector<double>& output) const {
+        auto& p2p1 = p2p1_vec(0);
+        output(0) = p2p1 * pow(
+            1 + (g - 1) / (2 * c4) * (
+                u4 - u1 - (c1/g) * (
+                    (p2p1 - 1) /
+                    sqrt(((g+1) / (2 * g)) * (p2p1 - 1) + 1)
+                )
+            ), (-(2 * g) / (g - 1))) - p4/p1;
+        return 0;
+    }
+};
+
+
+void exact_riemann_problem(double r4, double u4, double p4, double r1,
+        double u1, double p1, double g, double xL, double xR, double t,
+        vector<double>& r, vector<double>& u, vector<double>& p) {
+    // Points at which to evaluate Riemann problem
+    Eigen::Array<double, 2, 1> x;
+    x << xL, xR;
+
+    // Compute speed of sound
+    auto compute_c = [&](double pressure, double rho) {
+        return sqrt(g * pressure / rho);
+    };
+    auto c1 = compute_c(p1, r1);
+    auto c4 = compute_c(p4, r4);
+
+    //TODO Hack, for checking: set V_L_Riemann to V_L, same for right
+    r[0] = r4;
+    r[1] = r1;
+    u[0] = u4;
+    u[1] = u1;
+    p[0] = p4;
+    p[1] = p1;
+    return;
+
+    vector<double> guess(1);
+    guess << p4/p1;
+    PressureFunctor p_functor(u1, u4, c1, c4, p1, p4, g);
+    Eigen::NumericalDiff<PressureFunctor> func_with_num_diff(p_functor);
+    Eigen::HybridNonLinearSolver<Eigen::NumericalDiff<PressureFunctor> > solver(func_with_num_diff);
+    int info = solver.hybrd1(guess);
+    // Make sure that the solver did not fail
+    if (info != 1) {
+        throw std::runtime_error(
+                "Nonlinear solver in Riemann problem failed! Error code = "
+                + std::to_string(info));
+    }
+    double p2p1 = guess(0);
+    auto p2 = p2p1 * p1;
+
+    // Compute u2
+    auto u2 = u1 + (c1 / g) * (p2p1-1) / (sqrt( ((g+1)/(2*g)) * (p2p1-1) + 1));
+    // Compute V
+    auto V = u1 + c1 * sqrt( ((g+1)/(2*g)) * (p2p1-1) + 1);
+    // Compute c2
+    auto c2 = c1 * sqrt(
+            p2p1 * (
+                (((g+1)/(g-1)) + p2p1
+                ) / (
+                1 + ((g+1)/(g-1)) * p2p1)
+                )
+    );
+    // Compute r2
+    auto compute_r = [&](double pressure, double c) {
+        return g * pressure / (c*c);
+    };
+    auto r2 = compute_r(p2, c2);
+
+    // p and u same across contact
+    auto u3 = u2;
+    auto p3 = p2;
+    // Compute c3
+    auto c3 = .5 * (g - 1) * (u4 + ((2*c4)/(g-1)) - u3);
+    // Compute r3
+    auto r3 = compute_r(p3, c3);
+
+    // Flow inside expansion
+    auto u_exp = (2/(g+1)) * (x/t + ((g-1)/2) * u4 + c4);
+    auto c_exp = (2/(g+1)) * (x/t + ((g-1)/2) * u4 + c4) - x/t;
+//    // Clip the speed of sound to be positive. This is not entirely necessary
+//    // (the spurious negative speed of sound is only outside the expansion,
+//    // so in the expansion everything is okay) but not doing this makes Numpy
+//    // give warnings when computing pressure.
+//    // TODO: Is this really necessary for this application...
+//    c_exp[c_exp < 0] = 1e-16
+    auto p_exp = p4 * pow(c_exp/c4, 2*g/(g-1));
+    auto r_exp = vector<double>(2);
+    for (int i = 0; i < x.rows(); i++) {
+        r_exp(i) = compute_r(p_exp(i), c_exp(i));
+    }
+
+    // Figure out which flow region each point is in
+    for (int i = 0; i < x.rows(); i++) {
+        auto xt = x(i) / t;
+        // Left of expansion
+        if (xt < (u4 - c4)) {
+            r(i) = r4;
+            u(i) = u4;
+            p(i) = p4;
+        // Inside expansion
+        } else if (xt < (u3 - c3)) {
+            r(i) = r_exp[i];
+            u(i) = u_exp[i];
+            p(i) = p_exp[i];
+        // Right of expansion
+        } else if (xt < u3) {
+            r(i) = r3;
+            u(i) = u3;
+            p(i) = p3;
+        // Left of shock
+        } else if (xt < V) {
+            r(i) = r2;
+            u(i) = u2;
+            p(i) = p2;
+        // Right of shock
+        } else if (xt > V) {
+            r(i) = r1;
+            u(i) = u1;
+            p(i) = p1;
+        }
+    }
+}
+
+
 // Compute the fluid-fluid faces' contributions to the residual.
 void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         vector_ref<long> interface_IDs, matrix_ref<long> edge,
         matrix_ref<double> quad_wts, std::vector<double> quad_pts_phys,
         matrix_ref<double> limiter, std::vector<double> gradU,
         matrix_ref<double> xy, std::vector<double> area_normals_p2,
-        matrix_ref<double> area, double g, matrix_ref<double> residual) {
+        matrix_ref<double> area, double g, double dt,
+        matrix_ref<double> residual) {
     // Create buffers
     matrix<double> U_L(4, 1);
     matrix<double> U_R(4, 1);
@@ -76,7 +232,8 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         matrix_map<double> gradU_R(&gradU[R*4*2], 4, 2);
 
         // Loop over quadrature points
-        vector<double> F_integral = vector<double>::Zero(4);
+        vector<double> F_integral_L = vector<double>::Zero(4);
+        vector<double> F_integral_R = vector<double>::Zero(4);
         for (auto i = 0; i < 2; i++) {
             // Evaluate solution at faces on left and right
             // -- First order component -- #
@@ -100,15 +257,52 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             matrix<double> area_normal(2, 1);
             area_normal(0, 0) = area_normals_p2[face_ID*2*2 + i*2 + 0];
             area_normal(1, 0) = area_normals_p2[face_ID*2*2 + i*2 + 1];
-            // Evaluate interior fluxes
-            compute_flux(U_L, U_R, area_normal, g, F);
+            vector<double> n_hat = area_normal(all, 0).normalized();
+            vector<double> t_hat(2);
+            t_hat << -n_hat(1), n_hat(0);
+
+            // TODO: Should this be before or after adding the second order
+            // component??
+            // Convert left and right to primitive
+            auto V_L = conservative_to_primitive(U_L, g);
+            auto V_R = conservative_to_primitive(U_R, g);
+            // Get normal/tangential component of velocity
+            auto u_n_L = V_L(seq(1, 2)).dot(n_hat);
+            auto u_n_R = V_R(seq(1, 2)).dot(n_hat);
+            auto u_t_L = V_L(seq(1, 2)).dot(t_hat);
+            auto u_t_R = V_R(seq(1, 2)).dot(t_hat);
+            // Solve exact fluid-fluid Riemann problem
+            auto r = vector<double>(2);
+            auto u_n = vector<double>(2);
+            auto p = vector<double>(2);
+            // TODO What should this be??
+            auto xL = -1e-5 * (xy(L, all) - xy(R, all)).norm();
+            auto xR = -xL;
+            exact_riemann_problem(V_L(0), u_n_L, V_L(3), V_R(0), u_n_R, V_R(3),
+                    g, xL, xR, dt, r, u_n, p);
+            // Velocity, after the Riemann problem (which modifies the normal
+            // component)
+            vector<double> vel_L = u_n[0] * n_hat + u_t_L * t_hat;
+            vector<double> vel_R = u_n[1] * n_hat + u_t_R * t_hat;
+            // Convert back to conservative
+            V_L << r[0], vel_L(0), vel_L(1), p[0];
+            V_R << r[1], vel_R(0), vel_R(1), p[1];
+            matrix<double> U_L_Riemann = primitive_to_conservative(V_L, g);
+            matrix<double> U_R_Riemann = primitive_to_conservative(V_R, g);
+
+            // Evaluate left interior flux
+            compute_flux(U_L, U_L_Riemann, area_normal, g, F);
             // Add contribution to quadrature
-            F_integral += F * quad_wts(i, 0);
+            F_integral_L += F * quad_wts(i, 0);
+            // Evaluate right interior flux
+            compute_flux(U_R_Riemann, U_R, area_normal, g, F);
+            // Add contribution to quadrature
+            F_integral_R += F * quad_wts(i, 0);
         }
 
         // Update residual of cells on the left and right
-        residual(L, all) += -1 / area(L, 0) * F_integral;
-        residual(R, all) +=  1 / area(R, 0) * F_integral;
+        residual(L, all) += -1 / area(L, 0) * F_integral_L;
+        residual(R, all) +=  1 / area(R, 0) * F_integral_R;
     }
 }
 
@@ -305,35 +499,6 @@ vector<double> compute_ghost_advected_interface(
             V_ghost_cell[1], V_ghost_cell[2], V_ghost_cell[3]);
 }
 
-vector<double> conservative_to_primitive(vector<double> U, double g) {
-    // Unpack
-    auto& r = U(0);
-    auto& ru = U(1);
-    auto& rv = U(2);
-    auto& re = U(3);
-    // Compute primitive variables
-    vector<double> V(4);
-    V(0) = r;
-    V(1) = ru / r;
-    V(2) = rv / r;
-    V(3) = (re - .5 * (ru*ru + rv*rv) / r) * (g - 1);
-    return V;
-}
-vector<double> primitive_to_conservative(vector<double> V, double g) {
-    // Unpack
-    auto& r = V(0);
-    auto& u = V(1);
-    auto& v = V(2);
-    auto& p = V(3);
-    // Compute conservative variables
-    vector<double> U(4);
-    U(0) = r;
-    U(1) = r * u;
-    U(2) = r * v;
-    U(3) = p / (g - 1) + .5 * r * (u*u + v*v);
-    return U;
-}
-
 vector<double> compute_ghost_state(vector<double> U, matrix_ref<double> U_global,
         long bc, matrix<double> quad_pt, double t,
         vector<double> bc_area_normal, matrix<double> bc_data,
@@ -375,3 +540,34 @@ vector<double> compute_ghost_state(vector<double> U, matrix_ref<double> U_global
     auto U_ghost = primitive_to_conservative(V_ghost, g);
     return U_ghost;
 }
+
+vector<double> conservative_to_primitive(vector<double> U, double g) {
+    // Unpack
+    auto& r = U(0);
+    auto& ru = U(1);
+    auto& rv = U(2);
+    auto& re = U(3);
+    // Compute primitive variables
+    vector<double> V(4);
+    V(0) = r;
+    V(1) = ru / r;
+    V(2) = rv / r;
+    V(3) = (re - .5 * (ru*ru + rv*rv) / r) * (g - 1);
+    return V;
+}
+
+vector<double> primitive_to_conservative(vector<double> V, double g) {
+    // Unpack
+    auto& r = V(0);
+    auto& u = V(1);
+    auto& v = V(2);
+    auto& p = V(3);
+    // Compute conservative variables
+    vector<double> U(4);
+    U(0) = r;
+    U(1) = r * u;
+    U(2) = r * v;
+    U(3) = p / (g - 1) + .5 * r * (u*u + v*v);
+    return U;
+}
+

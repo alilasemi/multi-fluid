@@ -5,6 +5,9 @@ set(CMAKE_BUILD_TYPE Release)
 # run path for installed executables
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
+# Setting to export compile commands to create compile_commands.json for IDEs
+set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
+
 # Set the project info
 project(level_set VERSION 1.0)
 
