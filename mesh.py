@@ -731,6 +731,7 @@ class Mesh:
         is_surrogate = data.phi[self.edge[:, 0]] * data.phi[self.edge[:, 1]] < 0
         self.interface_IDs = np.argwhere(is_surrogate)[:, 0]
         # Remove these from the interior faces
+        self.interior_face_IDs = np.arange(self.n_faces)
         self.interior_face_IDs = self.interior_face_IDs[
                 ~np.isin(self.interior_face_IDs, self.interface_IDs)]
 
