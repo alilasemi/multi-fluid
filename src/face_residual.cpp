@@ -1,5 +1,6 @@
 #include <math.h>
 #include <iostream>
+#include <sstream>
 #include <string>
 using std::cout, std::endl;
 using std::string;
@@ -112,25 +113,34 @@ void exact_riemann_problem(double r4, double u4, double p4, double r1,
     auto c4 = compute_c(p4, r4);
 
     //TODO Hack, for checking: set V_L_Riemann to V_L, same for right
-    r[0] = r4;
-    r[1] = r1;
-    u[0] = u4;
-    u[1] = u1;
-    p[0] = p4;
-    p[1] = p1;
-    return;
+    //r[0] = r4;
+    //r[1] = r1;
+    //u[0] = u4;
+    //u[1] = u1;
+    //p[0] = p4;
+    //p[1] = p1;
+    //return;
 
     vector<double> guess(1);
-    guess << p4/p1;
+    if (p1 > p4) {
+        guess << p4/p1;
+    } else {
+        guess << p1/p4;
+    }
     PressureFunctor p_functor(u1, u4, c1, c4, p1, p4, g);
     Eigen::NumericalDiff<PressureFunctor> func_with_num_diff(p_functor);
     Eigen::HybridNonLinearSolver<Eigen::NumericalDiff<PressureFunctor> > solver(func_with_num_diff);
     int info = solver.hybrd1(guess);
     // Make sure that the solver did not fail
     if (info != 1) {
-        throw std::runtime_error(
-                "Nonlinear solver in Riemann problem failed! Error code = "
-                + std::to_string(info));
+        std::stringstream ss;
+        ss << "Nonlinear solver in Riemann problem failed! Error code = "
+                << info << endl
+                << "The inputs were:" << endl
+                << "u1, u4, c1, c4, p1, p4, g = "
+                << u1 << ", " << u4 << ", " << c1 << ", " << c4 << ", "
+                << p1 << ", " << p4 << ", " << g << endl;
+        throw std::runtime_error(ss.str());
     }
     double p2p1 = guess(0);
     auto p2 = p2p1 * p1;

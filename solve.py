@@ -10,12 +10,12 @@ from build.src.libpybind_bindings import compute_gradient
 
 
 # Solver inputs
-Problem = AdvectedBubble
-nx = 21
-ny = 21
+Problem = Cavitation
+nx = 81
+ny = 81
 #n_t = 100
-cfl = .1
-t_final = .01#1e-4#3.7e-5
+cfl = .5
+t_final = 3.7e-5
 max_n_t = 99999999999
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)

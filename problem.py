@@ -640,7 +640,7 @@ class Cavitation(Problem):
     ])
 
     # Initial radius
-    radius = .8e-3#.4e-3
+    radius = .4e-3
 
     # Ratio of specific heats
     g = 1.4
