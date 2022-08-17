@@ -14,4 +14,6 @@ PYBIND11_MODULE(libpybind_bindings, m) {
             "A function that...");
     m.def("compute_gradient", &compute_gradient,
             "A function that...");
+    m.def("compute_gradient_phi", &compute_gradient_phi,
+            "A function that...");
 }

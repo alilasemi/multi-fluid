@@ -4,6 +4,7 @@
 
 // Compute the interior faces' contributions to the residual.
 void compute_interior_face_residual(matrix_ref<double> U,
+        matrix_ref<double> U_L, matrix_ref<double> U_R,
         vector_ref<long> interior_face_IDs, matrix_ref<long> edge,
         matrix_ref<double> limiter, std::vector<double> gradU,
         matrix_ref<double> xy, matrix_ref<double> area_normals_p1,

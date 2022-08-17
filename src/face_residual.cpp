@@ -15,16 +15,17 @@ using std::string;
 
 // Compute the interior faces' contributions to the residual.
 void compute_interior_face_residual(matrix_ref<double> U,
+        matrix_ref<double> U_L, matrix_ref<double> U_R,
         vector_ref<long> interior_face_IDs, matrix_ref<long> edge,
         matrix_ref<double> limiter, std::vector<double> gradU,
         matrix_ref<double> xy, matrix_ref<double> area_normals_p1,
         matrix_ref<double> area, double g, matrix_ref<double> residual) {
+    // Sizing
+    auto n_faces = U_L.rows();
     // Create buffers
-    matrix<double> U_L(4, 1);
-    matrix<double> U_R(4, 1);
     vector<double> F(4);
-    // Loop over faces
-    for (const auto face_ID : interior_face_IDs) {
+    // Loop over all faces
+    for (int face_ID = 0; face_ID < n_faces; face_ID++) {
         // Left and right cell IDs
         auto L = edge(face_ID, 0);
         auto R = edge(face_ID, 1);
@@ -35,20 +36,27 @@ void compute_interior_face_residual(matrix_ref<double> U,
 
         // Evaluate solution at faces on left and right
         // -- First order component -- #
-        U_L = U(L, all).transpose();
-        U_R = U(R, all).transpose();
+        U_L(face_ID, all) = U(L, all);
+        U_R(face_ID, all) = U(R, all);
 
         // -- Second order component -- #
         matrix<double> edge_point = .5 * (xy(L, all) + xy(R, all)).transpose();
         // TODO: There has to be a cleaner way...
         for (int k = 0; k < 4; k++) {
-            U_L(k) += limiter(L, k) * (gradU_L(k, all).transpose().cwiseProduct(edge_point - xy(L, all).transpose()).sum());
-            U_R(k) += limiter(R, k) * (gradU_R(k, all).transpose().cwiseProduct(edge_point - xy(R, all).transpose()).sum());
+            U_L(face_ID, k) += limiter(L, k) * (gradU_L(k, all).transpose().cwiseProduct(edge_point - xy(L, all).transpose()).sum());
+            U_R(face_ID, k) += limiter(R, k) * (gradU_R(k, all).transpose().cwiseProduct(edge_point - xy(R, all).transpose()).sum());
         }
+    }
 
+    // Loop over interior faces
+    for (const auto face_ID : interior_face_IDs) {
+        // Left and right cell IDs
+        auto L = edge(face_ID, 0);
+        auto R = edge(face_ID, 1);
         // Evaluate fluxes
         matrix<double> area_normals = area_normals_p1(face_ID, all).transpose();
-        compute_flux(U_L, U_R, area_normals, g, F);
+        compute_flux(U_L(face_ID, all).transpose(),
+                U_R(face_ID, all).transpose(), area_normals, g, F);
 
         // Update residual of cells on the left and right
         residual(L, all) += -1 / area(L, 0) * F;

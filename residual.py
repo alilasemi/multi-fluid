@@ -50,9 +50,9 @@ def get_residual(data, mesh, problem):
     # TODO: Ditch the whole area_normals_p2 vs regular normals thing (actually
     # p1 wouldn't even work)
     # TODO: Passing 3D numpy arrays is kinda ugly right now...
-    compute_interior_face_residual(U, mesh.interior_face_IDs, mesh.edge,
-            limiter, gradU.flatten().data, mesh.xy,
-            mesh.area_normals_p1, mesh.area, data.g, residual)
+    compute_interior_face_residual(U, data.U_L, data.U_R,
+            mesh.interior_face_IDs, mesh.edge, limiter, gradU.flatten().data,
+            mesh.xy, mesh.area_normals_p1, mesh.area, data.g, residual)
 
     # Compute the boundary face residual
     compute_boundary_face_residual(U, mesh.bc_type, LagrangeSegment.quad_wts,
@@ -80,23 +80,26 @@ def get_residual_phi(data, mesh, problem):
     # Unpack
     U = data.U
     phi = data.phi
+    U_L = data.U_L
+    U_R = data.U_R
+    # Left and right cell IDs
+    L = mesh.edge[:, 0]
+    R = mesh.edge[:, 1]
     # Flux function
     flux_phi = Upwind()
 
     residual_phi = np.zeros_like(phi)
-    # Get interior faces only, ignoring "deactivated" interfaces
-    interior_face_IDs = mesh.edge[:, 0] != -1
-    edge_interior = mesh.edge[interior_face_IDs]
-
-    # Evaluate solution at faces on left and right: first order component
-    U_L = U[edge_interior[:, 0]]
-    U_R = U[edge_interior[:, 1]]
-    phi_L = phi[edge_interior[:, 0]]
-    phi_R = phi[edge_interior[:, 1]]
+    # Evaluate phi at faces on left and right: first order component
+    phi_L = phi[L]
+    phi_R = phi[R]
+    # Second order component
+    quad_pts = .5 * (mesh.xy[L] + mesh.xy[R])
+    phi_L += np.einsum('ik, ik -> i', data.grad_phi[L], quad_pts - mesh.xy[L])
+    phi_R += np.einsum('ik, ik -> i', data.grad_phi[R], quad_pts - mesh.xy[R])
 
     # Evalute interior fluxes
     F = flux_phi.compute_flux(U_L, U_R, phi_L, phi_R,
-            mesh.area_normals_p1[interior_face_IDs])
+            mesh.area_normals_p1)
 
     # Compute ghost phi
     phi_ghost = np.empty((mesh.bc_type.shape[0]))
@@ -108,43 +111,12 @@ def get_residual_phi(data, mesh, problem):
             phi[mesh.bc_type[:, 0]], phi_ghost, mesh.bc_area_normal)
 
     # Update cells on the left and right sides, for interior faces
-    cellL_ID = edge_interior[:, 0]
-    cellR_ID = edge_interior[:, 1]
-    np.add.at(residual_phi, cellL_ID, -1 / mesh.area[cellL_ID] * F)
-    np.add.at(residual_phi, cellR_ID,  1 / mesh.area[cellR_ID] * F)
+    np.add.at(residual_phi, L, -1 / mesh.area[L] * F)
+    np.add.at(residual_phi, R,  1 / mesh.area[R] * F)
     # Incorporate boundary faces
-    cellL_ID = mesh.bc_type[:, 0]
-    np.add.at(residual_phi, cellL_ID, -1 / mesh.area[cellL_ID] * F_bc)
+    L = mesh.bc_type[:, 0]
+    np.add.at(residual_phi, L, -1 / mesh.area[L] * F_bc)
     return residual_phi
-
-def compute_gradient_phi(phi, mesh):
-    '''
-    Warning: This function is completely untested so far!
-    '''
-    grad_phi = np.empty((mesh.n, 2))
-    # Loop over all cells
-    for i in range(mesh.n):
-        n_points = len(mesh.neighbors[i])
-        # If there are no other points in the stencil, then set the gradient to
-        # zero
-        if n_points == 1:
-            grad_phi[i] = 0
-        # Otherwise, solve with least squares
-        else:
-            # Construct A matrix: [x_i, y_i, 1]
-            A = np.ones((n_points, 3))
-            A[:, :-1] = mesh.xy[mesh.stencil[i]]
-            # We desired [x_i, y_i, 1] @ [c0, c1, c2] = U[i], therefore Ax=b.
-            # However, there are more equations than unknowns (for most points)
-            # so instead, solve the normal equations: A.T @ A x = A.T @ b
-            try:
-                c = np.linalg.solve(A.T @ A, A.T @ phi[mesh.stencil[i]])
-                # Since U = c0 x + c1 y + c2, then dU/dx = c0 and dU/dy = c1.
-                grad_phi[i] = c[:-1].T
-            except:
-                print(f'phi gradient calculation failed! Stencil = {mesh.stencil[i]}')
-                grad_phi[i] = 0
-    return grad_phi
 
 
 class Upwind:

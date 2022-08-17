@@ -9,12 +9,12 @@ using std::endl;
 #include <roe.h>
 
 
-matrix<double> convective_fluxes(matrix<double> U, double g) {
+matrix<double> convective_fluxes(matrix_ref<double> U, double g) {
     // Unpack
-    auto r =  U(0);
-    auto ru = U(1);
-    auto rv = U(2);
-    auto re = U(3);
+    auto r =  U(0, 0);
+    auto ru = U(1, 0);
+    auto rv = U(2, 0);
+    auto re = U(3, 0);
     auto p = (re - .5 * (pow(ru, 2) + pow(rv, 2)) / r) * (g - 1);
     // Compute flux
     auto F = matrix<double>(4, 2);
@@ -29,8 +29,8 @@ matrix<double> convective_fluxes(matrix<double> U, double g) {
     return F;
 }
 
-void compute_flux(matrix<double>& U_L,
-        matrix<double>& U_R, matrix<double>& area_normal, double g,
+void compute_flux(matrix_ref<double> U_L,
+        matrix_ref<double> U_R, matrix<double>& area_normal, double g,
         vector<double>& F) {
     // Unit normals
     auto length = area_normal.norm();
@@ -39,14 +39,14 @@ void compute_flux(matrix<double>& U_L,
     auto ny = unit_normals(1);
 
     // Convert to primitives
-    auto rL = U_L(0);
-    auto rR = U_R(0);
-    auto uL = U_L(1) / rL;
-    auto uR = U_R(1) / rR;
-    auto vL = U_L(2) / rL;
-    auto vR = U_R(2) / rR;
-    auto hL = (U_L(3) - (1/(2*g))*(g - 1)*rL*(pow(uL, 2) + pow(vL, 2))) * g / rL;
-    auto hR = (U_R(3) - (1/(2*g))*(g - 1)*rR*(pow(uR, 2) + pow(vR, 2))) * g / rR;
+    auto rL = U_L(0, 0);
+    auto rR = U_R(0, 0);
+    auto uL = U_L(1, 0) / rL;
+    auto uR = U_R(1, 0) / rR;
+    auto vL = U_L(2, 0) / rL;
+    auto vR = U_R(2, 0) / rR;
+    auto hL = (U_L(3, 0) - (1/(2*g))*(g - 1)*rL*(pow(uL, 2) + pow(vL, 2))) * g / rL;
+    auto hR = (U_R(3, 0) - (1/(2*g))*(g - 1)*rR*(pow(uR, 2) + pow(vR, 2))) * g / rR;
 
     // The RL state
     auto uRL = (sqrt(rR) * uR + sqrt(rL) * uL) / (sqrt(rR) + sqrt(rL));
@@ -74,12 +74,4 @@ void compute_flux(matrix<double>& U_L,
     F = length * (
             .5 * (convective_fluxes(U_L, g) + convective_fluxes(U_R, g)) * unit_normals
             - .5 * (abs_A_RL * (U_R - U_L)));
-    //cout << "Printing flux stuff" << endl;
-    //cout << uRL << "  " << vRL << "  " << hRL << endl;
-    //cout << A_RL << endl;
-    //cout << Lambda << endl;
-    //cout << Q_inv << endl;
-    //cout << Q << endl;
-    //cout << convective_fluxes(U_L, g) << endl;
-    //cout << convective_fluxes(U_R, g) << endl;
 }

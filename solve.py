@@ -6,7 +6,7 @@ from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
         CollapsingCylinder, Star, Cavitation, conservative_to_primitive,
         primitive_to_conservative)
 from residual import get_residual, get_residual_phi
-from build.src.libpybind_bindings import compute_gradient
+from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 
 # Solver inputs
@@ -62,7 +62,7 @@ def main(show_progress_bar=True):
     U_ghost = np.empty((mesh.bc_type.shape[0], 4))
 
     # Store data
-    data = SimulationData(mesh.nx, mesh.ny, U, phi, U_ghost, t_list, problem.g, file_name)
+    data = SimulationData(mesh.nx, mesh.ny, mesh.n_faces, U, phi, U_ghost, t_list, problem.g, file_name)
     del U, phi, U_ghost
 
     # Save initial condition, if desired
@@ -133,6 +133,8 @@ def main(show_progress_bar=True):
             # Compute gradients
             compute_gradient(data.U, mesh.xy, mesh.stencil,
                     data.gradU.reshape(-1))
+            compute_gradient_phi(data.phi, mesh.xy, mesh.neighbors,
+                    data.grad_phi)
             # Create ghost fluid interfaces
             if ghost_fluid_interfaces:
                 mesh.create_interfaces(data, problem.fluid_solid)
@@ -299,11 +301,25 @@ class SimulationData:
 
     Members:
     --------
-    i
-    t
-    U_list
-    phi_list
-    t_list
+    i - int, current iteration counter
+    t - float, simulation time
+    nx - int, number of grid points in x
+    ny - int, number of grid points in y
+    n_faces - int, number of faces
+    U_list - list, solution at each stored timestep
+    phi_list - list, level set at each stored timestep
+    t_list - list, time at each stored timestep
+    edge_points_list - list, coordinates of edge points at each stored timestep
+    vol_points_list - list, coordinates of volume points at each stored timestep
+    g - float, ratio of specific heats
+    U - np.array, solution
+    phi - np.array, level set
+    U_ghost - np.array, ghost state
+    gradU - np.array, gradient of solution
+    grad_phi - np.array, gradient of level set
+    U_L - np.array, solution evaluated at the left side of each face
+    U_R - np.array, solution evaluated at the right side of each face
+    file_name - string, name of file for reading/writing data
     '''
     # Iteration counter
     i = 0
@@ -312,10 +328,11 @@ class SimulationData:
     # Current timestep
     dt = 0
 
-    def __init__(self, nx, ny, U, phi, U_ghost, t_list, g, file_name):
+    def __init__(self, nx, ny, n_faces, U, phi, U_ghost, t_list, g, file_name):
         # Save mesh sizing
         self.nx = nx
         self.ny = ny
+        self.n_faces = n_faces
         # Set the ratio of specific heats
         self.g = 1.4
         # Temporary buffers
@@ -323,12 +340,13 @@ class SimulationData:
         self.phi = phi
         self.U_ghost = U_ghost
         self.gradU = np.empty((nx*ny, 4, 2))
+        self.grad_phi = np.empty((nx*ny, 2))
+        self.U_L = np.empty((n_faces, 4))
+        self.U_R = np.empty((n_faces, 4))
         # Lists of data for each stored timestep
         self.U_list = []
         self.phi_list = []
         self.t_list = t_list.copy()
-        self.iter_list = []
-        self.coords_list = []
         self.edge_points_list = []
         self.vol_points_list = []
         # Name of file to write to
@@ -349,18 +367,17 @@ class SimulationData:
 
     def write_to_file(self):
         with open(file_name, 'wb') as f:
-            np.savez(f, nx=self.nx, ny=self.ny, g=self.g, U_list=self.U_list,
-                    phi_list=self.phi_list, t_list = self.t_list,
-                    edge_points_list=self.edge_points_list,
-                    vol_points_list=self.vol_points_list,
-                    allow_pickle=True)
+            np.savez(f, nx=self.nx, ny=self.ny, n_faces=self.n_faces, g=self.g,
+                    U_list=self.U_list, phi_list=self.phi_list,
+                    t_list=self.t_list, edge_points_list=self.edge_points_list,
+                    vol_points_list=self.vol_points_list, allow_pickle=True)
 
     @classmethod
     def read_from_file(cls, file_name):
         with open(file_name, 'rb') as f:
             data = np.load(f)
-            sim_data = cls(data['nx'], data['ny'], None, None, None, data['t_list'],
-                    data['g'], file_name)
+            sim_data = cls(data['nx'], data['ny'], data['n_faces'], None, None,
+                    None, data['t_list'], data['g'], file_name)
             sim_data.U_list = data['U_list']
             sim_data.phi_list = data['phi_list']
             sim_data.edge_points_list = data['edge_points_list']
