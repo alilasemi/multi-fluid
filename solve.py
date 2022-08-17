@@ -11,10 +11,10 @@ from build.src.libpybind_bindings import compute_gradient
 
 # Solver inputs
 Problem = Cavitation
-nx = 81
-ny = 81
+nx = 41
+ny = 41
 #n_t = 100
-cfl = .5
+cfl = .1
 t_final = 3.7e-5
 max_n_t = 99999999999
 adaptive = False
@@ -201,6 +201,11 @@ def main(show_progress_bar=True):
                     else:
                         # Use constant extrapolation
                         data.U[ghost_ID] = np.mean(data.U[fluid_neighbors], axis=0)
+
+            # TODO: This is an "incompressible" hack
+            #liquid_IDs = data.phi > 0
+            #data.U[liquid_IDs, 0] = problem.ambient[0]
+            #data.U[~liquid_IDs, 0] = problem.bubble[0]
 
             # If the solution NaN's, then store the current solution for plotting
             # and stop. It is important to do this after the ghost fluid update,

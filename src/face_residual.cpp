@@ -127,20 +127,35 @@ void exact_riemann_problem(double r4, double u4, double p4, double r1,
     } else {
         guess << p1/p4;
     }
-    PressureFunctor p_functor(u1, u4, c1, c4, p1, p4, g);
-    Eigen::NumericalDiff<PressureFunctor> func_with_num_diff(p_functor);
-    Eigen::HybridNonLinearSolver<Eigen::NumericalDiff<PressureFunctor> > solver(func_with_num_diff);
-    int info = solver.hybrd1(guess);
+
+    bool success = false;
+    int info;
+    // TODO: Improve guesses, maybe a fit for this?
+    vector<double> guesses = vector<double>::LinSpaced(100, 0, std::max(p1/p4, p4/p1));
+    //vector<double> guesses = vector<double>::LinSpaced(1, guess(0), guess(0));
+    for (auto& guess_value : guesses) {
+        guess << guess_value;
+        PressureFunctor p_functor(u1, u4, c1, c4, p1, p4, g);
+        Eigen::NumericalDiff<PressureFunctor> func_with_num_diff(p_functor);
+        Eigen::HybridNonLinearSolver<Eigen::NumericalDiff<PressureFunctor> > solver(func_with_num_diff);
+        info = solver.hybrd1(guess);
+        if (info == 1) {
+            success = true;
+            break;
+        }
+    }
     // Make sure that the solver did not fail
-    if (info != 1) {
-        std::stringstream ss;
-        ss << "Nonlinear solver in Riemann problem failed! Error code = "
-                << info << endl
-                << "The inputs were:" << endl
-                << "u1, u4, c1, c4, p1, p4, g = "
-                << u1 << ", " << u4 << ", " << c1 << ", " << c4 << ", "
-                << p1 << ", " << p4 << ", " << g << endl;
-        throw std::runtime_error(ss.str());
+    if (not success) {
+        if (info != 1) {
+            std::stringstream ss;
+            ss << "Nonlinear solver in Riemann problem failed! Error code = "
+                    << info << endl
+                    << "The inputs were:" << endl
+                    << "u1, u4, c1, c4, p1, p4, g = "
+                    << u1 << ", " << u4 << ", " << c1 << ", " << c4 << ", "
+                    << p1 << ", " << p4 << ", " << g << endl;
+            throw std::runtime_error(ss.str());
+        }
     }
     double p2p1 = guess(0);
     auto p2 = p2p1 * p1;
@@ -171,9 +186,14 @@ void exact_riemann_problem(double r4, double u4, double p4, double r1,
     // Compute r3
     auto r3 = compute_r(p3, c3);
 
+    // TODO: Figure out what x/t should be. I have changed it to x/t = 0, not
+    // sure if this is right or not.
+
     // Flow inside expansion
-    auto u_exp = (2/(g+1)) * (x/t + ((g-1)/2) * u4 + c4);
-    auto c_exp = (2/(g+1)) * (x/t + ((g-1)/2) * u4 + c4) - x/t;
+    //auto u_exp = (2/(g+1)) * (x/t + ((g-1)/2) * u4 + c4);
+    //auto c_exp = (2/(g+1)) * (x/t + ((g-1)/2) * u4 + c4) - x/t;
+    auto u_exp = (2/(g+1)) * (((g-1)/2) * u4 + c4);
+    auto c_exp = (2/(g+1)) * (((g-1)/2) * u4 + c4);
 //    // Clip the speed of sound to be positive. This is not entirely necessary
 //    // (the spurious negative speed of sound is only outside the expansion,
 //    // so in the expansion everything is okay) but not doing this makes Numpy
@@ -181,14 +201,16 @@ void exact_riemann_problem(double r4, double u4, double p4, double r1,
 //    // TODO: Is this really necessary for this application...
 //    c_exp[c_exp < 0] = 1e-16
     auto p_exp = p4 * pow(c_exp/c4, 2*g/(g-1));
-    auto r_exp = vector<double>(2);
-    for (int i = 0; i < x.rows(); i++) {
-        r_exp(i) = compute_r(p_exp(i), c_exp(i));
-    }
+    //auto r_exp = vector<double>(2);
+    //for (int i = 0; i < x.rows(); i++) {
+    //    r_exp(i) = compute_r(p_exp(i), c_exp(i));
+    //}
+    auto r_exp = compute_r(p_exp, c_exp);
 
     // Figure out which flow region each point is in
     for (int i = 0; i < x.rows(); i++) {
-        auto xt = x(i) / t;
+        //auto xt = x(i) / t;
+        double xt = 0;
         // Left of expansion
         if (xt < (u4 - c4)) {
             r(i) = r4;
@@ -196,9 +218,9 @@ void exact_riemann_problem(double r4, double u4, double p4, double r1,
             p(i) = p4;
         // Inside expansion
         } else if (xt < (u3 - c3)) {
-            r(i) = r_exp[i];
-            u(i) = u_exp[i];
-            p(i) = p_exp[i];
+            r(i) = r_exp;
+            u(i) = u_exp;
+            p(i) = p_exp;
         // Right of expansion
         } else if (xt < u3) {
             r(i) = r3;
@@ -216,6 +238,13 @@ void exact_riemann_problem(double r4, double u4, double p4, double r1,
             p(i) = p1;
         }
     }
+    ////TODO hack to try this
+    //r(0) = r3;
+    //r(1) = r2;
+    //u(0) = u3;
+    //u(1) = u2;
+    //p(0) = p3;
+    //p(1) = p2;
 }
 
 

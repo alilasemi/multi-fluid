@@ -199,11 +199,11 @@ class AdvectedBubble(Problem):
     v = 0
     # bubble state (rho, u, v, p, phi)
     bubble = np.array([
-            .125, u, v, 1e5, -1
+            1, u, v, 1e5, -1
     ])
     # Ambient state (rho, u, v, p, phi)
     ambient = np.array([
-            1, u, v, 1e5, 1
+            1000, u, v, 1e5, 1
     ])
 
     # Radius of bubble
@@ -647,7 +647,7 @@ class Cavitation(Problem):
 
     # Levels to use for contour plots
     levels = [
-            np.linspace(0, 1000, 11),
+            np.linspace(0, ambient[0], 11),
             None,#np.linspace(-400, 400, 17),
             None,#np.linspace(-400, 400, 17),
             np.linspace(0, 1.5*ambient[3], 16)]

@@ -8,7 +8,8 @@ def exact_solution(
     make_plots = True
     # Domain
     n_points = 1601
-    x = np.linspace(-10, 10, n_points)
+    xL = -7e-6
+    x = np.linspace(xL, -xL, n_points)
 
     for t in t_list:
 
@@ -27,8 +28,27 @@ def exact_solution(
                     )
                 )
             )**(-(2 * g) / (g - 1)) - p4/p1
-        p2p1 = scipy.optimize.fsolve(p_rhs, p4/p1, args=(u1, u4, c1, c4, p1, p4, g)
-                )[0]
+
+        if (p1 > p4):
+            guess = p4/p1
+        else:
+            guess = p1/p4
+        u1 = 0
+        u4 = 0
+        c1 = 52.915
+        c4 = 5.2915
+        p1 = 2000
+        p4 = 100000
+        guesses = np.linspace(0, np.max([p1/p4, p4/p1]), 100)
+        success = False
+        for guess in guesses:
+            p2p1, infofict, ier, msg = scipy.optimize.fsolve(p_rhs,
+                    guess, args=(u1, u4, c1, c4, p1, p4, g),
+                    full_output=True)
+            if ier == 1:
+                success = True
+                break
+        breakpoint()
         p2 = p2p1 * p1
 
         # Compute u2
@@ -116,11 +136,15 @@ def exact_solution(
         # rho
         fig = plt.figure(figsize=(4,4))
         plt.plot(x, r, 'k', linewidth=3, label='Exact')
+        plt.plot(x, r2*np.ones_like(x), 'r', linewidth=1.5, label='Exact')
+        plt.plot(x, r3*np.ones_like(x), 'r', linewidth=1.5, label='Exact')
         plt.xlabel('$x$ (m)', fontsize=20)
         plt.ylabel('$\\rho$ (kg/m$^3$)', fontsize=20)
         plt.tick_params(labelsize=12)
         plt.grid(linestyle='--')
         plt.savefig('r_exact.pdf', bbox_inches='tight')
+        print(f'rho_2 = {r2}')
+        print(f'rho_3 = {r3}')
         # u
         fig = plt.figure(figsize=(4,4))
         plt.plot(x, u, 'k', linewidth=3, label='Exact')
@@ -129,6 +153,8 @@ def exact_solution(
         plt.tick_params(labelsize=12)
         plt.grid(linestyle='--')
         plt.savefig('u_exact.pdf', bbox_inches='tight')
+        print(f'u_2 = {u2}')
+        print(f'u_3 = {u3}')
         # p
         fig = plt.figure(figsize=(4,4))
         plt.plot(x, p, 'k', linewidth=3, label='Exact')
@@ -137,10 +163,13 @@ def exact_solution(
         plt.tick_params(labelsize=12)
         plt.grid(linestyle='--')
         plt.savefig('p_exact.pdf', bbox_inches='tight')
+        print(f'p_2 = {p2}')
+        print(f'p_3 = {p3}')
         plt.show()
 
 if __name__ == "__main__":
-    r4, u4, v4, p4 = 1, 100, 0, 1e5
-    r1, u1, v1, p1 = .125, 50, 0, 1e4
+    r4, u4, v4, p4 = 1000, 0, 0, 1e5
+    r1, u1, v1, p1 = 1, 0, 0, .02e5
     g = 1.4
-    exact_solution(r4, p4, u4, v4, r1, p1, u1, v1, g, [1e-2])
+    t_list = [1e-15]
+    exact_solution(r4, p4, u4, v4, r1, p1, u1, v1, g, t_list)
