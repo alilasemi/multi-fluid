@@ -11,8 +11,8 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 41
-ny = 41
+nx = 101
+ny = 101
 #n_t = 100
 cfl = .1
 t_final = 3.7e-5
@@ -141,7 +141,17 @@ def main(show_progress_bar=True):
 
             # -- Copy solution, then update -- #
             U_old = data.U.copy()
-            data.U = update(dt, data, mesh, problem)
+            try:
+                data.U = update(dt, data, mesh, problem)
+            # Handle errors from the Riemann solver
+            except RuntimeError as err:
+                data.U = U_old
+                data.save_current_state(mesh)
+                data.t_list = [time for time in data.t_list if time <= data.t]
+                data.t_list.append(data.t)
+                # Save solution
+                data.write_to_file()
+                raise err
             data.t += dt
 
             # -- Copy phi, Then Update -- #
