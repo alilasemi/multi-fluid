@@ -17,6 +17,7 @@ plot_mesh = False
 plot_contour = True
 mark_volume_points = False
 plot_phi_contours = True
+only_phi = True
 only_rho = False
 equal_aspect_ratio = True
 mesh_legend = False
@@ -204,6 +205,7 @@ def post_process():
                 time = f'(t={t} \\textrm{{ s}})'
                 ylabels = [f'$\\rho{time}$ (kg/m$^3$)', f'$u{time}$ (m/s)',
                         f'$v{time}$ (m/s)', f'$p{time}$ (N/m$^2$)']
+                phi_label = f'$\\phi{time}$'
                 # Loop over variables
                 for idx in range(num_vars):
                     ax = axes[i_iter, idx]
@@ -220,10 +222,13 @@ def post_process():
                         # its own
                         except AttributeError:
                             levels = None
-                    contourf = ax.tricontourf(mesh.xy[:, 0], mesh.xy[:, 1], f[idx],
-                            levels=levels, extend='both')
-                    plt.colorbar(mappable=contourf, ax=ax)
-                    ax.set_title(ylabels[idx], fontsize=10)
+                    if (idx != 0) or (not only_phi):
+                        contourf = ax.tricontourf(mesh.xy[:, 0], mesh.xy[:, 1], f[idx],
+                                levels=levels, extend='both')
+                        plt.colorbar(mappable=contourf, ax=ax)
+                        ax.set_title(ylabels[idx], fontsize=10)
+                    elif (idx == 0) and only_phi:
+                        ax.set_title(phi_label, fontsize=10)
                     ax.tick_params(labelsize=10)
                     ax.set_xlim([mesh.xL, mesh.xR])
                     ax.set_ylim([mesh.yL, mesh.yR])
@@ -235,8 +240,9 @@ def post_process():
                     # Plot phi contours on top of density plot
                     if plot_phi_contours and idx == 0:
                         contour = ax.tricontour(mesh.xy[:, 0], mesh.xy[:, 1],
-                                phi, colors='k', extend='both',
-                                linewidths=1*lw_scale, linestyles='dashed')
+                                phi, levels=np.linspace(-1, 1, 11), colors='k',
+                                extend='both', linewidths=1*lw_scale,
+                                linestyles='dashed')
                         zero_contour = ax.tricontour(mesh.xy[:, 0], mesh.xy[:, 1],
                                 phi, levels = [0,], colors='purple',
                                 linewidths=2*lw_scale, linestyles='dashed')
