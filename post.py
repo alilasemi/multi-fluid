@@ -240,7 +240,7 @@ def post_process():
                     # Plot phi contours on top of density plot
                     if plot_phi_contours and idx == 0:
                         contour = ax.tricontour(mesh.xy[:, 0], mesh.xy[:, 1],
-                                phi, levels=np.linspace(-1, 1, 11), colors='k',
+                                phi, levels=np.linspace(-.0005, .001, 11), colors='k',
                                 extend='both', linewidths=1*lw_scale,
                                 linestyles='dashed')
                         zero_contour = ax.tricontour(mesh.xy[:, 0], mesh.xy[:, 1],

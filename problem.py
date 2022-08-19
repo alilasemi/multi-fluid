@@ -681,7 +681,6 @@ class Cavitation(Problem):
             squared_dist = x**2 + y**2 - self.radius**2
             sign = np.sign(squared_dist)
             phi = sign * np.sqrt(np.abs(squared_dist))
-            phi /= np.max(np.abs(phi))
             return phi
         else:
             raise NotImplementedError('compute_exact_phi not implemented for Cavitation!')
