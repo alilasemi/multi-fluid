@@ -13,9 +13,9 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 Problem = Cavitation
 nx = 61
 ny = 61
-#n_t = 100
+#n_t = 5
 cfl = .1
-t_final = 3.7e-6
+t_final = 3.7e-5
 max_n_t = 99999999999
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
@@ -30,7 +30,7 @@ levelset = True
 #t_list = [dt, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1]
 #t_list = [dt, .0025, .005, .0075, .01]
 #t_list = [dt, .0025, .005, .0075, .01, .0125, .015, .0175, .02]
-t_list = np.linspace(0, t_final, 5).tolist()
+t_list = np.linspace(0, t_final, 6).tolist()
 #t_list = [dt, .00125, .0025, .00325, .005]
 #t_list = [dt, .00025, .0005, .00075, .001]
 #t_list = [dt, .000125, .00025, .000375, .0005]
@@ -279,7 +279,7 @@ def main(show_progress_bar=True):
             # Update progress bar
             progress.update(task, advance=dt)
             # If it's hit the final time, then stop iterating
-            if np.isclose(data.t, t_final): break
+            if np.isclose(data.t, t_final, atol=0): break
 
     # Fit a line to the shock location
     if Problem == RiemannProblem:
@@ -310,15 +310,29 @@ def update_phi(dt, data, mesh, problem):
     return phi_new
 
 def reinitialize_level_set(data, mesh):
-    phi = data.phi
-    #TODO what should the dt be??
-    dt = np.sqrt(mesh.area) / 2
-    eps = 1e1 * np.sqrt(mesh.area)
-    for _ in range(20):
-        phi += dt * (phi / np.sqrt(phi**2 + eps**2)) * (1 - np.linalg.norm(data.grad_phi,
-                axis=1))
-        # Update gradient
-        compute_gradient_phi(phi, mesh.xy, mesh.neighbors, data.grad_phi)
+    '''
+    Only for cavitation case!
+    '''
+    x = mesh.xy[:, 0]
+    y = mesh.xy[:, 1]
+    # Approximation of the current radius of the bubble
+    radius = np.linalg.norm(mesh.xy[np.argmin(data.phi**2)])
+    data.phi = np.sqrt(x**2 + y**2) - radius
+#    #TODO what should the dt be??
+#    dt = np.sqrt(mesh.area) / 2
+#    eps = 1e0 * np.sqrt(mesh.area)
+#    for _ in range(10):
+#        phi += dt * (phi / np.sqrt(phi**2 + eps**2)) * (1 - np.linalg.norm(data.grad_phi,
+#                axis=1))
+#        # Update "far" values
+#        dist = np.sqrt(mesh.area)
+#        factor = 5
+#        high_IDs = phi > factor * dist
+#        low_IDs = phi < -factor * dist
+#        far_IDs = low_IDs | high_IDs
+#        phi[far_IDs] = np.sqrt(x**2 + y**2)[far_IDs] - radius
+#        # Update gradient
+#        compute_gradient_phi(phi, mesh.xy, mesh.neighbors, data.grad_phi)
 
 class SimulationData:
     '''

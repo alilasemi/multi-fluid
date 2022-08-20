@@ -678,9 +678,7 @@ class Cavitation(Problem):
         if np.isclose(t, 0):
             x = coords[:, 0]
             y = coords[:, 1]
-            squared_dist = x**2 + y**2 - self.radius**2
-            sign = np.sign(squared_dist)
-            phi = sign * np.sqrt(np.abs(squared_dist))
+            phi = np.sqrt(x**2 + y**2) - self.radius
             return phi
         else:
             raise NotImplementedError('compute_exact_phi not implemented for Cavitation!')
@@ -721,9 +719,8 @@ class Cavitation(Problem):
             cell_ID, bc = bc_type[i]
             # Compute ambient ghost state
             if bc == 2:
-                # Just use the initial value as the boundary value
-                phi_ghost[i] = (self.xy[cell_ID, 0]**2 + self.xy[cell_ID, 1]**2
-                        - self.radius**2)
+                # Just use the neighboring value
+                phi_ghost[i] = phi[cell_ID]
             # Compute advected interface ghost state
             elif bc > 2:
                 # Just use the ghost fluid value of phi

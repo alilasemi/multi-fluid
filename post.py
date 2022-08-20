@@ -17,7 +17,7 @@ plot_mesh = False
 plot_contour = True
 mark_volume_points = False
 plot_phi_contours = True
-only_phi = True
+only_phi = False
 only_rho = False
 equal_aspect_ratio = True
 mesh_legend = False
@@ -240,9 +240,8 @@ def post_process():
                     # Plot phi contours on top of density plot
                     if plot_phi_contours and idx == 0:
                         contour = ax.tricontour(mesh.xy[:, 0], mesh.xy[:, 1],
-                                phi, levels=np.linspace(-.0005, .001, 11), colors='k',
-                                extend='both', linewidths=1*lw_scale,
-                                linestyles='dashed')
+                                phi, colors='k', extend='both',
+                                linewidths=1*lw_scale)
                         zero_contour = ax.tricontour(mesh.xy[:, 0], mesh.xy[:, 1],
                                 phi, levels = [0,], colors='purple',
                                 linewidths=2*lw_scale, linestyles='dashed')
