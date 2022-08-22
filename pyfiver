@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 import argparse
+import os
+from pathlib import Path
 import rich.traceback
+import subprocess
 rich.traceback.install()
-
-import solve, post
 
 profile=True
 
@@ -11,14 +12,25 @@ profile=True
 parser = argparse.ArgumentParser(description=
         'A Python CFD solver based on the FIVER algorithm.')
 parser.add_argument('mode', default='all', nargs='?',
-        help="Mode of operation. Options are 'solve', 'post', and "
+        help="Mode of operation. Options are 'compile', 'solve', 'post', and "
         "'all'. (Default: 'all')")
 parser.add_argument('-p', '--profile', dest='profile', action='store_true',
         help= 'Profile the solver using cProfile.')
 args = parser.parse_args()
 
+# Compile the code
+if args.mode == 'compile' or args.mode == 'all':
+    # Create build directory
+    Path('build').mkdir(exist_ok=True)
+    # Compile with CMake
+    os.chdir('build')
+    subprocess.run(['cmake', '..'], check=True)
+    subprocess.run(['make', '-j8'], check=True)
+    os.chdir('..')
+
 # Run solver
 if args.mode == 'solve' or args.mode == 'all':
+    import solve
     print('Checking for breakpoints...', end='', flush=True)
     show_progress_bar = True
     files = ['solve.py', 'residual.py', 'mesh.py', 'problem.py']
@@ -47,4 +59,5 @@ if args.mode == 'solve' or args.mode == 'all':
 
 # Run post processing
 if args.mode == 'post' or args.mode == 'all':
+    import post
     post.post_process()

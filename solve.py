@@ -14,9 +14,10 @@ Problem = Cavitation
 nx = 61
 ny = 61
 #n_t = 5
-cfl = .1
+cfl = .2
 t_final = 3.7e-5
 max_n_t = 99999999999
+level_set_reinitialization_rate = 12
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
@@ -30,7 +31,7 @@ levelset = True
 #t_list = [dt, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1]
 #t_list = [dt, .0025, .005, .0075, .01]
 #t_list = [dt, .0025, .005, .0075, .01, .0125, .015, .0175, .02]
-t_list = np.linspace(0, t_final, 6).tolist()
+t_list = np.linspace(0, t_final, 11).tolist()
 #t_list = [dt, .00125, .0025, .00325, .005]
 #t_list = [dt, .00025, .0005, .00075, .001]
 #t_list = [dt, .000125, .00025, .000375, .0005]
@@ -164,7 +165,10 @@ def main(show_progress_bar=True):
                     data.phi = update_phi(dt, data, mesh, problem)
 
             # Reinitialize level set
-            reinitialize_level_set(data, mesh)
+            if level_set_reinitialization_rate == 0:
+                level_set_reinitialization_rate == max_n_t
+            if i % level_set_reinitialization_rate == 0:
+                reinitialize_level_set(data, mesh)
 
             # -- Update Ghost Fluid Cells -- #
             if ghost_fluid_interfaces and update_ghost_fluid_cells:

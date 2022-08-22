@@ -1,6 +1,7 @@
 #include <defines.h>
 #include <face_residual.h>
 #include <gradient.h>
+#include <riemann.h>
 
 PYBIND11_MODULE(libpybind_bindings, m) {
     //TODO docstrings
@@ -15,5 +16,7 @@ PYBIND11_MODULE(libpybind_bindings, m) {
     m.def("compute_gradient", &compute_gradient,
             "A function that...");
     m.def("compute_gradient_phi", &compute_gradient_phi,
+            "A function that...");
+    m.def("compute_exact_riemann_problem", &compute_exact_riemann_problem,
             "A function that...");
 }

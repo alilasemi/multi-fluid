@@ -8,7 +8,7 @@ def exact_solution(
     make_plots = True
     # Domain
     n_points = 1601
-    xL = -7e-6
+    xL = -10
     x = np.linspace(xL, -xL, n_points)
 
     for t in t_list:
@@ -33,12 +33,6 @@ def exact_solution(
             guess = p4/p1
         else:
             guess = p1/p4
-        u1 = 0
-        u4 = 0
-        c1 = 52.915
-        c4 = 5.2915
-        p1 = 2000
-        p4 = 100000
         guesses = np.linspace(0, np.max([p1/p4, p4/p1]), 100)
         success = False
         for guess in guesses:
@@ -48,7 +42,6 @@ def exact_solution(
             if ier == 1:
                 success = True
                 break
-        breakpoint()
         p2 = p2p1 * p1
 
         # Compute u2
@@ -168,8 +161,10 @@ def exact_solution(
         plt.show()
 
 if __name__ == "__main__":
-    r4, u4, v4, p4 = 1000, 0, 0, 1e5
-    r1, u1, v1, p1 = 1, 0, 0, .02e5
+    #r4, u4, v4, p4 = 1000, 0, 0, 1e5
+    #r1, u1, v1, p1 = 1, 0, 0, .02e5
+    r1, u1, v1, p1 = .125, 50, 0, 1e4
+    r4, u4, v4, p4 = 1, 100, 0, 1e5
     g = 1.4
-    t_list = [1e-15]
+    t_list = [.01]
     exact_solution(r4, p4, u4, v4, r1, p1, u1, v1, g, t_list)
