@@ -5,11 +5,10 @@
 using std::cout, std::endl;
 using std::string;
 
-#include <unsupported/Eigen/NonLinearOptimization>
-
 #include <defines.h>
 #include <face_residual.h>
 #include <forced_interface.h>
+#include <riemann.h>
 #include <roe.h>
 
 
@@ -62,197 +61,6 @@ void compute_interior_face_residual(matrix_ref<double> U,
         residual(L, all) += -1 / area(L, 0) * F;
         residual(R, all) +=  1 / area(R, 0) * F;
     }
-}
-
-
-// A functor that computes the RHS of the nonlinear pressure equation in the
-// Riemann problem.
-struct PressureFunctor {
-    // ----- Info needed for Eigen's nonlinear solver ----- #
-    using Scalar = double;
-    enum {
-      InputsAtCompileTime = 1,
-      ValuesAtCompileTime = 1
-    };
-    using InputType = Scalar;
-    using ValueType = Scalar;
-    using JacobianType = Scalar;
-    int inputs() const { return InputsAtCompileTime; }
-    int values() const { return ValuesAtCompileTime; }
-
-    // ----- Inputs that define the Riemann problem ----- #
-    const double u1; const double u4;
-    const double c1; const double c4;
-    const double p1; const double p4;
-    const double g;
-
-    // Set the input values
-    PressureFunctor(double _u1, double _u4, double _c1, double _c4,
-            double _p1, double _p4, double _g) : u1(_u1), u4(_u4), c1(_c1),
-            c4(_c4), p1(_p1), p4(_p4), g(_g) {}
-
-    // Compute the RHS of the nonlinear pressure equation
-    int operator() (const vector<double>& p2p1_vec, vector<double>& output) const {
-        auto& p2p1 = p2p1_vec(0);
-        output(0) = p2p1 * pow(
-            1 + (g - 1) / (2 * c4) * (
-                u4 - u1 - (c1/g) * (
-                    (p2p1 - 1) /
-                    sqrt(((g+1) / (2 * g)) * (p2p1 - 1) + 1)
-                )
-            ), (-(2 * g) / (g - 1))) - p4/p1;
-        return 0;
-    }
-};
-
-
-void exact_riemann_problem(double r4, double u4, double p4, double r1,
-        double u1, double p1, double g, double xL, double xR, double t,
-        vector<double>& r, vector<double>& u, vector<double>& p) {
-    // Points at which to evaluate Riemann problem
-    Eigen::Array<double, 2, 1> x;
-    x << xL, xR;
-
-    // Compute speed of sound
-    auto compute_c = [&](double pressure, double rho) {
-        return sqrt(g * pressure / rho);
-    };
-    auto c1 = compute_c(p1, r1);
-    auto c4 = compute_c(p4, r4);
-
-    //TODO Hack, for checking: set V_L_Riemann to V_L, same for right
-    //r[0] = r4;
-    //r[1] = r1;
-    //u[0] = u4;
-    //u[1] = u1;
-    //p[0] = p4;
-    //p[1] = p1;
-    //return;
-
-    vector<double> guess(1);
-    if (p1 > p4) {
-        guess << p4/p1;
-    } else {
-        guess << p1/p4;
-    }
-
-    bool success = false;
-    int info;
-    // TODO: Improve guesses, maybe a fit for this?
-    vector<double> guesses = vector<double>::LinSpaced(100, 0, std::max(p1/p4, p4/p1));
-    //vector<double> guesses = vector<double>::LinSpaced(1, guess(0), guess(0));
-    for (auto& guess_value : guesses) {
-        guess << guess_value;
-        PressureFunctor p_functor(u1, u4, c1, c4, p1, p4, g);
-        Eigen::NumericalDiff<PressureFunctor> func_with_num_diff(p_functor);
-        Eigen::HybridNonLinearSolver<Eigen::NumericalDiff<PressureFunctor> > solver(func_with_num_diff);
-        info = solver.hybrd1(guess);
-        if (info == 1) {
-            success = true;
-            break;
-        }
-    }
-    // Make sure that the solver did not fail
-    if (not success) {
-        if (info != 1) {
-            std::stringstream ss;
-            ss << "Nonlinear solver in Riemann problem failed! Error code = "
-                    << info << endl
-                    << "The inputs were:" << endl
-                    << "u1, u4, c1, c4, p1, p4, g = "
-                    << u1 << ", " << u4 << ", " << c1 << ", " << c4 << ", "
-                    << p1 << ", " << p4 << ", " << g << endl;
-            throw std::runtime_error(ss.str());
-        }
-    }
-    double p2p1 = guess(0);
-    auto p2 = p2p1 * p1;
-
-    // Compute u2
-    auto u2 = u1 + (c1 / g) * (p2p1-1) / (sqrt( ((g+1)/(2*g)) * (p2p1-1) + 1));
-    // Compute V
-    auto V = u1 + c1 * sqrt( ((g+1)/(2*g)) * (p2p1-1) + 1);
-    // Compute c2
-    auto c2 = c1 * sqrt(
-            p2p1 * (
-                (((g+1)/(g-1)) + p2p1
-                ) / (
-                1 + ((g+1)/(g-1)) * p2p1)
-                )
-    );
-    // Compute r2
-    auto compute_r = [&](double pressure, double c) {
-        return g * pressure / (c*c);
-    };
-    auto r2 = compute_r(p2, c2);
-
-    // p and u same across contact
-    auto u3 = u2;
-    auto p3 = p2;
-    // Compute c3
-    auto c3 = .5 * (g - 1) * (u4 + ((2*c4)/(g-1)) - u3);
-    // Compute r3
-    auto r3 = compute_r(p3, c3);
-
-    // TODO: Figure out what x/t should be. I have changed it to x/t = 0, not
-    // sure if this is right or not.
-
-    // Flow inside expansion
-    //auto u_exp = (2/(g+1)) * (x/t + ((g-1)/2) * u4 + c4);
-    //auto c_exp = (2/(g+1)) * (x/t + ((g-1)/2) * u4 + c4) - x/t;
-    auto u_exp = (2/(g+1)) * (((g-1)/2) * u4 + c4);
-    auto c_exp = (2/(g+1)) * (((g-1)/2) * u4 + c4);
-//    // Clip the speed of sound to be positive. This is not entirely necessary
-//    // (the spurious negative speed of sound is only outside the expansion,
-//    // so in the expansion everything is okay) but not doing this makes Numpy
-//    // give warnings when computing pressure.
-//    // TODO: Is this really necessary for this application...
-//    c_exp[c_exp < 0] = 1e-16
-    auto p_exp = p4 * pow(c_exp/c4, 2*g/(g-1));
-    //auto r_exp = vector<double>(2);
-    //for (int i = 0; i < x.rows(); i++) {
-    //    r_exp(i) = compute_r(p_exp(i), c_exp(i));
-    //}
-    auto r_exp = compute_r(p_exp, c_exp);
-
-    // Figure out which flow region each point is in
-    for (int i = 0; i < x.rows(); i++) {
-        //auto xt = x(i) / t;
-        double xt = 0;
-        // Left of expansion
-        if (xt < (u4 - c4)) {
-            r(i) = r4;
-            u(i) = u4;
-            p(i) = p4;
-        // Inside expansion
-        } else if (xt < (u3 - c3)) {
-            r(i) = r_exp;
-            u(i) = u_exp;
-            p(i) = p_exp;
-        // Right of expansion
-        } else if (xt < u3) {
-            r(i) = r3;
-            u(i) = u3;
-            p(i) = p3;
-        // Left of shock
-        } else if (xt < V) {
-            r(i) = r2;
-            u(i) = u2;
-            p(i) = p2;
-        // Right of shock
-        } else if (xt > V) {
-            r(i) = r1;
-            u(i) = u1;
-            p(i) = p1;
-        }
-    }
-    ////TODO hack to try this
-    //r(0) = r3;
-    //r(1) = r2;
-    //u(0) = u3;
-    //u(1) = u2;
-    //p(0) = p3;
-    //p(1) = p2;
 }
 
 
@@ -322,18 +130,20 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             auto r = vector<double>(2);
             auto u_n = vector<double>(2);
             auto p = vector<double>(2);
-            // TODO What should this be??
-            auto xL = -1e-5 * (xy(L, all) - xy(R, all)).norm();
-            auto xR = -xL;
-            exact_riemann_problem(V_L(0), u_n_L, V_L(3), V_R(0), u_n_R, V_R(3),
-                    g, xL, xR, dt, r, u_n, p);
+            vector<double> result(4);
+            compute_exact_riemann_problem(V_L(0), V_L(3), u_n_L, V_R(0), V_R(3),
+                    u_n_R, g, result);
+            auto& p_star = result(0);
+            auto& u_star = result(1);
+            auto& r_starL = result(2);
+            auto& r_starR = result(3);
             // Velocity, after the Riemann problem (which modifies the normal
             // component)
-            vector<double> vel_L = u_n[0] * n_hat + u_t_L * t_hat;
-            vector<double> vel_R = u_n[1] * n_hat + u_t_R * t_hat;
+            vector<double> vel_L = u_star * n_hat + u_t_L * t_hat;
+            vector<double> vel_R = u_star * n_hat + u_t_R * t_hat;
             // Convert back to conservative
-            V_L << r[0], vel_L(0), vel_L(1), p[0];
-            V_R << r[1], vel_R(0), vel_R(1), p[1];
+            V_L << r_starL, vel_L(0), vel_L(1), p_star;
+            V_R << r_starR, vel_R(0), vel_R(1), p_star;
             matrix<double> U_L_Riemann = primitive_to_conservative(V_L, g);
             matrix<double> U_R_Riemann = primitive_to_conservative(V_R, g);
 

@@ -159,60 +159,6 @@ class Upwind:
         return F
 
 
-def exact_riemann_problem(
-        rL, pL, uL, rR, pR, uR, g):
-    # Constants
-    AL = 2 / ((g + 1) * rL)
-    AR = 2 / ((g + 1) * rR)
-    BL = ((g - 1) / (g + 1)) * pL
-    BR = ((g - 1) / (g + 1)) * pR
-    # Compute speed of sound
-    def compute_c(g, p, r): return np.sqrt(g * p / r)
-    cL = compute_c(g, pL, rL)
-    cR = compute_c(g, pR, rR)
-
-    # Pressure functions
-    def fLR(p, pLR, ALR, BLR, cLR):
-        if p > pLR:
-            return (p - pLR) * (ALR / (p + BLR))**.5
-        else:
-            return (2 * cLR / (g - 1)) * ( (p/pLR)**((g - 1) / (2*g)) - 1 )
-
-    def f(p, pL, pR, AL, AR, BL, BR, cL, cR, uL, uR):
-        return fLR(p, pL, AL, BL, cL) + fLR(p, pR, AR, BR, cR) + uR - uL
-
-    # Solve nonlinear equation for pressure in the star region
-    guesses = [.5*(pL + pR), 0]
-    for guess in guesses:
-        p_star, infodict, ier, mesg = scipy.optimize.fsolve(f, guess,
-                args=(pL, pR, AL, AR, BL, BR, cL, cR, uL, uR), full_output=True)
-        if ier == 1: break
-    p_star = p_star[0]
-
-    # Use this to get the velocity in the star region
-    u_star = .5 * (uL + uR) + .5 * (fLR(p_star, pR, AR, BR, cR) - fLR(p_star, pL, AL, BL, cL))
-
-    # Density functions
-    def r_star_shock(r, p_star, p, g):
-        r_star = r
-        r_star *= ((g - 1) / (g + 1)) + p_star / p
-        r_star /= ((g - 1) / (g + 1)) * p_star / p + 1
-        return r_star
-    def r_star_expansion(r, p_star, p, g):
-        return r * (p_star / p)**(1/g)
-
-    # Compute density
-    if p_star > pL:
-        r_starL = r_star_shock(rL, p_star, pL, g)
-    else:
-        r_starL = r_star_expansion(rL, p_star, pL, g)
-    if p_star > pR:
-        r_starR = r_star_shock(rR, p_star, pR, g)
-    else:
-        r_starR = r_star_expansion(rR, p_star, pR, g)
-    return p_star, u_star, r_starL, r_starR
-
-
 def convective_fluxes(U, g):
     # Unpack
     r =  U[:, 0]
@@ -243,29 +189,27 @@ if __name__ == '__main__':
     compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, g, output)
     test1 = np.isclose([.30313, .92745, .42632, .26557], output, rtol=rtol)
     print(f'Test 1: {test1}')
-    exact_riemann_problem(rL, pL, uL, rR, pR, uR, g)
-    breakpoint()
     # Test 2
     rtol = 1e-2
     rL, uL, pL, rR, uR, pR = 1, -2, .4, 1, 2, .4
-    test2 = np.isclose([.00189, 0, .02185, .02185],
-            exact_riemann_problem(rL, pL, uL, rR, pR, uR, g), rtol=rtol)
+    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, g, output)
+    test2 = np.isclose([.00189, 0, .02185, .02185], output, rtol=rtol)
     print(f'Test 2: {test2}')
     # Test 3
     rtol = 1e-5
     rL, uL, pL, rR, uR, pR = 1, 0, 1000, 1, 0, .01
-    test3 = np.isclose([460.894, 19.5975, .57506, 5.99924],
-            exact_riemann_problem(rL, pL, uL, rR, pR, uR, g), rtol=rtol)
+    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, g, output)
+    test3 = np.isclose([460.894, 19.5975, .57506, 5.99924], output, rtol=rtol)
     print(f'Test 3: {test3}')
     # Test 4
     rtol = 1e-5
     rL, uL, pL, rR, uR, pR = 1, 0, .01, 1, 0, 100
-    test4 = np.isclose([46.0950, -6.19633, 5.99242, .57511],
-            exact_riemann_problem(rL, pL, uL, rR, pR, uR, g), rtol=rtol)
+    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, g, output)
+    test4 = np.isclose([46.0950, -6.19633, 5.99242, .57511], output, rtol=rtol)
     print(f'Test 4: {test4}')
     # Test 5
     rtol = 1e-5
     rL, uL, pL, rR, uR, pR = 5.99924, 19.5975, 460.894, 5.99242, -6.19633, 46.0950
-    test5 = np.isclose([1691.64, 8.68975, 14.2823, 31.0426],
-            exact_riemann_problem(rL, pL, uL, rR, pR, uR, g), rtol=rtol)
+    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, g, output)
+    test5 = np.isclose([1691.64, 8.68975, 14.2823, 31.0426], output, rtol=rtol)
     print(f'Test 5: {test5}')
