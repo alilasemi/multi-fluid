@@ -11,13 +11,13 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 121
-ny = 121
+nx = 101
+ny = 101
 #n_t = 5
-cfl = .4
-t_final = 5e-5#3.7e-5
+cfl = .2
+t_final = 1e-2#3.7e-5
 max_n_t = 99999999999
-level_set_reinitialization_rate = 25
+level_set_reinitialization_rate = 15
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
@@ -165,8 +165,14 @@ def main(show_progress_bar=True):
                     data.phi = update_phi(dt, data, mesh, problem)
 
             # Reinitialize level set
+            # TODO: This stuff is mostly just a hack for now
+            # Get radius and write to file
+            radius = np.linalg.norm(mesh.xy[np.argmin(data.phi**2)])
+            with open('radius.txt', 'a') as f:
+                f.write(str(data.t) + ' ' + str(radius) + '\n')
+            global level_set_reinitialization_rate
             if level_set_reinitialization_rate == 0:
-                level_set_reinitialization_rate == max_n_t
+                level_set_reinitialization_rate = max_n_t
             if i % level_set_reinitialization_rate == 0:
                 reinitialize_level_set(data, mesh)
 

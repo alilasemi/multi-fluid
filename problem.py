@@ -624,10 +624,10 @@ class Cavitation(Problem):
     '''
     fluid_solid = False
     # Domain
-    xL = -2e-3
-    xR = 2e-3
-    yL = -2e-3
-    yR = 2e-3
+    xL = -2e-1
+    xR = 2e-1
+    yL = -2e-1
+    yR = 2e-1
 
     # Ambient state (rho, u, v, p)
     ambient = np.array([
@@ -636,11 +636,11 @@ class Cavitation(Problem):
 
     # Bubble state (rho, u, v, p)
     bubble = np.array([
-            1, 0, 0, .02e5
+            1, 0, 0, 5e2
     ])
 
     # Initial radius
-    radius = .8e-3
+    radius = .8e-1
 
     # Ratio of specific heats
     g = 1.4
