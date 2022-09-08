@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 # Default build type
-set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE Debug)
 
 # run path for installed executables
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
