@@ -18,7 +18,8 @@ void compute_interior_face_residual(matrix_ref<double> U,
         vector_ref<long> interior_face_IDs, matrix_ref<long> edge,
         matrix_ref<double> limiter, std::vector<double> gradU,
         matrix_ref<double> xy, matrix_ref<double> area_normals_p1,
-        matrix_ref<double> area, double g, matrix_ref<double> residual) {
+        matrix_ref<double> area, double g, double psg,
+        matrix_ref<double> residual) {
     // Sizing
     auto n_faces = U_L.rows();
     // Create buffers
@@ -55,7 +56,7 @@ void compute_interior_face_residual(matrix_ref<double> U,
         // Evaluate fluxes
         matrix<double> area_normals = area_normals_p1(face_ID, all).transpose();
         compute_flux(U_L(face_ID, all).transpose(),
-                U_R(face_ID, all).transpose(), area_normals, g, F);
+                U_R(face_ID, all).transpose(), area_normals, g, psg, F);
 
         // Update residual of cells on the left and right
         residual(L, all) += -1 / area(L, 0) * F;
@@ -70,7 +71,7 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         matrix_ref<double> quad_wts, std::vector<double> quad_pts_phys,
         matrix_ref<double> limiter, std::vector<double> gradU,
         matrix_ref<double> xy, std::vector<double> area_normals_p2,
-        matrix_ref<double> area, double g, double dt,
+        matrix_ref<double> area, double g, double psg,
         matrix_ref<double> residual) {
     // Create buffers
     matrix<double> U_L(4, 1);
@@ -119,8 +120,8 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             // TODO: Should this be before or after adding the second order
             // component??
             // Convert left and right to primitive
-            auto V_L = conservative_to_primitive(U_L, g);
-            auto V_R = conservative_to_primitive(U_R, g);
+            auto V_L = conservative_to_primitive(U_L, g, psg);
+            auto V_R = conservative_to_primitive(U_R, g, psg);
             // Get normal/tangential component of velocity
             auto u_n_L = V_L(seq(1, 2)).dot(n_hat);
             auto u_n_R = V_R(seq(1, 2)).dot(n_hat);
@@ -132,7 +133,7 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             auto p = vector<double>(2);
             vector<double> result(4);
             compute_exact_riemann_problem(V_L(0), V_L(3), u_n_L, V_R(0), V_R(3),
-                    u_n_R, g, result);
+                    u_n_R, g, psg, result);
             auto& p_star = result(0);
             auto& u_star = result(1);
             auto& r_starL = result(2);
@@ -144,15 +145,15 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             // Convert back to conservative
             V_L << r_starL, vel_L(0), vel_L(1), p_star;
             V_R << r_starR, vel_R(0), vel_R(1), p_star;
-            matrix<double> U_L_Riemann = primitive_to_conservative(V_L, g);
-            matrix<double> U_R_Riemann = primitive_to_conservative(V_R, g);
+            matrix<double> U_L_Riemann = primitive_to_conservative(V_L, g, psg);
+            matrix<double> U_R_Riemann = primitive_to_conservative(V_R, g, psg);
 
             // Evaluate left interior flux
-            compute_flux(U_L, U_L_Riemann, area_normal, g, F);
+            compute_flux(U_L, U_L_Riemann, area_normal, g, psg, F);
             // Add contribution to quadrature
             F_integral_L += F * quad_wts(i, 0);
             // Evaluate right interior flux
-            compute_flux(U_R_Riemann, U_R, area_normal, g, F);
+            compute_flux(U_R_Riemann, U_R, area_normal, g, psg, F);
             // Add contribution to quadrature
             F_integral_R += F * quad_wts(i, 0);
         }
@@ -169,14 +170,14 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
 vector<double> compute_ghost_state(vector<double> U, matrix_ref<double> U_global,
         long bc, matrix<double> quad_pt, double t,
         vector<double> bc_area_normal, matrix<double> bc_data,
-        ComputeForcedInterfaceVelocity*);
+        ComputeForcedInterfaceVelocity*, double g, double psg);
 // Compute the boundary faces' contributions to the residual.
 void compute_boundary_face_residual(matrix_ref<double> U,
         matrix_ref<long> bc_type, matrix_ref<double> quad_wts,
         std::vector<double> quad_pts_phys, matrix_ref<double> limiter,
         std::vector<double> gradU, matrix_ref<double> xy,
         std::vector<double> area_normals_p2, matrix_ref<double> area,
-        double g, long num_boundaries, matrix<double> bc_data,
+        double g, double psg, long num_boundaries, matrix<double> bc_data,
         string problem_name, double t, matrix_ref<double> residual) {
     // Sizing
     int n_faces = bc_type.rows();
@@ -255,13 +256,13 @@ void compute_boundary_face_residual(matrix_ref<double> U,
             area_normal_vec(1) = area_normal(1, 0);
             // Compute ghost state
             auto U_ghost_vec = compute_ghost_state(U_L, U, bc, quad_pt, t,
-                    area_normal_vec, bc_data, compute_interface_velocity);
+                    area_normal_vec, bc_data, compute_interface_velocity, g, psg);
             // TODO: Fix matrix vs vector!
             matrix<double> U_ghost(4, 1);
             U_ghost << U_ghost_vec(0), U_ghost_vec(1), U_ghost_vec(2), U_ghost_vec(3);
 
             // Evaluate boundary fluxes
-            compute_flux(U_L, U_ghost, area_normal, g, F);
+            compute_flux(U_L, U_ghost, area_normal, g, psg, F);
             // Add contribution to quadrature
             if (nq == 2) {
                 F_integral += F * quad_wts(i, 0);
@@ -359,15 +360,14 @@ vector<double> compute_ghost_advected_interface(
 vector<double> compute_ghost_state(vector<double> U, matrix_ref<double> U_global,
         long bc, matrix<double> quad_pt, double t,
         vector<double> bc_area_normal, matrix<double> bc_data,
-        ComputeForcedInterfaceVelocity* compute_interface_velocity) {
-    // Get gamma
+        ComputeForcedInterfaceVelocity* compute_interface_velocity, double g,
+        double psg) {
     // TODO: bc_data is not storing what you think...the initial bc_type vs.
     // after being modified are different!
-    auto g = bc_data(1, 4);
     vector<double> V_ghost(4);
     // Compute interface ghost state
     if (bc == 0) {
-        auto V = conservative_to_primitive(U, g);
+        auto V = conservative_to_primitive(U, g, psg);
         vector<double> data = bc_data(bc, all);
         auto wall_velocity = (*compute_interface_velocity)(
                 quad_pt(0), quad_pt(1), t, data);
@@ -376,29 +376,30 @@ vector<double> compute_ghost_state(vector<double> U, matrix_ref<double> U_global
         //cout << quad_pt.transpose() << "  " << wall_velocity.transpose() << endl;
     // Compute wall ghost state
     } else if (bc == 1) {
-        auto V = conservative_to_primitive(U, g);
+        auto V = conservative_to_primitive(U, g, psg);
         V_ghost = compute_ghost_wall(V, bc_area_normal);
     // Compute full state ghost state
     } else if (bc == 2) {
         V_ghost = bc_data(bc, seq(0, 3));
     } else if (bc > 2) {
-        auto V = conservative_to_primitive(U, g);
+        auto V = conservative_to_primitive(U, g, psg);
         // Get ghost cell ID
         auto ghost_cell_ID = bc - 3;
         // Get ghost cell's state
         vector<double> U_ghost_cell = U_global(ghost_cell_ID, all).transpose();
-        auto V_ghost_cell = conservative_to_primitive(U_ghost_cell, g);
+        auto V_ghost_cell = conservative_to_primitive(U_ghost_cell, g, psg);
         // Pass the ghost fluid state in to compute the ghost state
         V_ghost = compute_ghost_advected_interface(V, V_ghost_cell, bc_area_normal);
     } else {
         printf("ERROR: Invalid BC type given! bc = %li\n", bc);
     }
     // Convert to conservative
-    auto U_ghost = primitive_to_conservative(V_ghost, g);
+    auto U_ghost = primitive_to_conservative(V_ghost, g, psg);
     return U_ghost;
 }
 
-vector<double> conservative_to_primitive(vector<double> U, double g) {
+vector<double> conservative_to_primitive(vector<double> U, double g,
+        double psg) {
     // Unpack
     auto& r = U(0);
     auto& ru = U(1);
@@ -409,11 +410,12 @@ vector<double> conservative_to_primitive(vector<double> U, double g) {
     V(0) = r;
     V(1) = ru / r;
     V(2) = rv / r;
-    V(3) = (re - .5 * (ru*ru + rv*rv) / r) * (g - 1);
+    V(3) = (g - 1) * (re - .5 * (ru*ru + rv*rv) / r) - g * psg;
     return V;
 }
 
-vector<double> primitive_to_conservative(vector<double> V, double g) {
+vector<double> primitive_to_conservative(vector<double> V, double g,
+        double psg) {
     // Unpack
     auto& r = V(0);
     auto& u = V(1);
@@ -424,7 +426,7 @@ vector<double> primitive_to_conservative(vector<double> V, double g) {
     U(0) = r;
     U(1) = r * u;
     U(2) = r * v;
-    U(3) = p / (g - 1) + .5 * r * (u*u + v*v);
+    U(3) = (p + g * psg) / (g - 1) + .5 * r * (u*u + v*v);
     return U;
 }
 

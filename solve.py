@@ -384,6 +384,7 @@ class SimulationData:
         self.n_faces = n_faces
         # Set the ratio of specific heats
         self.g = 1.4
+        self.psg = 0
         # Temporary buffers
         self.U = U
         self.phi = phi

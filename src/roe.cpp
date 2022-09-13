@@ -79,15 +79,15 @@ void compute_flux_roe(matrix_ref<double> U_L,
 }
 
 void compute_flux(matrix_ref<double> U_L,
-        matrix_ref<double> U_R, matrix<double>& area_normal, double g,
+        matrix_ref<double> U_R, matrix<double>& area_normal, double g, double psg,
         vector<double>& F) {
     // Package the normals
     double length = area_normal.norm();
     vector<double> n_hat = area_normal(all, 0).normalized();
 
     // Convert left and right to primitive
-    auto V_L = conservative_to_primitive(U_L, g);
-    auto V_R = conservative_to_primitive(U_R, g);
+    auto V_L = conservative_to_primitive(U_L, g, psg);
+    auto V_R = conservative_to_primitive(U_R, g, psg);
     // Get normal/tangential component of velocity
     auto u_n_L = V_L(seq(1, 2)).dot(n_hat);
     auto u_n_R = V_R(seq(1, 2)).dot(n_hat);
@@ -97,7 +97,7 @@ void compute_flux(matrix_ref<double> U_L,
     auto p = vector<double>(2);
     vector<double> result(4);
     compute_exact_riemann_problem(V_L(0), V_L(3), u_n_L, V_R(0), V_R(3),
-            u_n_R, g, result);
+            u_n_R, g, psg, result);
     auto& p_star = result(0);
     auto& u_star = result(1);
     auto& r_starL = result(2);
@@ -114,7 +114,7 @@ void compute_flux(matrix_ref<double> U_L,
     // Convert back to conservative
     vector<double> V_star(4);
     V_star << r_star, u_star, 0, p_star;
-    matrix<double> U_star = primitive_to_conservative(V_star, g);
+    matrix<double> U_star = primitive_to_conservative(V_star, g, psg);
     // Compute flux
     matrix<double> full_F = convective_fluxes(U_star, g);
     F = length * full_F(all, 0);

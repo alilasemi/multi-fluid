@@ -52,12 +52,12 @@ def get_residual(data, mesh, problem):
     # TODO: Passing 3D numpy arrays is kinda ugly right now...
     compute_interior_face_residual(U, data.U_L, data.U_R,
             mesh.interior_face_IDs, mesh.edge, limiter, gradU.flatten().data,
-            mesh.xy, mesh.area_normals_p1, mesh.area, data.g, residual)
+            mesh.xy, mesh.area_normals_p1, mesh.area, data.g, data.psg, residual)
 
     # Compute the boundary face residual
     compute_boundary_face_residual(U, mesh.bc_type, LagrangeSegment.quad_wts,
             mesh.bc_quad_pts_phys.flatten().data, limiter, gradU.flatten().data, mesh.xy,
-            mesh.bc_area_normals_p2.flatten().data, mesh.area, data.g,
+            mesh.bc_area_normals_p2.flatten().data, mesh.area, data.g, data.psg,
             mesh.num_boundaries, problem.bc_data, problem.__class__.__name__,
             data.t, residual)
 
@@ -71,7 +71,7 @@ def get_residual(data, mesh, problem):
         compute_fluid_fluid_face_residual(U, mesh.interface_IDs, mesh.edge,
                 LagrangeSegment.quad_wts, mesh.quad_pts_phys.flatten().data,
                 limiter, gradU.flatten().data, mesh.xy,
-                mesh.area_normals_p2.flatten().data, mesh.area, data.g, data.dt,
+                mesh.area_normals_p2.flatten().data, mesh.area, data.g, data.psg,
                 residual)
 
     return residual
