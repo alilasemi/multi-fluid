@@ -11,13 +11,13 @@ using std::endl;
 #include <face_residual.h>
 
 
-matrix<double> convective_fluxes(matrix_ref<double> U, double g) {
+matrix<double> convective_fluxes(matrix_ref<double> U, double g, double psg) {
     // Unpack
     auto r =  U(0, 0);
     auto ru = U(1, 0);
     auto rv = U(2, 0);
     auto re = U(3, 0);
-    auto p = (re - .5 * (pow(ru, 2) + pow(rv, 2)) / r) * (g - 1);
+    auto p = (g - 1) * (re - .5 * (ru*ru + rv*rv) / r) - g * psg;
     // Compute flux
     auto F = matrix<double>(4, 2);
     F(0, 0) = ru;
@@ -73,21 +73,23 @@ void compute_flux_roe(matrix_ref<double> U_L,
     auto abs_A_RL = A_RL_p - A_RL_m;
 
     // Compute flux
-    F = length * (
-            .5 * (convective_fluxes(U_L, g) + convective_fluxes(U_R, g)) * unit_normals
-            - .5 * (abs_A_RL * (U_R - U_L)));
+    // TODO
+    cout << "Roe not implemented for stiffened gas!!" << endl;
+    //F = length * (
+    //        .5 * (convective_fluxes(U_L, g) + convective_fluxes(U_R, g)) * unit_normals
+    //        - .5 * (abs_A_RL * (U_R - U_L)));
 }
 
-void compute_flux(matrix_ref<double> U_L,
-        matrix_ref<double> U_R, matrix<double>& area_normal, double g, double psg,
-        vector<double>& F) {
+void compute_flux(matrix_ref<double> U_L, matrix_ref<double> U_R,
+        matrix<double>& area_normal, double gL, double gR, double psgL,
+        double psgR, vector<double>& F) {
     // Package the normals
     double length = area_normal.norm();
     vector<double> n_hat = area_normal(all, 0).normalized();
 
     // Convert left and right to primitive
-    auto V_L = conservative_to_primitive(U_L, g, psg);
-    auto V_R = conservative_to_primitive(U_R, g, psg);
+    auto V_L = conservative_to_primitive(U_L, gL, psgR);
+    auto V_R = conservative_to_primitive(U_R, gR, psgR);
     // Get normal/tangential component of velocity
     auto u_n_L = V_L(seq(1, 2)).dot(n_hat);
     auto u_n_R = V_R(seq(1, 2)).dot(n_hat);
@@ -97,26 +99,32 @@ void compute_flux(matrix_ref<double> U_L,
     auto p = vector<double>(2);
     vector<double> result(4);
     compute_exact_riemann_problem(V_L(0), V_L(3), u_n_L, V_R(0), V_R(3),
-            u_n_R, g, psg, result);
+            u_n_R, gL, gR, psgL, psgR, result);
     auto& p_star = result(0);
     auto& u_star = result(1);
     auto& r_starL = result(2);
     auto& r_starR = result(3);
     // Select the density in the middle
     double r_star;
+    double g_star;
+    double psg_star;
     if (u_star > 0) {
         r_star = r_starL;
+        g_star = gL;
+        psg_star = psgL;
     } else {
         r_star = r_starR;
+        g_star = gR;
+        psg_star = psgR;
     }
     // TODO: The following has some hacks to make previous 2D code work for a 1D
     // flux
     // Convert back to conservative
     vector<double> V_star(4);
     V_star << r_star, u_star, 0, p_star;
-    matrix<double> U_star = primitive_to_conservative(V_star, g, psg);
+    matrix<double> U_star = primitive_to_conservative(V_star, g_star, psg_star);
     // Compute flux
-    matrix<double> full_F = convective_fluxes(U_star, g);
+    matrix<double> full_F = convective_fluxes(U_star, g_star, psg_star);
     F = length * full_F(all, 0);
     // Use the normal vector for the direction of the momentum flux
     F(seq(1, 2)) = F(1) * n_hat;

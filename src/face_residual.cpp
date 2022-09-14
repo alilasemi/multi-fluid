@@ -18,7 +18,8 @@ void compute_interior_face_residual(matrix_ref<double> U,
         vector_ref<long> interior_face_IDs, matrix_ref<long> edge,
         matrix_ref<double> limiter, std::vector<double> gradU,
         matrix_ref<double> xy, matrix_ref<double> area_normals_p1,
-        matrix_ref<double> area, double g, double psg,
+        matrix_ref<double> area, vector_ref<long> fluid_ID,
+        std::vector<double> g, std::vector<double> psg,
         matrix_ref<double> residual) {
     // Sizing
     auto n_faces = U_L.rows();
@@ -53,10 +54,16 @@ void compute_interior_face_residual(matrix_ref<double> U,
         // Left and right cell IDs
         auto L = edge(face_ID, 0);
         auto R = edge(face_ID, 1);
+        // Get fluid data on left and right
+        auto gL = g[fluid_ID(L)];
+        auto gR = g[fluid_ID(R)];
+        auto psgL = psg[fluid_ID(L)];
+        auto psgR = psg[fluid_ID(R)];
         // Evaluate fluxes
         matrix<double> area_normals = area_normals_p1(face_ID, all).transpose();
         compute_flux(U_L(face_ID, all).transpose(),
-                U_R(face_ID, all).transpose(), area_normals, g, psg, F);
+                U_R(face_ID, all).transpose(), area_normals,
+                gL, gR, psgL, psgR, F);
 
         // Update residual of cells on the left and right
         residual(L, all) += -1 / area(L, 0) * F;
@@ -71,7 +78,8 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         matrix_ref<double> quad_wts, std::vector<double> quad_pts_phys,
         matrix_ref<double> limiter, std::vector<double> gradU,
         matrix_ref<double> xy, std::vector<double> area_normals_p2,
-        matrix_ref<double> area, double g, double psg,
+        matrix_ref<double> area, vector_ref<long> fluid_ID,
+        std::vector<double> g, std::vector<double> psg,
         matrix_ref<double> residual) {
     // Create buffers
     matrix<double> U_L(4, 1);
@@ -82,6 +90,11 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         // Left and right cell IDs
         auto L = edge(face_ID, 0);
         auto R = edge(face_ID, 1);
+        // Get fluid data on left and right
+        auto gL = g[fluid_ID(L)];
+        auto gR = g[fluid_ID(R)];
+        auto psgL = psg[fluid_ID(L)];
+        auto psgR = psg[fluid_ID(R)];
 
         // Gradients for these cells
         matrix_map<double> gradU_L(&gradU[L*4*2], 4, 2);
@@ -120,8 +133,8 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             // TODO: Should this be before or after adding the second order
             // component??
             // Convert left and right to primitive
-            auto V_L = conservative_to_primitive(U_L, g, psg);
-            auto V_R = conservative_to_primitive(U_R, g, psg);
+            auto V_L = conservative_to_primitive(U_L, gL, psgL);
+            auto V_R = conservative_to_primitive(U_R, gR, psgR);
             // Get normal/tangential component of velocity
             auto u_n_L = V_L(seq(1, 2)).dot(n_hat);
             auto u_n_R = V_R(seq(1, 2)).dot(n_hat);
@@ -133,7 +146,7 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             auto p = vector<double>(2);
             vector<double> result(4);
             compute_exact_riemann_problem(V_L(0), V_L(3), u_n_L, V_R(0), V_R(3),
-                    u_n_R, g, psg, result);
+                    u_n_R, gL, gR, psgL, psgR, result);
             auto& p_star = result(0);
             auto& u_star = result(1);
             auto& r_starL = result(2);
@@ -145,15 +158,17 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             // Convert back to conservative
             V_L << r_starL, vel_L(0), vel_L(1), p_star;
             V_R << r_starR, vel_R(0), vel_R(1), p_star;
-            matrix<double> U_L_Riemann = primitive_to_conservative(V_L, g, psg);
-            matrix<double> U_R_Riemann = primitive_to_conservative(V_R, g, psg);
+            matrix<double> U_L_Riemann = primitive_to_conservative(V_L, gL, psgL);
+            matrix<double> U_R_Riemann = primitive_to_conservative(V_R, gR, psgR);
 
-            // Evaluate left interior flux
-            compute_flux(U_L, U_L_Riemann, area_normal, g, psg, F);
+            // Evaluate left interior flux, using the left fluid data (this is
+            // why gL and psgL are repeated)
+            compute_flux(U_L, U_L_Riemann, area_normal, gL, gL, psgL, psgL, F);
             // Add contribution to quadrature
             F_integral_L += F * quad_wts(i, 0);
-            // Evaluate right interior flux
-            compute_flux(U_R_Riemann, U_R, area_normal, g, psg, F);
+            // Evaluate right interior flux, using the right fluid data (this is
+            // why gR and psgR are repeated)
+            compute_flux(U_R_Riemann, U_R, area_normal, gR, gR, psgR, psgR, F);
             // Add contribution to quadrature
             F_integral_R += F * quad_wts(i, 0);
         }
@@ -177,8 +192,9 @@ void compute_boundary_face_residual(matrix_ref<double> U,
         std::vector<double> quad_pts_phys, matrix_ref<double> limiter,
         std::vector<double> gradU, matrix_ref<double> xy,
         std::vector<double> area_normals_p2, matrix_ref<double> area,
-        double g, double psg, long num_boundaries, matrix<double> bc_data,
-        string problem_name, double t, matrix_ref<double> residual) {
+        vector_ref<long> fluid_ID, std::vector<double> g,
+        std::vector<double> psg, long num_boundaries, matrix<double> bc_data,
+        std::string problem_name, double t, matrix_ref<double> residual) {
     // Sizing
     int n_faces = bc_type.rows();
 
@@ -206,6 +222,9 @@ void compute_boundary_face_residual(matrix_ref<double> U,
         auto L = bc_type(face_ID, 0);
         // Type of BC
         auto bc = bc_type(face_ID, 1);
+        // Get fluid data on left
+        auto gL = g[fluid_ID(L)];
+        auto psgL = psg[fluid_ID(L)];
 
         // Gradients for this cell
         matrix_map<double> gradU_L(&gradU[L*4*2], 4, 2);
@@ -256,13 +275,14 @@ void compute_boundary_face_residual(matrix_ref<double> U,
             area_normal_vec(1) = area_normal(1, 0);
             // Compute ghost state
             auto U_ghost_vec = compute_ghost_state(U_L, U, bc, quad_pt, t,
-                    area_normal_vec, bc_data, compute_interface_velocity, g, psg);
+                    area_normal_vec, bc_data, compute_interface_velocity, gL, psgL);
             // TODO: Fix matrix vs vector!
             matrix<double> U_ghost(4, 1);
             U_ghost << U_ghost_vec(0), U_ghost_vec(1), U_ghost_vec(2), U_ghost_vec(3);
 
-            // Evaluate boundary fluxes
-            compute_flux(U_L, U_ghost, area_normal, g, psg, F);
+            // Evaluate boundary fluxes. Assume the ghost fluid is of the same
+            // fluid ID - this is why the gL and psgL are repeated.
+            compute_flux(U_L, U_ghost, area_normal, gL, gL, psgL, psgL, F);
             // Add contribution to quadrature
             if (nq == 2) {
                 F_integral += F * quad_wts(i, 0);

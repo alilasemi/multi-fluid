@@ -21,6 +21,10 @@ level_set_reinitialization_rate = 15
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
+# Physical parameters
+g = [4.4, 1.4]
+psg = [6e8, 0]
+
 file_name = 'data.npz'
 ghost_fluid_interfaces = True
 update_ghost_fluid_cells = True
@@ -58,12 +62,13 @@ def main(show_progress_bar=True):
     edge_points_copy = mesh.edge_points.copy()
 
     # Initial solution
-    problem = Problem(mesh.xy, t_list, mesh.bc_type)
+    problem = Problem(mesh.xy, t_list, mesh.bc_type, g, psg)
     U, phi = problem.get_initial_conditions()
     U_ghost = np.empty((mesh.bc_type.shape[0], 4))
 
     # Store data
-    data = SimulationData(mesh.nx, mesh.ny, mesh.n_faces, U, phi, U_ghost, t_list, problem.g, file_name)
+    data = SimulationData(mesh.nx, mesh.ny, mesh.n_faces, U, phi, U_ghost,
+            t_list, g, psg, file_name)
     del U, phi, U_ghost
 
     # Save initial condition, if desired
@@ -89,16 +94,22 @@ def main(show_progress_bar=True):
         for i in range(max_n_t):
             data.new_iteration()
 
+            # Set fluid identity based on phi
+            data.fluid_ID = (data.phi < 0).astype(int)
+
             # If told to compute timestep using CFL
             if 'cfl' in globals():
+                # Get fluid data for each cell
+                g_i = np.array(g)[data.fluid_ID]
+                psg_i = np.array(psg)[data.fluid_ID]
                 r  = data.U[:, 0]
                 ru = data.U[:, 1]
                 rv = data.U[:, 2]
                 re = data.U[:, 3]
                 # Compute pressure
-                p = (re - .5 * (ru**2 + rv**2) / r) * (problem.g - 1)
+                p = (g_i - 1) * (re - .5 * (ru**2 + rv**2) / r) - g_i * psg_i;
                 # Speed of sound
-                a = np.sqrt(problem.g * p / r)
+                a = np.sqrt(g_i * p / r)
                 # Norm of velocity
                 norm_u = np.sqrt(ru**2 + rv**2) / r
                 # Compute timestep from CFL
@@ -227,11 +238,6 @@ def main(show_progress_bar=True):
                     else:
                         # Use constant extrapolation
                         data.U[ghost_ID] = np.mean(data.U[fluid_neighbors], axis=0)
-
-            # TODO: This is an "incompressible" hack
-            #liquid_IDs = data.phi > 0
-            #data.U[liquid_IDs, 0] = problem.ambient[0]
-            #data.U[~liquid_IDs, 0] = problem.bubble[0]
 
             # If the solution NaN's, then store the current solution for plotting
             # and stop. It is important to do this after the ghost fluid update,
@@ -368,6 +374,7 @@ class SimulationData:
     grad_phi - np.array, gradient of level set
     U_L - np.array, solution evaluated at the left side of each face
     U_R - np.array, solution evaluated at the right side of each face
+    fluid_ID - np.array, the fluid identity of each cell
     file_name - string, name of file for reading/writing data
     '''
     # Iteration counter
@@ -377,14 +384,14 @@ class SimulationData:
     # Current timestep
     dt = 0
 
-    def __init__(self, nx, ny, n_faces, U, phi, U_ghost, t_list, g, file_name):
+    def __init__(self, nx, ny, n_faces, U, phi, U_ghost, t_list, g, psg, file_name):
         # Save mesh sizing
         self.nx = nx
         self.ny = ny
         self.n_faces = n_faces
         # Set the ratio of specific heats
-        self.g = 4.4
-        self.psg = 6e8
+        self.g = g
+        self.psg = psg
         # Temporary buffers
         self.U = U
         self.phi = phi
@@ -393,6 +400,7 @@ class SimulationData:
         self.grad_phi = np.empty((nx*ny, 2))
         self.U_L = np.empty((n_faces, 4))
         self.U_R = np.empty((n_faces, 4))
+        self.fluid_ID = np.empty(nx*ny, dtype=int)
         # Lists of data for each stored timestep
         self.U_list = []
         self.phi_list = []
@@ -418,7 +426,7 @@ class SimulationData:
     def write_to_file(self):
         with open(file_name, 'wb') as f:
             np.savez(f, nx=self.nx, ny=self.ny, n_faces=self.n_faces, g=self.g,
-                    U_list=self.U_list, phi_list=self.phi_list,
+                    psg=self.psg, U_list=self.U_list, phi_list=self.phi_list,
                     t_list=self.t_list, edge_points_list=self.edge_points_list,
                     vol_points_list=self.vol_points_list, allow_pickle=True)
 
@@ -427,7 +435,7 @@ class SimulationData:
         with open(file_name, 'rb') as f:
             data = np.load(f)
             sim_data = cls(data['nx'], data['ny'], data['n_faces'], None, None,
-                    None, data['t_list'], data['g'], file_name)
+                    None, data['t_list'], data['g'], data['psg'], file_name)
             sim_data.U_list = data['U_list']
             sim_data.phi_list = data['phi_list']
             sim_data.edge_points_list = data['edge_points_list']

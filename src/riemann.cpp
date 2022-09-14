@@ -36,26 +36,27 @@ double fLR(double p, double pLR, double ALR, double BLR, double DLR, double cLR,
 
 double f(double p, double pL, double pR, double AL, double AR, double BL,
         double BR, double DL, double DR, double cL, double cR, double uL,
-        double uR, double g) {
-    return fLR(p, pL, AL, BL, DL, cL, g) + fLR(p, pR, AR, BR, DR, cR, g)
+        double uR, double gL, double gR) {
+    return fLR(p, pL, AL, BL, DL, cL, gL) + fLR(p, pR, AR, BR, DR, cR, gR)
             + uR - uL;
 }
 
 void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
-        double pR, double uR, double g, double psg, vector_ref<double> result) {
+        double pR, double uR, double gL, double gR, double psgL, double psgR,
+        vector_ref<double> result) {
     // TODO: Go through and make all the g's and psg's have a left and right!
     // Constants
-    auto AL = 2 / ((g + 1) * rL);
-    auto AR = 2 / ((g + 1) * rR);
-    auto BL = ((g - 1) / (g + 1)) * pL;
-    auto BR = ((g - 1) / (g + 1)) * pR;
-    auto DL = (2 * g / (g + 1)) * psg;
-    auto DR = (2 * g / (g + 1)) * psg;
+    auto AL = 2 / ((gL + 1) * rL);
+    auto AR = 2 / ((gR + 1) * rR);
+    auto BL = ((gL - 1) / (gL + 1)) * pL;
+    auto BR = ((gR - 1) / (gR + 1)) * pR;
+    auto DL = (2 * gL / (gL + 1)) * psgL;
+    auto DR = (2 * gR / (gR + 1)) * psgR;
     auto CL = DL / pL;
     auto CR = DR / pR;
     // Compute speed of sound
-    auto cL = compute_c(g, pL, rL);
-    auto cR = compute_c(g, pR, rR);
+    auto cL = compute_c(gL, pL, rL);
+    auto cR = compute_c(gR, pR, rR);
 
     // Solve nonlinear equation for pressure in the star region
     bool success = false;
@@ -68,11 +69,11 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
         for (int i = 0; i < iter_max; i++) {
             old_guess = p;
             // Compute RHS
-            auto rhs = f(p, pL, pR, AL, AR, BL, BR, DL, DR, cL, cR, uL, uR, g);
+            auto rhs = f(p, pL, pR, AL, AR, BL, BR, DL, DR, cL, cR, uL, uR, gL, gR);
             // Compute derivative
             auto delta_p = p * 1e-6;
             auto rhs_plus = f(p + delta_p, pL, pR, AL, AR, BL, BR, DL, DR, cL,
-                    cR, uL, uR, g);
+                    cR, uL, uR, gL, gR);
             auto d_rhs_d_p = (rhs_plus - rhs) / delta_p;
             // Newton iteration
             p -= .2 * rhs / d_rhs_d_p;
@@ -92,28 +93,28 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
         std::stringstream ss;
         ss << "Nonlinear solver in Riemann problem failed!" << endl
                 << "The inputs were:" << endl
-                << "rL, uL, pL, rR, uR, pR, g = "
-                << rL << ", " << uL << ", " << pL << ", " << rR << ", "
-                << uR << ", " << pR << ", " << g << endl;
+                << "rL, uL, pL | rR, uR, pR | gL/gR = "
+                << rL << ", " << uL << ", " << pL << " | " << rR << ", "
+                << uR << ", " << pR << " | " << gL << "/" << gR << ", " << endl;
         throw std::runtime_error(ss.str());
     }
 
     // Use this to get the velocity in the star region
-    auto u_star = .5 * (uL + uR) + .5 * (fLR(p_star, pR, AR, BR, DR, cR, g)
-            - fLR(p_star, pL, AL, BL, DL, cL, g));
+    auto u_star = .5 * (uL + uR) + .5 * (fLR(p_star, pR, AR, BR, DR, cR, gR)
+            - fLR(p_star, pL, AL, BL, DL, cL, gL));
 
 
     // Compute density
     double r_starL, r_starR;
     if (p_star > pL) {
-        r_starL = r_star_shock(rL, p_star, pL, g, CL);
+        r_starL = r_star_shock(rL, p_star, pL, gL, CL);
     } else {
-        r_starL = r_star_expansion(rL, p_star, pL, g);
+        r_starL = r_star_expansion(rL, p_star, pL, gL);
     }
     if (p_star > pR) {
-        r_starR = r_star_shock(rR, p_star, pR, g, CR);
+        r_starR = r_star_shock(rR, p_star, pR, gR, CR);
     } else {
-        r_starR = r_star_expansion(rR, p_star, pR, g);
+        r_starR = r_star_expansion(rR, p_star, pR, gR);
     }
 
     // Store result

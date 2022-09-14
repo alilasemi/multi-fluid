@@ -14,16 +14,16 @@ class Problem:
     bc_data = np.empty((4, 5))
     exact = False
     fluid_solid = True
-    def __init__(self, xy, t_list, bc_type):
+    def __init__(self, xy, t_list, bc_type, g, psg):
         self.xy = xy
         self.t_list = t_list
         self.n = xy.shape[0]
         self.bc_type = bc_type
+        self.g = g
+        self.psg = psg
         self.set_bc_data()
 
     def set_bc(self, bc, bc_name, data=None):
-        # All BCs store gamma in the last entry
-        self.bc_data[bc, -1] = self.g
         # Nothing special needed for walls or advected interfaces
         if bc_name == 'wall' or bc_name == 'advected interface':
             pass
@@ -642,11 +642,6 @@ class Cavitation(Problem):
     # Initial radius
     radius = .8e-1
 
-    # Ratio of specific heats
-    g = 4.4
-    # Pressure constant
-    psg = 6e8
-
     # Levels to use for contour plots
     levels = [
             np.linspace(0, ambient[0], 11),
@@ -660,9 +655,9 @@ class Cavitation(Problem):
 
         # Get initial conditions as conservatives
         r, u, v, p = self.ambient
-        W_ambient = primitive_to_conservative(r, u, v, p, g, psg)
+        W_ambient = primitive_to_conservative(r, u, v, p, g[0], psg[0])
         r, u, v, p = self.bubble
-        W_bubble = primitive_to_conservative(r, u, v, p, g, psg)
+        W_bubble = primitive_to_conservative(r, u, v, p, g[1], psg[1])
 
         # Set bubble in the center of the domain
         U = W_ambient * np.ones((self.n, 4))
