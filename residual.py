@@ -159,28 +159,10 @@ class Upwind:
         return F
 
 
-def convective_fluxes(U, g):
-    # Unpack
-    r =  U[:, 0]
-    ru = U[:, 1]
-    rv = U[:, 2]
-    re = U[:, 3]
-    p = (re - .5 * (ru**2 + rv**2) / r) * (g - 1)
-    # Compute flux
-    F = np.empty(U.shape + (2,))
-    F[:, 0, 0] = ru
-    F[:, 1, 0] = ru**2 / r + p
-    F[:, 2, 0] = ru*rv / r
-    F[:, 3, 0] = (re + p) * ru / r
-    F[:, 0, 1] = rv
-    F[:, 1, 1] = ru*rv / r
-    F[:, 2, 1] = rv**2 / r + p
-    F[:, 3, 1] = (re + p) * rv / r
-    return F
-
 if __name__ == '__main__':
-    # These tests come for Toro's Riemann solvers booko
+    # These tests come from Toro's Riemann solvers book
     # TODO: Add as unit tests
+    # TODO: These will only test psg = 0
     output = np.empty(4)
     g = 1.4
     # Test 1

@@ -41,7 +41,7 @@ def post_process():
         V = np.empty_like(U)
         for i in range(mesh.n):
             V[i] = conservative_to_primitive(
-                    U[i, 0], U[i, 1], U[i, 2], U[i, 3], data.g)
+                    U[i, 0], U[i, 1], U[i, 2], U[i, 3], data.g, data.psg)
         V_list.append(V)
 
     # Plot

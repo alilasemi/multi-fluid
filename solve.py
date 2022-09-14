@@ -14,8 +14,8 @@ Problem = Cavitation
 nx = 41
 ny = 41
 #n_t = 5
-cfl = .2
-t_final = 1e-2#3.7e-5
+cfl = .1
+t_final = 2e-5#3.7e-5
 max_n_t = 99999999999
 level_set_reinitialization_rate = 15
 adaptive = False
@@ -383,8 +383,8 @@ class SimulationData:
         self.ny = ny
         self.n_faces = n_faces
         # Set the ratio of specific heats
-        self.g = 1.4
-        self.psg = 0
+        self.g = 4.4
+        self.psg = 6e8
         # Temporary buffers
         self.U = U
         self.phi = phi

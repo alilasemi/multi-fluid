@@ -61,11 +61,10 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
     bool success = false;
     std::vector<double> guesses = {.25*pL + .75*pR, .5*(pL + pR), .75*pL + .25*pR, 0};
     double p_star;
-    //std::vector<double> guesses = {.5*(pL + pR), 0};
     for (auto p : guesses) {
         double old_guess;
         int iter_max = 500;
-        auto tol = 1e-8;
+        auto tol = fmax(pL, pR) * 1e-6;
         for (int i = 0; i < iter_max; i++) {
             old_guess = p;
             // Compute RHS

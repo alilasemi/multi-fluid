@@ -636,14 +636,16 @@ class Cavitation(Problem):
 
     # Bubble state (rho, u, v, p)
     bubble = np.array([
-            1, 0, 0, 5e2
+            1, 0, 0, 2e3
     ])
 
     # Initial radius
     radius = .8e-1
 
     # Ratio of specific heats
-    g = 1.4
+    g = 4.4
+    # Pressure constant
+    psg = 6e8
 
     # Levels to use for contour plots
     levels = [
@@ -654,12 +656,13 @@ class Cavitation(Problem):
 
     def get_initial_conditions(self):
         g = self.g
+        psg = self.psg
 
         # Get initial conditions as conservatives
         r, u, v, p = self.ambient
-        W_ambient = primitive_to_conservative(r, u, v, p, g)
+        W_ambient = primitive_to_conservative(r, u, v, p, g, psg)
         r, u, v, p = self.bubble
-        W_bubble = primitive_to_conservative(r, u, v, p, g)
+        W_bubble = primitive_to_conservative(r, u, v, p, g, psg)
 
         # Set bubble in the center of the domain
         U = W_ambient * np.ones((self.n, 4))
@@ -731,18 +734,18 @@ class Cavitation(Problem):
 
 
 # TODO: These are marked for removal. Point to the C++ functions instead.
-def primitive_to_conservative(r, u, v, p, g):
+def primitive_to_conservative(r, u, v, p, g, psg):
     W = np.empty(4)
     W[0] = r
     W[1] = r * u
     W[2] = r * v
-    W[3] = p / (g - 1) + .5 * r * (u**2 + v**2)
+    W[3] = (p + g * psg) / (g - 1) + .5 * r * (u**2 + v**2);
     return W
 
-def conservative_to_primitive(r, ru, rv, re, g):
+def conservative_to_primitive(r, ru, rv, re, g, psg):
     V = np.empty(4)
     V[0] = r
     V[1] = ru / r
     V[2] = rv / r
-    V[3] = (re - .5 * (ru**2 + rv**2) / r) * (g - 1)
+    V[3] = (g - 1) * (re - .5 * (ru**2 + rv**2) / r) - g * psg;
     return V
