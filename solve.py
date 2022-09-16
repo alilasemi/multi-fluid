@@ -66,9 +66,10 @@ def main(show_progress_bar=True):
             BarColumn(finished_style='purple'),
             '[progress.percentage]{task.percentage:>3.0f}%',
             TimeRemainingColumn(),
+            '[yellow]{task.fields[iteration]}',
             disable = not show_progress_bar) as progress:
         task = progress.add_task('Running iterations...',
-                total=t_final)
+                total=t_final, iteration=0)
 
         # Loop over time
         x_shock = []
@@ -305,7 +306,7 @@ def main(show_progress_bar=True):
                         x_shock.append(mesh.xy[nx - 1 - j, 0])
                         break
             # Update progress bar
-            progress.update(task, advance=dt)
+            progress.update(task, advance=dt, iteration=i)
             # If it's hit the final time, then stop iterating
             if np.isclose(data.t, t_final, atol=0): break
 
