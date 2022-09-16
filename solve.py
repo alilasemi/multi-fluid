@@ -11,13 +11,13 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 21
-ny = 21
+nx = 81
+ny = 81
 #n_t = 5
 cfl = .05
-t_final = 4e-2#3.7e-5
+t_final = 2e-2#3.7e-5
 max_n_t = 99999999999
-level_set_reinitialization_rate = 1000
+level_set_reinitialization_rate = 0
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
@@ -50,6 +50,8 @@ def main(show_progress_bar=True):
             t_list, g, psg, file_name)
     del U, phi, U_ghost
 
+    # Set fluid identity based on phi
+    data.fluid_ID = (data.phi < 0).astype(int)
     # Save initial condition, if desired
     written_times = -np.ones_like(t_list)
     if 0 in t_list:
@@ -239,6 +241,16 @@ def main(show_progress_bar=True):
                         data.U[ghost_ID] = primitive_to_conservative(
                                 *mean_V, g_ghost, psg_ghost)
 
+            #if data.t > .008:
+            #    V = np.empty_like(data.U)
+            #    for j in range(mesh.n):
+            #        g_j = data.g[data.fluid_ID[j]]
+            #        psg_j = data.psg[data.fluid_ID[j]]
+            #        V[j] = conservative_to_primitive(*data.U[j], g_j, psg_j)
+            #    max_p = np.max(V[:, 3])
+            #    if max_p > 140000:
+            #        reakpoint()
+
             # If the solution NaN's, then store the current solution for plotting
             # and stop. It is important to do this after the ghost fluid update,
             # since in in a ghost fluid method, the cells that have seemingly
@@ -381,6 +393,7 @@ class SimulationData:
     U_L - np.array, solution evaluated at the left side of each face
     U_R - np.array, solution evaluated at the right side of each face
     fluid_ID - np.array, the fluid identity of each cell
+    fluid_ID_list - list, fluid identity at each stored timestep
     file_name - string, name of file for reading/writing data
     '''
     # Iteration counter
@@ -407,6 +420,7 @@ class SimulationData:
         self.U_L = np.empty((n_faces, 4))
         self.U_R = np.empty((n_faces, 4))
         self.fluid_ID = np.empty(nx*ny, dtype=int)
+        self.fluid_ID_list = []
         # Lists of data for each stored timestep
         self.U_list = []
         self.phi_list = []
@@ -426,13 +440,14 @@ class SimulationData:
         '''
         self.U_list.append(self.U.copy())
         self.phi_list.append(self.phi.copy())
+        self.fluid_ID_list.append(self.fluid_ID.copy())
         self.edge_points_list.append(mesh.edge_points.copy())
         self.vol_points_list.append(mesh.vol_points.copy())
 
     def write_to_file(self):
         with open(file_name, 'wb') as f:
             np.savez(f, nx=self.nx, ny=self.ny, n_faces=self.n_faces, g=self.g,
-                    psg=self.psg, fluid_ID=self.fluid_ID, U_list=self.U_list,
+                    psg=self.psg, fluid_ID_list=self.fluid_ID_list, U_list=self.U_list,
                     phi_list=self.phi_list, t_list=self.t_list,
                     edge_points_list=self.edge_points_list,
                     vol_points_list=self.vol_points_list, allow_pickle=True)
@@ -447,7 +462,7 @@ class SimulationData:
             sim_data.phi_list = data['phi_list']
             sim_data.edge_points_list = data['edge_points_list']
             sim_data.vol_points_list = data['vol_points_list']
-            sim_data.fluid_ID = data['fluid_ID']
+            sim_data.fluid_ID_list = data['fluid_ID_list']
         return sim_data
 
 if __name__ == '__main__':

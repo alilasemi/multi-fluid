@@ -37,12 +37,13 @@ def post_process():
 
     # Final primitives
     V_list = []
-    for U in data.U_list:
+    for i_iter, U in enumerate(data.U_list):
         V = np.empty_like(U)
         for i in range(mesh.n):
             # Get fluid data for each cell
-            g_i = data.g[data.fluid_ID[i]]
-            psg_i = data.psg[data.fluid_ID[i]]
+            fluid_ID = data.fluid_ID_list[i_iter]
+            g_i = data.g[fluid_ID[i]]
+            psg_i = data.psg[fluid_ID[i]]
             V[i] = conservative_to_primitive(
                     U[i, 0], U[i, 1], U[i, 2], U[i, 3], g_i, psg_i)
         V_list.append(V)
