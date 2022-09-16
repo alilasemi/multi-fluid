@@ -11,19 +11,19 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 81
-ny = 81
+nx = 41
+ny = 41
 #n_t = 5
-cfl = .05
-t_final = 2e-2#3.7e-5
+cfl = .005
+t_final = 4e-3#3.7e-5
 max_n_t = 99999999999
-level_set_reinitialization_rate = 0
+level_set_reinitialization_rate = 20
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
 # Physical parameters
 g = [4.4, 1.4]
-psg = [6e5, 0]#[6e8, 0]
+psg = [6e6, 0]#[6e8, 0]
 
 file_name = 'data.npz'
 ghost_fluid_interfaces = True
@@ -338,35 +338,37 @@ def update_phi(dt, data, mesh, problem):
     return phi_new
 
 def reinitialize_level_set(data, mesh):
-    '''
-    Only for cavitation case!
-    '''
-    x = mesh.xy[:, 0]
-    y = mesh.xy[:, 1]
-    # -- Approximation of the current radius of the bubble -- #
-    # Get cell IDs of some cells closest to the interface
-    if mesh.n < 5:
-        n_closest_cells = mesh.n
-    else:
-        n_closest_cells = 5
-    closest_IDs = np.argpartition(data.phi**2, n_closest_cells)[:n_closest_cells]
-    radius = np.mean(np.linalg.norm(mesh.xy[closest_IDs], axis=1))
-    data.phi = np.sqrt(x**2 + y**2) - radius
-#    #TODO what should the dt be??
-#    dt = np.sqrt(mesh.area) / 2
-#    eps = 1e0 * np.sqrt(mesh.area)
-#    for _ in range(10):
-#        phi += dt * (phi / np.sqrt(phi**2 + eps**2)) * (1 - np.linalg.norm(data.grad_phi,
-#                axis=1))
-#        # Update "far" values
-#        dist = np.sqrt(mesh.area)
-#        factor = 5
-#        high_IDs = phi > factor * dist
-#        low_IDs = phi < -factor * dist
-#        far_IDs = low_IDs | high_IDs
-#        phi[far_IDs] = np.sqrt(x**2 + y**2)[far_IDs] - radius
-#        # Update gradient
-#        compute_gradient_phi(phi, mesh.xy, mesh.neighbors, data.grad_phi)
+    # Array of points on the interface
+    interface_points = np.empty((mesh.interface_IDs.size, 2))
+    # For each interface
+    for i, interface_ID in enumerate(mesh.interface_IDs):
+        # Get cells on either side
+        L, R = mesh.edge[interface_ID]
+        phiL, phiR = data.phi[[L, R]]
+        xL, xR = mesh.xy[[L, R], 0]
+        yL, yR = mesh.xy[[L, R], 1]
+        # Use a 1D Lagrange fit in both x and y to find the location of phi = 0
+        if np.isclose(xL, xR):
+            x = np.mean([xL, xR])
+        else:
+            x = xR * phiL / (xL - xR) + xL * phiR / (xR - xL)
+            x /= phiL / (xL - xR) + phiR / (xR - xL)
+        if np.isclose(yL, yR):
+            y = np.mean([yL, yR])
+        else:
+            y = yR * phiL / (yL - yR) + yL * phiR / (yR - yL)
+            y /= phiL / (yL - yR) + phiR / (yR - yL)
+        # Store
+        interface_points[i] = [x, y]
+
+    # Set phi to be the signed distance to the nearest point on the interface
+    data.phi = np.sign(data.phi)
+    for i in range(mesh.n):
+        distances = np.linalg.norm(interface_points - mesh.xy[i], axis=1)
+        data.phi[i] *= np.min(distances)
+
+    # Update gradient
+    compute_gradient_phi(data.phi, mesh.xy, mesh.neighbors, data.grad_phi)
 
 class SimulationData:
     '''
