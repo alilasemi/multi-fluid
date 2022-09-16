@@ -11,19 +11,19 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 41
-ny = 41
+nx = 21
+ny = 21
 #n_t = 5
-cfl = .1
-t_final = 2e-5#3.7e-5
+cfl = .05
+t_final = 4e-2#3.7e-5
 max_n_t = 99999999999
-level_set_reinitialization_rate = 15
+level_set_reinitialization_rate = 1000
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
 # Physical parameters
 g = [4.4, 1.4]
-psg = [6e8, 0]
+psg = [6e5, 0]#[6e8, 0]
 
 file_name = 'data.npz'
 ghost_fluid_interfaces = True
@@ -31,29 +31,8 @@ update_ghost_fluid_cells = True
 linear_ghost_extrapolation = False
 levelset = True
 
-#t_list = [dt, .025, .05, .075, .1]
-#t_list = [dt, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1]
-#t_list = [dt, .0025, .005, .0075, .01]
-#t_list = [dt, .0025, .005, .0075, .01, .0125, .015, .0175, .02]
+# List of times at which the solution should be written to file
 t_list = np.linspace(0, t_final, 11).tolist()
-#t_list = [dt, .00125, .0025, .00325, .005]
-#t_list = [dt, .00025, .0005, .00075, .001]
-#t_list = [dt, .000125, .00025, .000375, .0005]
-#t_list = [dt, .00025]
-#t_list = [dt, .000025, .00005, .000075, .0001, .000125]
-#t_list = [dt, .000125, .00025, .000375, .0005,
-#        .000625, .00075, .000825, .001]
-#t_list = [.01]
-#t_list = [dt, .004, .008]
-#t_list = [dt, 4, 8]
-#t_list = [dt, 8*dt, 16*dt, 24*dt, 32*dt, 40*dt]
-#t_list = [dt, 4*dt, 8*dt, 12*dt, 16*dt, 20*dt]
-#t_list = [dt, 2*dt, 3*dt, 4*dt, 5*dt, 6*dt, 7*dt, 8*dt, 9*dt, 10*dt, 11*dt,
-#        12*dt, 13*dt, 14*dt, 15*dt]
-#t_list = [dt, 2*dt, 3*dt, 4*dt]
-#t_list = [0, dt,]
-#t_list = [dt,]
-#t_list = [0, 1, 2, 3, 4, 5]
 
 def main(show_progress_bar=True):
     # Create mesh
@@ -144,7 +123,7 @@ def main(show_progress_bar=True):
 
             # Compute gradients
             compute_gradient(data.U, mesh.xy, mesh.stencil,
-                    data.gradU.reshape(-1))
+                    data.gradU.reshape(-1), data.g, data.psg, data.fluid_ID)
             compute_gradient_phi(data.phi, mesh.xy, mesh.neighbors,
                     data.grad_phi)
 
@@ -196,6 +175,8 @@ def main(show_progress_bar=True):
                 for ghost_ID in ghost_IDs:
                     # Get new sign of phi for this ghost
                     sign = np.sign(data.phi[ghost_ID])
+                    # Update fluid ID
+                    data.fluid_ID[ghost_ID] = int(sign < 0)
                     # Get neighbors, not including this cell
                     neighbors = np.array(mesh.neighbors[ghost_ID])[1:]
                     # Get neighbors that are in the same fluid
@@ -211,8 +192,10 @@ def main(show_progress_bar=True):
                         print(f'Oh no, a lone ghost fluid cell! ID = {ghost_ID}')
                         continue
 
-                    # Perform extrapolation of the ghost fluid state
+                    # Perform linear extrapolation of the ghost fluid state
                     if linear_ghost_extrapolation:
+                        #TODO
+                        print("Linear ghost extrapolation with primitive variables not implemented!")
                         # Loop over state variables
                         for k in range(4):
                             # Construct A matrix:
@@ -235,9 +218,26 @@ def main(show_progress_bar=True):
                             c = np.linalg.solve(A.T @ A, A.T @ b)
                             # Evaluate extrapolant, U = c0 x + c1 y + c2.
                             data.U[ghost_ID, k] = np.dot(c[:-1], mesh.xy[ghost_ID]) + c[-1]
+                    # Use constant extrapolation
                     else:
-                        # Use constant extrapolation
-                        data.U[ghost_ID] = np.mean(data.U[fluid_neighbors], axis=0)
+                        # Neighbor conservative state vectors
+                        neighbor_U = data.U[fluid_neighbors]
+                        # For each neighbor
+                        neighbor_V = np.empty_like(neighbor_U)
+                        for j, cell_ID in enumerate(fluid_neighbors):
+                            # Get fluid data
+                            g_j = data.g[data.fluid_ID[cell_ID]]
+                            psg_j = data.psg[data.fluid_ID[cell_ID]]
+                            # Convert to primitive
+                            neighbor_V[j] = conservative_to_primitive(
+                                    *neighbor_U[j], g_j, psg_j)
+                        # Average neighbor primitive variables
+                        mean_V = np.mean(neighbor_V, axis=0)
+                        # Convert back to conservative
+                        g_ghost = data.g[data.fluid_ID[ghost_ID]]
+                        psg_ghost = data.psg[data.fluid_ID[ghost_ID]]
+                        data.U[ghost_ID] = primitive_to_conservative(
+                                *mean_V, g_ghost, psg_ghost)
 
             # If the solution NaN's, then store the current solution for plotting
             # and stop. It is important to do this after the ghost fluid update,
@@ -331,8 +331,14 @@ def reinitialize_level_set(data, mesh):
     '''
     x = mesh.xy[:, 0]
     y = mesh.xy[:, 1]
-    # Approximation of the current radius of the bubble
-    radius = np.linalg.norm(mesh.xy[np.argmin(data.phi**2)])
+    # -- Approximation of the current radius of the bubble -- #
+    # Get cell IDs of some cells closest to the interface
+    if mesh.n < 5:
+        n_closest_cells = mesh.n
+    else:
+        n_closest_cells = 5
+    closest_IDs = np.argpartition(data.phi**2, n_closest_cells)[:n_closest_cells]
+    radius = np.mean(np.linalg.norm(mesh.xy[closest_IDs], axis=1))
     data.phi = np.sqrt(x**2 + y**2) - radius
 #    #TODO what should the dt be??
 #    dt = np.sqrt(mesh.area) / 2
@@ -426,8 +432,9 @@ class SimulationData:
     def write_to_file(self):
         with open(file_name, 'wb') as f:
             np.savez(f, nx=self.nx, ny=self.ny, n_faces=self.n_faces, g=self.g,
-                    psg=self.psg, U_list=self.U_list, phi_list=self.phi_list,
-                    t_list=self.t_list, edge_points_list=self.edge_points_list,
+                    psg=self.psg, fluid_ID=self.fluid_ID, U_list=self.U_list,
+                    phi_list=self.phi_list, t_list=self.t_list,
+                    edge_points_list=self.edge_points_list,
                     vol_points_list=self.vol_points_list, allow_pickle=True)
 
     @classmethod
@@ -440,6 +447,7 @@ class SimulationData:
             sim_data.phi_list = data['phi_list']
             sim_data.edge_points_list = data['edge_points_list']
             sim_data.vol_points_list = data['vol_points_list']
+            sim_data.fluid_ID = data['fluid_ID']
         return sim_data
 
 if __name__ == '__main__':

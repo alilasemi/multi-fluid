@@ -31,7 +31,7 @@ def post_process():
     # Create mesh
     mesh = Mesh(data.nx, data.ny, Problem.xL, Problem.xR, Problem.yL, Problem.yR)
     # Create problem
-    problem = Problem(mesh.xy, data.t_list, mesh.bc_type)
+    problem = Problem(mesh.xy, data.t_list, mesh.bc_type, data.g, data.psg)
     has_exact_phi = hasattr(problem, 'plot_exact_interface') and callable(
             problem.plot_exact_interface)
 
@@ -40,8 +40,11 @@ def post_process():
     for U in data.U_list:
         V = np.empty_like(U)
         for i in range(mesh.n):
+            # Get fluid data for each cell
+            g_i = data.g[data.fluid_ID[i]]
+            psg_i = data.psg[data.fluid_ID[i]]
             V[i] = conservative_to_primitive(
-                    U[i, 0], U[i, 1], U[i, 2], U[i, 3], data.g, data.psg)
+                    U[i, 0], U[i, 1], U[i, 2], U[i, 3], g_i, psg_i)
         V_list.append(V)
 
     # Plot

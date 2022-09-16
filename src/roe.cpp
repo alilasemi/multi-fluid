@@ -88,7 +88,7 @@ void compute_flux(matrix_ref<double> U_L, matrix_ref<double> U_R,
     vector<double> n_hat = area_normal(all, 0).normalized();
 
     // Convert left and right to primitive
-    auto V_L = conservative_to_primitive(U_L, gL, psgR);
+    auto V_L = conservative_to_primitive(U_L, gL, psgL);
     auto V_R = conservative_to_primitive(U_R, gR, psgR);
     // Get normal/tangential component of velocity
     auto u_n_L = V_L(seq(1, 2)).dot(n_hat);

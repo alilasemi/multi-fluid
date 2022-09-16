@@ -4,9 +4,12 @@ using std::cout, std::endl;
 
 #include <defines.h>
 #include <gradient.h>
+#include <face_residual.h>
 
 void compute_gradient(matrix_ref<double> U, matrix_ref<double> xy,
-        std::vector<vector<long>>& stencil, vector_ref<double> gradU) {
+        std::vector<vector<long>>& stencil, vector_ref<double> gradU,
+        std::vector<double> g, std::vector<double> psg,
+        vector_ref<long> fluid_ID) {
     // Number of cells
     int n = U.rows();
     // Loop over all cells
@@ -21,16 +24,28 @@ void compute_gradient(matrix_ref<double> U, matrix_ref<double> xy,
             gradU_i = matrix<double>::Zero(4, 2);
         // Otherwise, solve with least squares
         } else {
+            // Get solution vectors for each stencil point
+            matrix<double> U_stencil = U(stencil[i], all);
+            // Convert to primitive variables
+            matrix<double> V_stencil(U_stencil.rows(), U_stencil.cols());
+            for (int i_stencil = 0; i_stencil < U_stencil.rows(); i_stencil++) {
+                // Get fluid data
+                auto g_i = g[fluid_ID(i_stencil)];
+                auto psg_i = psg[fluid_ID(i_stencil)];
+                V_stencil(i_stencil, all) = conservative_to_primitive(
+                        U_stencil(i_stencil, all), g_i, psg_i);
+            }
+
             // Construct A matrix: [x_i, y_i, 1]
             matrix<double> A = matrix<double>::Constant(n_points, 3, 1);
             A(all, seq(0, 1)) = xy(stencil[i], all);
-            // We desired [x_i, y_i, 1] @ [c0, c1, c2] = U[i], therefore Ax=b.
+            // We desired [x_i, y_i, 1] @ [c0, c1, c2] = V[i], therefore Ax=b.
             // However, there are more equations than unknowns (for most points)
             // so instead, solve the normal equations: A.T @ A x = A.T @ b
             matrix<double> c = (A.transpose() * A).partialPivLu().solve(
-                    A.transpose() * U(stencil[i], all));
-            // Since U = c0 x + c1 y + c2, then dU/dx = c0 and dU/dy = c1.
-            gradU_i = c(seq(0, 1), all).transpose();
+                    A.transpose() * V_stencil);
+            // Since V = c0 x + c1 y + c2, then dV/dx = c0 and dV/dy = c1.
+            matrix<double> gradV_i = c(seq(0, 1), all).transpose();
             // If any NaNs are found, that means the matrix inverse failed
             // (probably a singular combination of stencil points, such as all
             // points being in a straight line). In this case, set gradient to
@@ -40,6 +55,21 @@ void compute_gradient(matrix_ref<double> U, matrix_ref<double> xy,
                         << stencil[i].transpose() << endl;
                 gradU_i = matrix<double>::Zero(4, 2);
             }
+            // Otherwise, now gradV can be used to compute gradU using chain
+            // rule, since gradU = dU/dV * gradV.
+            matrix<double> dUdV(4, 4);
+            auto g_i = g[fluid_ID(i)];
+            auto psg_i = psg[fluid_ID(i)];
+            vector<double> V = conservative_to_primitive(U(i, all), g_i, psg_i);
+            auto r = V(0);
+            auto u = V(1);
+            auto v = V(2);
+            auto p = V(3);
+            dUdV << 1, 0, 0, 0,
+                    u, r, 0, 0,
+                    v, 0, r, 0,
+                    .5 * (u*u + v*v), r * u, r * v, 1 / (g_i - 1);
+            gradU_i = dUdV * gradV_i;
         }
     }
 }

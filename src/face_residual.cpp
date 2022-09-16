@@ -164,6 +164,13 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             // Evaluate left interior flux, using the left fluid data (this is
             // why gL and psgL are repeated)
             compute_flux(U_L, U_L_Riemann, area_normal, gL, gL, psgL, psgL, F);
+            //if (L == 549 or R == 549) {
+            //    cout << "L = " << L << ", R = " << R << endl;
+            //    cout << result.transpose() << endl;
+            //    cout << U_L_Riemann.transpose() << endl;
+            //    cout << U_R_Riemann.transpose() << endl;
+            //    cout << F << endl;
+            //}
             // Add contribution to quadrature
             F_integral_L += F * quad_wts(i, 0);
             // Evaluate right interior flux, using the right fluid data (this is
