@@ -14,10 +14,10 @@ Problem = Cavitation
 nx = 41
 ny = 41
 #n_t = 5
-cfl = .005
-t_final = 4e-3#3.7e-5
+cfl = .01
+t_final = 2e-2#3.7e-5
 max_n_t = 99999999999
-level_set_reinitialization_rate = 20
+level_set_reinitialization_rate = 2000
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
@@ -67,7 +67,8 @@ def main(show_progress_bar=True):
             '[progress.percentage]{task.percentage:>3.0f}%',
             TimeRemainingColumn(),
             '[yellow]{task.fields[iteration]}',
-            disable = not show_progress_bar) as progress:
+            disable = not show_progress_bar,
+            auto_refresh=False) as progress:
         task = progress.add_task('Running iterations...',
                 total=t_final, iteration=0)
 
@@ -306,7 +307,7 @@ def main(show_progress_bar=True):
                         x_shock.append(mesh.xy[nx - 1 - j, 0])
                         break
             # Update progress bar
-            progress.update(task, advance=dt, iteration=i)
+            progress.update(task, advance=dt, iteration=i, refresh=True)
             # If it's hit the final time, then stop iterating
             if np.isclose(data.t, t_final, atol=0): break
 
