@@ -41,6 +41,17 @@ double f(double p, double pL, double pR, double AL, double AR, double BL,
             + uR - uL;
 }
 
+// See Toro, pg. 134.
+double compute_shock_speed(double r, double u, double p_star, double A,
+        double B, double D, bool left) {
+    auto Q = sqrt((p_star + B + D) / A);
+    if (left) {
+        return u - Q / r;
+    } else {
+        return u + Q / r;
+    }
+}
+
 void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
         double pR, double uR, double gL, double gR, double psgL, double psgR,
         vector_ref<double> result) {
@@ -117,9 +128,76 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
         r_starR = r_star_expansion(rR, p_star, pR, gR);
     }
 
+    // Now the star state is known, so choose the solution at x/t = 0.
+    double r_0;
+    double u_0;
+    double p_0;
+    // Check for a left shock
+    if (p_star > pL) {
+        // If the shock speed is positive, then x/t = 0 is to the left of the
+        // shock, therefore U|_x/t=0 = U_L.
+        auto S = compute_shock_speed(rL, uL, p_star, AL, BL, DL, true);
+        if (S > 0) {
+            r_0 = rL;
+            u_0 = uL;
+            p_0 = pL;
+        // If the shock speed is negative and u_star is positive, then x/t = 0
+        // is in between the shock and the contact.
+        } else if (u_star > 0) {
+            r_0 = r_starL;
+            u_0 = u_star;
+            p_0 = p_star;
+        // If the shock speed is negative and u_star is negative, then it's
+        // between the contact and the rightmost wave. Need to first find out
+        // if it's a right shock or not.
+        } else if (p_star > pR) {
+            // If the shock speed is positive, then x/t = 0 is to the left of
+            // the shock, therefore U|_x/t=0 = U_starR.
+            S = compute_shock_speed(rR, uR, p_star, AL, BL, DL, false);
+            if (S > 0) {
+                r_0 = r_starR;
+                u_0 = u_star;
+                p_0 = p_star;
+            // Otherwise, then x/t = 0 is the right of the shock.
+            } else {
+                r_0 = rR;
+                u_0 = uR;
+                p_0 = pR;
+            }
+        // Otherwise, it's a right expansion
+        } else {
+    // Otherwise, it's a left expansion
+    } else {
+        auto S_H = uL - cL;
+        auto c_starL = sqrt(gL * p_star / r_starL);
+        auto S_T = u_star - c_starL;
+        // If the head of the expansion has positive speed, then x/t = 0 is to
+        // the left of the expansion, therefore U|_x/t=0 = U_L.
+        if (S_H > 0) {
+            r_0 = rL;
+            u_0 = uL;
+            p_0 = pL;
+        // Otherwise, if the tail of the expansion has positive speed, then
+        // x/t = 0 lies inside the expansion. In this case, use isentropic
+        // relations and the Riemann invariant.
+        } else if (S_T > 0) {
+
+
+    // Select the fluid ID in the middle (at x/t = 0)
+    double g_0;
+    double psg_0;
+    if (u_star > 0) {
+        g_0 = gL;
+        psg_0 = psgL;
+    } else {
+        g_0 = gR;
+        psg_0 = psgR;
+    }
+
     // Store result
-    result[0] = p_star;
-    result[1] = u_star;
-    result[2] = r_starL;
-    result[3] = r_starR;
+    result[0] = r_0;
+    result[1] = u_0;
+    result[2] = p_0;
+    result[3] = g_0;
+    result[4] = psg_0;
 }

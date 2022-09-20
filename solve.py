@@ -11,11 +11,11 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 41
-ny = 41
+nx = 11
+ny = 11
 #n_t = 5
-cfl = .01
-t_final = 2e-2#3.7e-5
+cfl = .1
+t_final = 1e-2#3.7e-5
 max_n_t = 99999999999
 level_set_reinitialization_rate = 2000
 adaptive = False
@@ -23,7 +23,7 @@ rho_levels = np.linspace(.15, 1.05, 19)
 
 # Physical parameters
 g = [4.4, 1.4]
-psg = [6e6, 0]#[6e8, 0]
+psg = [6e5, 0]#[6e8, 0]
 
 file_name = 'data.npz'
 ghost_fluid_interfaces = True
