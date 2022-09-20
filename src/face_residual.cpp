@@ -144,13 +144,13 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             auto r = vector<double>(2);
             auto u_n = vector<double>(2);
             auto p = vector<double>(2);
-            vector<double> result(4);
+            vector<double> result(9);
             compute_exact_riemann_problem(V_L(0), V_L(3), u_n_L, V_R(0), V_R(3),
                     u_n_R, gL, gR, psgL, psgR, result);
-            auto& p_star = result(0);
-            auto& u_star = result(1);
-            auto& r_starL = result(2);
-            auto& r_starR = result(3);
+            auto& r_starL = result(5);
+            auto& r_starR = result(6);
+            auto& u_star = result(7);
+            auto& p_star = result(8);
             // Velocity, after the Riemann problem (which modifies the normal
             // component)
             vector<double> vel_L = u_star * n_hat + u_t_L * t_hat;

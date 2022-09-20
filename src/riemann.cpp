@@ -153,7 +153,7 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
         } else if (p_star > pR) {
             // If the shock speed is positive, then x/t = 0 is to the left of
             // the shock, therefore U|_x/t=0 = U_starR.
-            S = compute_shock_speed(rR, uR, p_star, AL, BL, DL, false);
+            S = compute_shock_speed(rR, uR, p_star, AR, BR, DR, false);
             if (S > 0) {
                 r_0 = r_starR;
                 u_0 = u_star;
@@ -166,6 +166,30 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
             }
         // Otherwise, it's a right expansion
         } else {
+            auto S_H = uR + cR;
+            auto c_starR = sqrt(gR * p_star / r_starR);
+            auto S_T = u_star + c_starR;
+            // If the tail of the expansion has positive speed, then x/t = 0 is to
+            // the left of the expansion, therefore U|_x/t=0 = U_starR.
+            if (S_T > 0) {
+                r_0 = r_starR;
+                u_0 = u_star;
+                p_0 = p_star;
+            // Otherwise, if the head of the expansion has positive speed, then
+            // x/t = 0 lies inside the expansion. In this case, use isentropic
+            // relations and the Riemann invariant.
+            } else if (S_H > 0) {
+                u_0 = (2 / (gR + 1)) * (-cR + ((gR - 1) / 2) * uR);
+                r_0 = pow( gR * pR / (pow(rR, gR) * pow(u_0, 2)), 1 / (1 - gR) );
+                p_0 = r_0 * pow(u_0, 2) / gR;
+            // Otherwise, if the head of the expansion has negative speed, then
+            // x/t = 0 is to the right of the expansion.
+            } else {
+                r_0 = rR;
+                u_0 = uR;
+                p_0 = pR;
+            }
+        }
     // Otherwise, it's a left expansion
     } else {
         auto S_H = uL - cL;
@@ -181,7 +205,59 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
         // x/t = 0 lies inside the expansion. In this case, use isentropic
         // relations and the Riemann invariant.
         } else if (S_T > 0) {
-
+            u_0 = (2 / (gL + 1)) * (cL + ((gL - 1) / 2) * uL);
+            r_0 = pow( gL * pL / (pow(rL, gL) * pow(u_0, 2)), 1 / (1 - gL) );
+            p_0 = r_0 * pow(u_0, 2) / gL;
+        // Otherwise, if u_star is positive, then x/t = 0 is in between the
+        // expansion and the contact.
+        } else if (u_star > 0) {
+            r_0 = r_starL;
+            u_0 = u_star;
+            p_0 = p_star;
+        // If the expansion head and tail speed is negative and u_star is
+        // negative, then it's between the contact and the rightmost wave. Need
+        // to first find out if it's a right shock or not.
+        } else if (p_star > pR) {
+            // If the shock speed is positive, then x/t = 0 is to the left of
+            // the shock, therefore U|_x/t=0 = U_starR.
+            auto S = compute_shock_speed(rR, uR, p_star, AR, BR, DR, false);
+            if (S > 0) {
+                r_0 = r_starR;
+                u_0 = u_star;
+                p_0 = p_star;
+            // Otherwise, then x/t = 0 is the right of the shock.
+            } else {
+                r_0 = rR;
+                u_0 = uR;
+                p_0 = pR;
+            }
+        // Otherwise, it's a right expansion
+        } else {
+            auto S_H = uR + cR;
+            auto c_starR = sqrt(gR * p_star / r_starR);
+            auto S_T = u_star + c_starR;
+            // If the tail of the expansion has positive speed, then x/t = 0 is to
+            // the left of the expansion, therefore U|_x/t=0 = U_starR.
+            if (S_T > 0) {
+                r_0 = r_starR;
+                u_0 = u_star;
+                p_0 = p_star;
+            // Otherwise, if the head of the expansion has positive speed, then
+            // x/t = 0 lies inside the expansion. In this case, use isentropic
+            // relations and the Riemann invariant.
+            } else if (S_H > 0) {
+                u_0 = (2 / (gR + 1)) * (-cR + ((gR - 1) / 2) * uR);
+                r_0 = pow( gR * pR / (pow(rR, gR) * pow(u_0, 2)), 1 / (1 - gR) );
+                p_0 = r_0 * pow(u_0, 2) / gR;
+            // Otherwise, if the head of the expansion has negative speed, then
+            // x/t = 0 is to the right of the expansion.
+            } else {
+                r_0 = rR;
+                u_0 = uR;
+                p_0 = pR;
+            }
+        }
+    }
 
     // Select the fluid ID in the middle (at x/t = 0)
     double g_0;
@@ -200,4 +276,8 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
     result[2] = p_0;
     result[3] = g_0;
     result[4] = psg_0;
+    result[5] = r_starL;
+    result[6] = r_starR;
+    result[7] = u_star;
+    result[8] = p_star;
 }

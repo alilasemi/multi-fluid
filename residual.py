@@ -7,7 +7,7 @@ import scipy.optimize
 from build.src.libpybind_bindings import (
         compute_interior_face_residual, compute_fluid_fluid_face_residual,
         compute_boundary_face_residual, compute_exact_riemann_problem,
-        compute_flux)
+        compute_flux, compute_flux_roe)
 from lagrange import LagrangeSegment
 
 
@@ -165,49 +165,53 @@ if __name__ == '__main__':
     # These tests come from Toro's Riemann solvers book
     # TODO: Add as unit tests
     # TODO: These will only test psg = 0
-    output = np.empty(4)
-    g = 1.4
-    psg = 0
-    # Test 1
-    rtol = 1e-4
-    rL, uL, pL, rR, uR, pR = 1, 0, 1, .125, 0, .1
-    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, g, g, psg, psg, output)
-    test1 = np.isclose([.30313, .92745, .42632, .26557], output, rtol=rtol)
-    print(f'Test 1: {test1}')
-    # Test 2
-    rtol = 1e-2
-    rL, uL, pL, rR, uR, pR = 1, -2, .4, 1, 2, .4
-    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, g, g, psg, psg, output)
-    test2 = np.isclose([.00189, 0, .02185, .02185], output, rtol=rtol)
-    print(f'Test 2: {test2}')
-    # Test 3
-    rtol = 1e-5
-    rL, uL, pL, rR, uR, pR = 1, 0, 1000, 1, 0, .01
-    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, g, g, psg, psg, output)
-    test3 = np.isclose([460.894, 19.5975, .57506, 5.99924], output, rtol=rtol)
-    print(f'Test 3: {test3}')
-    # Test 4
-    rtol = 1e-5
-    rL, uL, pL, rR, uR, pR = 1, 0, .01, 1, 0, 100
-    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, g, g, psg, psg, output)
-    test4 = np.isclose([46.0950, -6.19633, 5.99242, .57511], output, rtol=rtol)
-    print(f'Test 4: {test4}')
-    # Test 5
-    rtol = 1e-5
-    rL, uL, pL, rR, uR, pR = 5.99924, 19.5975, 460.894, 5.99242, -6.19633, 46.0950
-    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, g, g, psg, psg, output)
-    test5 = np.isclose([1691.64, 8.68975, 14.2823, 31.0426], output, rtol=rtol)
-    print(f'Test 5: {test5}')
+    output = np.empty(5)
+#    g = 1.4
+#    psg = 0
+#    # Test 1
+#    rtol = 1e-4
+#    rL, uL, pL, rR, uR, pR = 1, 0, 1, .125, 0, .1
+#    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, g, g, psg, psg, output)
+#    test1 = np.isclose([.30313, .92745, .42632, .26557], output, rtol=rtol)
+#    print(f'Test 1: {test1}')
+#    # Test 2
+#    rtol = 1e-2
+#    rL, uL, pL, rR, uR, pR = 1, -2, .4, 1, 2, .4
+#    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, g, g, psg, psg, output)
+#    test2 = np.isclose([.00189, 0, .02185, .02185], output, rtol=rtol)
+#    print(f'Test 2: {test2}')
+#    # Test 3
+#    rtol = 1e-5
+#    rL, uL, pL, rR, uR, pR = 1, 0, 1000, 1, 0, .01
+#    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, g, g, psg, psg, output)
+#    test3 = np.isclose([460.894, 19.5975, .57506, 5.99924], output, rtol=rtol)
+#    print(f'Test 3: {test3}')
+#    # Test 4
+#    rtol = 1e-5
+#    rL, uL, pL, rR, uR, pR = 1, 0, .01, 1, 0, 100
+#    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, g, g, psg, psg, output)
+#    test4 = np.isclose([46.0950, -6.19633, 5.99242, .57511], output, rtol=rtol)
+#    print(f'Test 4: {test4}')
+#    # Test 5
+#    rtol = 1e-5
+#    rL, uL, pL, rR, uR, pR = 5.99924, 19.5975, 460.894, 5.99242, -6.19633, 46.0950
+#    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, g, g, psg, psg, output)
+#    test5 = np.isclose([1691.64, 8.68975, 14.2823, 31.0426], output, rtol=rtol)
+#    print(f'Test 5: {test5}')
 
-    # Testing that the flux does not depend on direction
-    U_L = np.array([1, 800, 0, 2.5e5])
-    U_R = np.array([1, 0, 0, 2.5e5])
+    # Testing that the exact flux gives about the same thing as Roe
     #area_normal = np.array([np.cos(.8), np.sin(.8)]).reshape(2, 1)
     area_normal = np.array([1, 0]).reshape(2, 1)
     gL = 1.4
     gR = 1.4
     psgL = 0
     psgR = 0
-    F1 = np.empty(4)
-    compute_flux(U_L, U_R,  area_normal, gL, gR, psgL, psgR, F1)
-    breakpoint()
+    F = np.empty(4)
+    F_roe = np.empty(4)
+    v = 1000
+    U_LR = [(np.array([1, v, 0, 2.5e5 + .5*v**2]), np.array([1, 0, 0, 2.5e5])),
+            ]
+    for U_L, U_R in U_LR:
+        compute_flux(U_L, U_R, area_normal, gL, gR, psgL, psgR, F)
+        compute_flux_roe(U_L, U_R, area_normal, gL, F_roe)
+        print(F - F_roe)

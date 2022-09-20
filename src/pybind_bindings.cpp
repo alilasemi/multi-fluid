@@ -22,4 +22,6 @@ PYBIND11_MODULE(libpybind_bindings, m) {
             "A function that...");
     m.def("compute_flux", &compute_flux,
             "A function that...");
+    m.def("compute_flux_roe", &compute_flux_roe,
+            "A function that...");
 }

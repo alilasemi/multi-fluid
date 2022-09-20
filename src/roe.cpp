@@ -33,7 +33,7 @@ matrix<double> convective_fluxes(matrix_ref<double> U, double g, double psg) {
 
 void compute_flux_roe(matrix_ref<double> U_L,
         matrix_ref<double> U_R, matrix<double>& area_normal, double g,
-        vector<double>& F) {
+        vector_ref<double> F) {
     // Unit normals
     auto length = area_normal.norm();
     auto unit_normals = area_normal / length;
@@ -97,7 +97,7 @@ void compute_flux(matrix_ref<double> U_L, matrix_ref<double> U_R,
     auto r = vector<double>(2);
     auto u_n = vector<double>(2);
     auto p = vector<double>(2);
-    vector<double> result(5);
+    vector<double> result(9);
     compute_exact_riemann_problem(V_L(0), V_L(3), u_n_L, V_R(0), V_R(3),
             u_n_R, gL, gR, psgL, psgR, result);
     auto& r_0 = result(0);
@@ -112,13 +112,4 @@ void compute_flux(matrix_ref<double> U_L, matrix_ref<double> U_R,
     // Compute flux
     matrix<double> full_F = convective_fluxes(U_0, g_0, psg_0);
     F = full_F * area_normal;
-    //// Use the normal vector for the direction of the momentum flux
-    //F(seq(1, 2)) = F(1) * n_hat;
-    cout << "info" << endl;
-    cout << "u_0 = " << u_0 << endl;
-    cout << F << endl;
-
-    vector<double> F_roe(4);
-    compute_flux_roe(U_L, U_R, area_normal, gL, F_roe);
-    cout << F_roe << endl;
 }
