@@ -11,8 +11,8 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 41
-ny = 41
+nx = 3
+ny = 3
 #n_t = 5
 cfl = .1
 t_final = 2e-2#3.7e-5
@@ -340,6 +340,11 @@ def update_phi(dt, data, mesh, problem):
     return phi_new
 
 def reinitialize_level_set(data, mesh):
+    # Check to see if there are any interfaces
+    if mesh.interface_IDs.size == 0:
+        print('Level set reinitialization requested, but there are no '
+                'interfaces!')
+        return
     # Array of points on the interface
     interface_points = np.empty((mesh.interface_IDs.size, 2))
     # For each interface

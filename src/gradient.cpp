@@ -53,7 +53,7 @@ void compute_gradient(matrix_ref<double> U, matrix_ref<double> xy,
             if (c.array().isNaN().any()) {
                 cout << "Gradient calculation failed! Stencil = "
                         << stencil[i].transpose() << endl;
-                gradU_i = matrix<double>::Zero(4, 2);
+                gradV_i = matrix<double>::Zero(4, 2);
             }
             // Otherwise, now gradV can be used to compute gradU using chain
             // rule, since gradU = dU/dV * gradV.

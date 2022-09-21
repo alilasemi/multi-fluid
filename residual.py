@@ -201,15 +201,19 @@ if __name__ == '__main__':
 
     # Testing that the exact flux gives about the same thing as Roe
     #area_normal = np.array([np.cos(.8), np.sin(.8)]).reshape(2, 1)
-    area_normal = np.array([1, 0]).reshape(2, 1)
+    area_normal = np.array([np.sqrt(2)/2, np.sqrt(2)/2]).reshape(2, 1)
+    #area_normal = np.array([1, 0]).reshape(2, 1)
+    #area_normal = np.array([0, 1]).reshape(2, 1)
     gL = 1.4
     gR = 1.4
     psgL = 0
     psgR = 0
     F = np.empty(4)
     F_roe = np.empty(4)
-    v = 1000
-    U_LR = [(np.array([1, v, 0, 2.5e5 + .5*v**2]), np.array([1, 0, 0, 2.5e5])),
+    vL = 2000
+    vR = 0
+    U_LR = [(np.array([1, vL, 0, 2.5e5 + .5*vL**2]), np.array([1, vR, 0, 2.5e5 +
+            .5*vR**2])),
             ]
     for U_L, U_R in U_LR:
         compute_flux(U_L, U_R, area_normal, gL, gR, psgL, psgR, F)

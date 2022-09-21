@@ -93,6 +93,10 @@ void compute_flux(matrix_ref<double> U_L, matrix_ref<double> U_R,
     // Get normal/tangential component of velocity
     auto u_n_L = V_L(seq(1, 2)).dot(n_hat);
     auto u_n_R = V_R(seq(1, 2)).dot(n_hat);
+    vector<double> t_hat(2);
+    t_hat << -n_hat(1), n_hat(0);
+    auto u_t_L = V_L(seq(1, 2)).dot(t_hat);
+    auto u_t_R = V_R(seq(1, 2)).dot(t_hat);
     // Solve exact fluid-fluid Riemann problem
     auto r = vector<double>(2);
     auto u_n = vector<double>(2);
@@ -101,13 +105,22 @@ void compute_flux(matrix_ref<double> U_L, matrix_ref<double> U_R,
     compute_exact_riemann_problem(V_L(0), V_L(3), u_n_L, V_R(0), V_R(3),
             u_n_R, gL, gR, psgL, psgR, result);
     auto& r_0 = result(0);
-    auto& u_0 = result(1);
+    auto& u_n_0 = result(1);
     auto& p_0 = result(2);
     auto& g_0 = result(3);
     auto& psg_0 = result(4);
+    // Get the tangential velocity by upwinding
+    double u_t_0;
+    if (u_n_0 > 0) {
+        u_t_0 = u_t_L;
+    } else {
+        u_t_0 = u_t_R;
+    }
+
     // Convert back to conservative
+    vector<double> velocity_0 = u_n_0 * n_hat + u_t_0 * t_hat;
     vector<double> V_0(4);
-    V_0 << r_0, u_0 * n_hat(0), u_0 * n_hat(1), p_0;
+    V_0 << r_0, velocity_0(0), velocity_0(1), p_0;
     matrix<double> U_0 = primitive_to_conservative(V_0, g_0, psg_0);
     // Compute flux
     matrix<double> full_F = convective_fluxes(U_0, g_0, psg_0);
