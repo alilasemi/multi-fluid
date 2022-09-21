@@ -640,7 +640,7 @@ class Cavitation(Problem):
     ])
 
     # Initial radius
-    radius = 1.5e-1
+    radius = .4e-1
 
     # Levels to use for contour plots
     levels = [

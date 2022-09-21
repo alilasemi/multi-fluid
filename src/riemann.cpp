@@ -76,7 +76,7 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
     for (auto p : guesses) {
         double old_guess;
         int iter_max = 500;
-        auto tol = fmax(pL, pR) * 1e-6;
+        auto tol = fmax(pL, pR) * 1e-9;
         for (int i = 0; i < iter_max; i++) {
             old_guess = p;
             // Compute RHS

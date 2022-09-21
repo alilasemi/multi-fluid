@@ -131,6 +131,10 @@ def main(show_progress_bar=True):
             compute_gradient_phi(data.phi, mesh.xy, mesh.neighbors,
                     data.grad_phi)
 
+            # TODO hack gradients to be zero
+            data.gradU = np.zeros_like(data.gradU)
+            data.grad_phi = np.zeros_like(data.grad_phi)
+
             # Create ghost fluid interfaces
             if ghost_fluid_interfaces:
                 mesh.create_interfaces(data, problem.fluid_solid)

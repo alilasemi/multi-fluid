@@ -96,6 +96,12 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         auto psgL = psg[fluid_ID(L)];
         auto psgR = psg[fluid_ID(R)];
 
+        //TODO
+        //std::vector<long> int_IDs = {2, 4, 7, 10, 11, 12};
+        std::vector<long> int_IDs = {2, 12};
+        bool print = std::find(int_IDs.begin(), int_IDs.end(), face_ID) != int_IDs.end();
+        if (print) cout << face_ID << endl;
+
         // Gradients for these cells
         matrix_map<double> gradU_L(&gradU[L*4*2], 4, 2);
         matrix_map<double> gradU_R(&gradU[R*4*2], 4, 2);
@@ -141,9 +147,6 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             auto u_t_L = V_L(seq(1, 2)).dot(t_hat);
             auto u_t_R = V_R(seq(1, 2)).dot(t_hat);
             // Solve exact fluid-fluid Riemann problem
-            auto r = vector<double>(2);
-            auto u_n = vector<double>(2);
-            auto p = vector<double>(2);
             vector<double> result(9);
             compute_exact_riemann_problem(V_L(0), V_L(3), u_n_L, V_R(0), V_R(3),
                     u_n_R, gL, gR, psgL, psgR, result);
@@ -160,6 +163,14 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             V_R << r_starR, vel_R(0), vel_R(1), p_star;
             matrix<double> U_L_Riemann = primitive_to_conservative(V_L, gL, psgL);
             matrix<double> U_R_Riemann = primitive_to_conservative(V_R, gR, psgR);
+            //if (print) {
+            //    cout << "U_Riemann" << endl;
+            //    if (L == 4) {
+            //        cout << U_L_Riemann << endl;
+            //    } else {
+            //        cout << U_R_Riemann << endl;
+            //    }
+            //}
 
             // Evaluate left interior flux, using the left fluid data (this is
             // why gL and psgL are repeated)
@@ -183,7 +194,17 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         // Update residual of cells on the left and right
         residual(L, all) += -1 / area(L, 0) * F_integral_L;
         residual(R, all) +=  1 / area(R, 0) * F_integral_R;
+
+        if (print) {
+            cout << "integral" << endl;
+            if (L == 4) {
+                cout << F_integral_L << endl;
+            } else {
+                cout << F_integral_R << endl;
+            }
+        }
     }
+    cout << "EEEEEEND " << endl;
 }
 
 
