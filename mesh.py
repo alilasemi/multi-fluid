@@ -69,7 +69,7 @@ class Mesh:
         self.vol_points = np.empty((self.n_primal_cells, 2))
         self.neighbors = np.empty(self.n, dtype=object)
         self.stencil = np.empty(self.n, dtype=object)
-        self.max_limiter_stencil_size = 6
+        self.max_limiter_stencil_size = 7
         self.limiter_stencil = np.empty((self.n, self.max_limiter_stencil_size),
                 dtype=int)
         self.edge = np.empty((self.n_faces, 2), dtype=int)
@@ -128,12 +128,15 @@ class Mesh:
 
                 # Also check left and bottom side (not needed for faces since
                 # it's redundant, but useful for finishing the stencil)
-                if (i > 0):
+                if i > 0:
                     left_ID = j*nx + i - 1
                     stencil.append(left_ID)
-                if (j > 0):
+                if j > 0:
                     below_ID = (j - 1)*nx + i
                     stencil.append(below_ID)
+                if i > 0 and j > 0:
+                    left_below_ID = (j - 1)*nx + i - 1
+                    stencil.append(left_below_ID)
 
                 # Store stencil
                 self.stencil[cell_ID] = stencil.copy()
@@ -144,8 +147,7 @@ class Mesh:
 
                 # Store a vectorized-friendly version of stencil, with a
                 # hardcoded maximum stencil size to avoid the jagged array.
-                # Also, don't include the current cell in this one. Instead, the
-                # extra "padded" array elements are  the current cell.
+                # The extra "padded" array elements are  the current cell.
                 # This is used for the limiter.
                 self.limiter_stencil[cell_ID, :len(stencil)] = stencil
                 self.limiter_stencil[cell_ID, len(stencil):] = cell_ID

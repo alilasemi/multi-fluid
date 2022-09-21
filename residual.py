@@ -219,3 +219,13 @@ if __name__ == '__main__':
         compute_flux(U_L, U_R, area_normal, gL, gR, psgL, psgR, F)
         compute_flux_roe(U_L, U_R, area_normal, gL, F_roe)
         print(F - F_roe)
+
+    print("test")
+    U_L = np.array([  1033.20818198,   1864.46042583,   1864.46042651, 789732.18893363])
+    U_R = np.array([  1033.20818221,  -1864.46042674,  -1864.46042742, 789732.18889649])
+    #U_b = np.array([ 1.02082322e+03, -3.68422265e+02, -3.68422265e+02, 7.84533017e+05])
+    U_b = np.array([ 2.04441635e+00, -1.48672743e-08, -1.48674070e-08, 1.40086659e+04])
+    compute_flux(U_L, U_b, area_normal, 4.4, 1.4, 6e5, 0, F)
+    print(F)
+    compute_flux(U_b, U_R, area_normal, 1.4, 4.4, 0, 6e5, F)
+    print(F)

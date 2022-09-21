@@ -98,9 +98,6 @@ void compute_flux(matrix_ref<double> U_L, matrix_ref<double> U_R,
     auto u_t_L = V_L(seq(1, 2)).dot(t_hat);
     auto u_t_R = V_R(seq(1, 2)).dot(t_hat);
     // Solve exact fluid-fluid Riemann problem
-    auto r = vector<double>(2);
-    auto u_n = vector<double>(2);
-    auto p = vector<double>(2);
     vector<double> result(9);
     compute_exact_riemann_problem(V_L(0), V_L(3), u_n_L, V_R(0), V_R(3),
             u_n_R, gL, gR, psgL, psgR, result);

@@ -139,6 +139,16 @@ def main(show_progress_bar=True):
             if ghost_fluid_interfaces:
                 mesh.create_interfaces(data, problem.fluid_solid)
 
+            print('bubdensity', data.U[4, 0])
+            if data.i in [22, 23, 24]:
+                print(f'Printing i = {data.i}')
+                print(data.U[0])
+                flipped = data.U[8].copy()
+                flipped[1:3] *= -1
+                print(flipped)
+                print(data.U[4])
+                if data.i == 24: breakpoint()
+
             # -- Copy solution, then update -- #
             U_old = data.U.copy()
             try:
