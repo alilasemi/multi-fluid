@@ -100,6 +100,7 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         //std::vector<long> int_IDs = {2, 4, 7, 10, 11, 12};
         std::vector<long> int_IDs = {2, 12};
         bool print = std::find(int_IDs.begin(), int_IDs.end(), face_ID) != int_IDs.end();
+        print = false;
         if (print) cout << face_ID << endl;
 
         // Gradients for these cells
@@ -204,7 +205,7 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             }
         }
     }
-    cout << "EEEEEEND " << endl;
+    //cout << "EEEEEEND " << endl;
 }
 
 

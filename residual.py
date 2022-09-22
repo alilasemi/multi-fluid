@@ -152,8 +152,9 @@ class Upwind:
         vel_dot_normal_R = np.einsum('ij, ij -> i', vel_R, unit_normals)
         # If velocity points left to right, then the left state is upwind.
         # Otherwise, the right state is upwind
-        upwindL = vel_dot_normal_L >= 0
-        upwindR = vel_dot_normal_L < 0
+        vel_dot_normal = .5 * (vel_dot_normal_L + vel_dot_normal_R)
+        upwindL = vel_dot_normal >= 0
+        upwindR = vel_dot_normal < 0
         # Compute the upwind flux in both cases
         F = np.empty(n_faces)
         F[upwindL] = length[upwindL, 0] * phi_L[upwindL] * vel_dot_normal_L[upwindL]

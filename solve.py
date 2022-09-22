@@ -11,13 +11,13 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 3
-ny = 3
+nx = 81
+ny = 81
 #n_t = 5
-cfl = .1
+cfl = .05
 t_final = 2e-2#3.7e-5
 max_n_t = 99999999999
-level_set_reinitialization_rate = 2000
+level_set_reinitialization_rate = 20
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
@@ -132,22 +132,24 @@ def main(show_progress_bar=True):
                     data.grad_phi)
 
             # TODO hack gradients to be zero
-            data.gradU = np.zeros_like(data.gradU)
-            data.grad_phi = np.zeros_like(data.grad_phi)
+            #data.gradU = np.zeros_like(data.gradU)
+            #data.grad_phi = np.zeros_like(data.grad_phi)
 
             # Create ghost fluid interfaces
             if ghost_fluid_interfaces:
                 mesh.create_interfaces(data, problem.fluid_solid)
 
-            print('bubdensity', data.U[4, 0])
-            if data.i in [22, 23, 24]:
-                print(f'Printing i = {data.i}')
-                print(data.U[0])
-                flipped = data.U[8].copy()
-                flipped[1:3] *= -1
-                print(flipped)
-                print(data.U[4])
-                if data.i == 24: breakpoint()
+            #print('bubdensity', data.U[4, 0])
+            #print(data.phi[0])
+            #print(data.phi[8])
+            #if True:#data.i in [22, 23, 24]:
+            #    print(f'Printing i = {data.i}')
+            #    print(data.U[0])
+            #    flipped = data.U[8].copy()
+            #    flipped[1:3] *= -1
+            #    print(flipped)
+            #    print(data.U[4])
+            #    #if data.i == 24: reakpoint()
 
             # -- Copy solution, then update -- #
             U_old = data.U.copy()
