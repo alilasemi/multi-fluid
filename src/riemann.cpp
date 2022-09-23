@@ -8,8 +8,8 @@ using std::string;
 #include <riemann.h>
 
 // Compute speed of sound
-double compute_c(double g, double p, double r) {
-    return sqrt(g * p / r);
+double compute_c(double g, double p, double r, double psg) {
+    return sqrt(g * (p + psg) / r);
 }
 
 // Density functions - from Toro
@@ -24,20 +24,59 @@ double r_star_expansion(double r, double p_star, double p, double g) {
     return r * pow(p_star / p, 1/g);
 }
 
+double r_inside_expansion(double u, double rLR, double pLR, double g,
+        double psg, double r_guess) {
+    int iter_max = 200;
+    auto tol = r_guess * 1e-8;
+    auto r = r_guess;
+    bool success = false;
+    for (int i = 0; i < iter_max; i++) {
+        // Store previous value
+        r_guess = r;
+        // Compute RHS
+        auto rhs = r * pow(u, 2) / g - psg - pow(r, g) * pLR / pow(rLR, g);
+        // Compute derivative
+        auto d_rhs_d_r = pow(u, 2) / g - g * pow(r, g - 1) * pLR / pow(rLR, g);
+        // Newton iteration
+        r -= rhs / d_rhs_d_r;
+        // Check convergence
+        if (abs(r - r_guess) < tol) {
+            success = true;
+            break;
+        }
+    }
+    if (not success) {
+        std::stringstream ss;
+        ss << "Nonlinear solver for density inside expansion for Riemann problem failed!" << endl
+                << "The inputs were:" << endl
+                << "u, rLR, pLR, g, psg = "
+                << u << ", " << rLR << ", " << pLR << ", " << g << ", " << psg
+                << endl;
+        throw std::runtime_error(ss.str());
+    }
+    return r;
+}
+
+
 // Pressure functions - from Toro
-double fLR(double p, double pLR, double ALR, double BLR, double DLR, double cLR,
-        double g) {
+double fLR(double p, double rLR, double pLR, double ALR, double BLR, double DLR,
+    double cLR, double g, double psg) {
+    // For a shock
     if (p > pLR) {
         return (p - pLR) * sqrt(ALR / (p + BLR + DLR));
+    // For an expansion
     } else {
-        return (2 * cLR / (g - 1)) * ( pow(p/pLR, (g - 1) / (2*g)) - 1 );
+        auto c_star_LR = compute_c(g, p, rLR * pow(p / pLR, 1 / g), psg);
+        return (2 / (g - 1)) * (c_star_LR - cLR);
     }
 }
 
 double f(double p, double pL, double pR, double AL, double AR, double BL,
-        double BR, double DL, double DR, double cL, double cR, double uL,
-        double uR, double gL, double gR) {
-    return fLR(p, pL, AL, BL, DL, cL, gL) + fLR(p, pR, AR, BR, DR, cR, gR)
+        double BR, double DL, double DR, double rL, double rR, double cL,
+        double cR, double uL, double uR, double gL, double gR, double psgL,
+        double psgR) {
+    return fLR(p, rL, pL, AL, BL, DL, cL, gL, psgL)
+            + fLR(p, rR, pR, AR, BR, DR, cR, gR, psgR)
             + uR - uL;
 }
 
@@ -55,7 +94,6 @@ double compute_shock_speed(double r, double u, double p_star, double A,
 void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
         double pR, double uR, double gL, double gR, double psgL, double psgR,
         vector_ref<double> result) {
-    // TODO: Go through and make all the g's and psg's have a left and right!
     // Constants
     auto AL = 2 / ((gL + 1) * rL);
     auto AR = 2 / ((gR + 1) * rR);
@@ -66,27 +104,31 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
     auto CL = DL / pL;
     auto CR = DR / pR;
     // Compute speed of sound
-    auto cL = compute_c(gL, pL, rL);
-    auto cR = compute_c(gR, pR, rR);
+    auto cL = compute_c(gL, pL, rL, psgL);
+    auto cR = compute_c(gR, pR, rR, psgR);
 
     // Solve nonlinear equation for pressure in the star region
     bool success = false;
-    std::vector<double> guesses = {.25*pL + .75*pR, .5*(pL + pR), .75*pL + .25*pR, 0};
+    std::vector<double> guesses = {.25*pL + .75*pR, .5*(pL + pR), .75*pL + .25*pR};
     double p_star;
     for (auto p : guesses) {
         double old_guess;
         int iter_max = 500;
-        auto tol = fmax(pL, pR) * 1e-9;
+        auto tol = fmax(pL, pR) * 1e-5;
         for (int i = 0; i < iter_max; i++) {
             old_guess = p;
             // Compute RHS
-            auto rhs = f(p, pL, pR, AL, AR, BL, BR, DL, DR, cL, cR, uL, uR, gL, gR);
+            auto rhs = f(p, pL, pR, AL, AR, BL, BR, DL, DR, rL, rR, cL, cR, uL,
+                    uR, gL, gR, psgL, psgR);
             // Compute derivative
-            auto delta_p = p * 1e-6;
-            auto rhs_plus = f(p + delta_p, pL, pR, AL, AR, BL, BR, DL, DR, cL,
-                    cR, uL, uR, gL, gR);
-            auto d_rhs_d_p = (rhs_plus - rhs) / delta_p;
+            auto delta_p = p * 1e-9;
+            auto rhs_plus = f(p + delta_p, pL, pR, AL, AR, BL, BR, DL, DR, rL,
+                    rR, cL, cR, uL, uR, gL, gR, psgL, psgR);
+            auto rhs_minus = f(p - delta_p, pL, pR, AL, AR, BL, BR, DL, DR, rL,
+                    rR, cL, cR, uL, uR, gL, gR, psgL, psgR);
+            auto d_rhs_d_p = (rhs_plus - rhs_minus) / (2 * delta_p);
             // Newton iteration
+            cout << p << endl;
             p -= .2 * rhs / d_rhs_d_p;
             // Check convergence
             if (abs(p - old_guess) < tol) {
@@ -111,8 +153,8 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
     }
 
     // Use this to get the velocity in the star region
-    auto u_star = .5 * (uL + uR) + .5 * (fLR(p_star, pR, AR, BR, DR, cR, gR)
-            - fLR(p_star, pL, AL, BL, DL, cL, gL));
+    auto u_star = .5 * (uL + uR) + .5 * (fLR(p_star, rR, pR, AR, BR, DR, cR, gR, psgR)
+            - fLR(p_star, rL, pL, AL, BL, DL, cL, gL, psgL));
 
 
     // Compute density
@@ -167,7 +209,7 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
         // Otherwise, it's a right expansion
         } else {
             auto S_H = uR + cR;
-            auto c_starR = sqrt(gR * p_star / r_starR);
+            auto c_starR = compute_c(gR, p_star, r_starR, psgR);
             auto S_T = u_star + c_starR;
             // If the tail of the expansion has positive speed, then x/t = 0 is to
             // the left of the expansion, therefore U|_x/t=0 = U_starR.
@@ -180,8 +222,8 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
             // relations and the Riemann invariant.
             } else if (S_H > 0) {
                 u_0 = (2 / (gR + 1)) * (-cR + ((gR - 1) / 2) * uR);
-                r_0 = pow( gR * pR / (pow(rR, gR) * pow(u_0, 2)), 1 / (1 - gR) );
-                p_0 = r_0 * pow(u_0, 2) / gR;
+                r_0 = r_inside_expansion(u_0, rR, pR, gR, psgR, .5 * (r_starR + rR));
+                p_0 = r_0 * pow(u_0, 2) / gR - psgR;
             // Otherwise, if the head of the expansion has negative speed, then
             // x/t = 0 is to the right of the expansion.
             } else {
@@ -193,7 +235,7 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
     // Otherwise, it's a left expansion
     } else {
         auto S_H = uL - cL;
-        auto c_starL = sqrt(gL * p_star / r_starL);
+        auto c_starL = compute_c(gL, p_star, r_starL, psgL);
         auto S_T = u_star - c_starL;
         // If the head of the expansion has positive speed, then x/t = 0 is to
         // the left of the expansion, therefore U|_x/t=0 = U_L.
@@ -206,8 +248,8 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
         // relations and the Riemann invariant.
         } else if (S_T > 0) {
             u_0 = (2 / (gL + 1)) * (cL + ((gL - 1) / 2) * uL);
-            r_0 = pow( gL * pL / (pow(rL, gL) * pow(u_0, 2)), 1 / (1 - gL) );
-            p_0 = r_0 * pow(u_0, 2) / gL;
+            r_0 = r_inside_expansion(u_0, rL, pL, gL, psgL, .5 * (r_starL + rL));
+            p_0 = r_0 * pow(u_0, 2) / gL - psgL;
         // Otherwise, if u_star is positive, then x/t = 0 is in between the
         // expansion and the contact.
         } else if (u_star > 0) {
@@ -234,7 +276,7 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
         // Otherwise, it's a right expansion
         } else {
             auto S_H = uR + cR;
-            auto c_starR = sqrt(gR * p_star / r_starR);
+            auto c_starR = compute_c(gR, p_star, r_starR, psgR);
             auto S_T = u_star + c_starR;
             // If the tail of the expansion has positive speed, then x/t = 0 is to
             // the left of the expansion, therefore U|_x/t=0 = U_starR.
@@ -247,8 +289,8 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
             // relations and the Riemann invariant.
             } else if (S_H > 0) {
                 u_0 = (2 / (gR + 1)) * (-cR + ((gR - 1) / 2) * uR);
-                r_0 = pow( gR * pR / (pow(rR, gR) * pow(u_0, 2)), 1 / (1 - gR) );
-                p_0 = r_0 * pow(u_0, 2) / gR;
+                r_0 = r_inside_expansion(u_0, rR, pR, gR, psgR, .5 * (r_starR + rR));
+                p_0 = r_0 * pow(u_0, 2) / gR - psgR;
             // Otherwise, if the head of the expansion has negative speed, then
             // x/t = 0 is to the right of the expansion.
             } else {

@@ -200,6 +200,20 @@ if __name__ == '__main__':
 #    test5 = np.isclose([1691.64, 8.68975, 14.2823, 31.0426], output, rtol=rtol)
 #    print(f'Test 5: {test5}')
 
+    # Testing Riemann problem between the same state
+    result = np.empty(9)
+    rL, pL, uL, rR, pR, uR = 1e3, 1e5, 0, 1e3, 1e5, 0
+    gL, gR, psgL, psgR = 4.4, 4.4, 6e5, 6e5
+    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, gL, gR, psgL, psgR,
+            result)
+
+    # Now with slightly different state
+    rL, pL, uL, rR, pR, uR = 1e3, 1e5, 0, 1e3, 200000, 0
+    gL, gR, psgL, psgR = 4.4, 4.4, 6e5, 6e5
+    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, gL, gR, psgL, psgR,
+            result)
+    breakpoint()
+
     # Testing that the exact flux gives about the same thing as Roe
     #area_normal = np.array([np.cos(.8), np.sin(.8)]).reshape(2, 1)
     area_normal = np.array([np.sqrt(2)/2, np.sqrt(2)/2]).reshape(2, 1)

@@ -14,16 +14,18 @@ Problem = Cavitation
 nx = 81
 ny = 81
 #n_t = 5
-cfl = .05
+cfl = .2
 t_final = 2e-2#3.7e-5
 max_n_t = 99999999999
-level_set_reinitialization_rate = 20
+level_set_reinitialization_rate = 2000
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 
 # Physical parameters
 g = [4.4, 1.4]
 psg = [6e5, 0]#[6e8, 0]
+#g = [1.4, 1.4]
+#psg = [0, 0]
 
 file_name = 'data.npz'
 ghost_fluid_interfaces = True
@@ -92,7 +94,7 @@ def main(show_progress_bar=True):
                 # Compute pressure
                 p = (g_i - 1) * (re - .5 * (ru**2 + rv**2) / r) - g_i * psg_i;
                 # Speed of sound
-                a = np.sqrt(g_i * p / r)
+                a = np.sqrt(g_i * (p + psg_i) / r)
                 # Norm of velocity
                 norm_u = np.sqrt(ru**2 + rv**2) / r
                 # Compute timestep from CFL
