@@ -25,11 +25,16 @@ double r_star_expansion(double r, double p_star, double p, double g) {
 }
 
 double r_inside_expansion(double u, double rLR, double pLR, double g,
-        double psg, double r_guess) {
+        double psg, double rRL) {
+    //cout << "ahh " << u << ", " << rLR << ", " << pLR << ", " << g << ", " << psg << ", " << rRL << endl;
     int iter_max = 200;
     auto tol = 1e-6;
-    auto r = r_guess;
+    // Initial guess
+    double r_guess = .5 * (rLR + rRL);
+    double r = r_guess;
     bool success = false;
+    double r_min = fmin(rLR, rRL);
+    double r_max = fmax(rLR, rRL);
     for (int i = 0; i < iter_max; i++) {
         // Store previous value
         r_guess = r;
@@ -37,8 +42,17 @@ double r_inside_expansion(double u, double rLR, double pLR, double g,
         auto rhs = r * pow(u, 2) / g - psg - pow(r, g) * pLR / pow(rLR, g);
         // Compute derivative
         auto d_rhs_d_r = pow(u, 2) / g - g * pow(r, g - 1) * pLR / pow(rLR, g);
+        //cout << "r = " << r << endl;
+        //cout << "rhs = " << rhs << endl;
+        //cout << "d_rhs_d_p = " << d_rhs_d_r << endl;
         // Newton iteration
         r -= rhs / d_rhs_d_r;
+        // Clip density to stay within the bounds
+        if (r > r_max) {
+            r = r_max;
+        } else if (r < r_min) {
+            r = r_min;
+        }
         // Check convergence
         if (abs(r - r_guess) / (.5 * (r + r_guess)) < tol) {
             success = true;
@@ -66,7 +80,7 @@ double fLR(double p, double rLR, double pLR, double ALR, double BLR, double DLR,
         return (p - pLR) * sqrt(ALR / (p + BLR + DLR));
     // For an expansion
     } else {
-        auto c_star_LR = compute_c(g, p, rLR * pow(p / pLR, 1 / g), psg);
+        auto c_star_LR = compute_c(g, p, rLR * pow((p + psg) / (pLR + psg), 1 / g), psg);
         return (2 / (g - 1)) * (c_star_LR - cLR);
     }
 }
@@ -111,8 +125,13 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
     bool success = false;
     std::vector<double> guesses = {.5*(pL + pR), .25*pL + .75*pR, .75*pL + .25*pR};
     double p_star;
+    // Some interval information - from Toro
     double p_min = fmin(pL, pR);
     double p_max = fmax(pL, pR);
+    auto f_min = f(p_min, pL, pR, AL, AR, BL, BR, DL, DR, rL, rR, cL, cR, uL,
+            uR, gL, gR, psgL, psgR);
+    auto f_max = f(p_max, pL, pR, AL, AR, BL, BR, DL, DR, rL, rR, cL, cR, uL,
+            uR, gL, gR, psgL, psgR);
     for (auto p : guesses) {
         double old_guess;
         int iter_max = 500;
@@ -134,14 +153,27 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
             //cout << "rhs, rhs_plus/minus = " << rhs << ", " << rhs_plus << "  " << rhs_minus << endl;
             //cout << "d_rhs_d_p = " << d_rhs_d_p << endl;
             p -= .2 * rhs / d_rhs_d_p;
-            // Clip pressure to stay within the bounds
-            if (p > p_max) {
-                p = p_max;
-            } else if (p < p_min) {
-                p = p_min;
+            //cout << "p_new = " << p << endl;
+            // Bound pressure using bounds given in Toro, pg. 126
+            if (f_min > 0 and f_max > 0) {
+                if (p < 0) {
+                    p = p_min * 1e-6;
+                } else if (p > p_min) {
+                    p = p_min;
+                }
+            } else if (f_min <= 0 and f_max >= 0) {
+                if (p >= p_max) {
+                    p = p_max;
+                } else if (p <= p_min) {
+                    p = p_min;
+                }
+            } else if (f_min < 0 and f_max < 0) {
+                if (p < p_max) {
+                    p = p_max;
+                }
             }
             // Check convergence
-            if (abs(p - old_guess) / (.5 * (p + old_guess)) < tol) {
+            if (p > 0 and (abs(p - old_guess) / (.5 * (p + old_guess)) < tol)) {
                 success = true;
                 break;
             }
@@ -181,6 +213,7 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
     } else {
         r_starR = r_star_expansion(rR, p_star, pR, gR);
     }
+    //cout << p_star << "  " << u_star << "  " << r_starL << "  " << r_starR << endl;
 
     // Now the star state is known, so choose the solution at x/t = 0.
     double r_0;
@@ -234,7 +267,7 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
             // relations and the Riemann invariant.
             } else if (S_H > 0) {
                 u_0 = (2 / (gR + 1)) * (-cR + ((gR - 1) / 2) * uR);
-                r_0 = r_inside_expansion(u_0, rR, pR, gR, psgR, .5 * (r_starR + rR));
+                r_0 = r_inside_expansion(u_0, rR, pR, gR, psgR, r_starR);
                 p_0 = r_0 * pow(u_0, 2) / gR - psgR;
             // Otherwise, if the head of the expansion has negative speed, then
             // x/t = 0 is to the right of the expansion.
@@ -260,7 +293,7 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
         // relations and the Riemann invariant.
         } else if (S_T > 0) {
             u_0 = (2 / (gL + 1)) * (cL + ((gL - 1) / 2) * uL);
-            r_0 = r_inside_expansion(u_0, rL, pL, gL, psgL, .5 * (r_starL + rL));
+            r_0 = r_inside_expansion(u_0, rL, pL, gL, psgL, r_starL);
             p_0 = r_0 * pow(u_0, 2) / gL - psgL;
         // Otherwise, if u_star is positive, then x/t = 0 is in between the
         // expansion and the contact.
@@ -301,7 +334,7 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
             // relations and the Riemann invariant.
             } else if (S_H > 0) {
                 u_0 = (2 / (gR + 1)) * (-cR + ((gR - 1) / 2) * uR);
-                r_0 = r_inside_expansion(u_0, rR, pR, gR, psgR, .5 * (r_starR + rR));
+                r_0 = r_inside_expansion(u_0, rR, pR, gR, psgR, r_starR);
                 p_0 = r_0 * pow(u_0, 2) / gR - psgR;
             // Otherwise, if the head of the expansion has negative speed, then
             // x/t = 0 is to the right of the expansion.
@@ -328,6 +361,8 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
     //auto p = result[1];
     //result[0] = f(p, pL, pR, AL, AR, BL, BR, DL, DR, rL, rR, cL, cR, uL,
     //        uR, gL, gR, psgL, psgR);
+    //cout << fLR(p, rL, pL, AL, BL, DL, cL, gL, psgL) << "  "
+    //    << fLR(p, rR, pR, AR, BR, DR, cR, gR, psgR) << endl;
     // Store result
     result[0] = r_0;
     result[1] = u_0;

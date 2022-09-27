@@ -23,7 +23,7 @@ rho_levels = np.linspace(.15, 1.05, 19)
 
 # Physical parameters
 g = [4.4, 1.4]
-psg = [6e5, 0]#[6e8, 0]
+psg = [6e6, 0]#[6e8, 0]
 #g = [1.4, 1.4]
 #psg = [0, 0]
 

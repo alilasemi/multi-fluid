@@ -209,23 +209,28 @@ if __name__ == '__main__':
 
     # Now with slightly different state
     rL, pL, uL, rR, pR, uR = 1e3, 100000, 0, 1e0, 2000, 0
-    gL, gR, psgL, psgR = 4.4, 1.4, 6e6, 0
-    #n_points = 200
-    #f = np.empty(n_points)
-    #p = np.linspace(1e5, 210000, n_points)
-    #for i in range(n_points):
-    #    result[1] = p[i]
-    #    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, gL, gR, psgL, psgR,
-    #            result)
-    #    f[i] = result[0]
-    #import matplotlib.pyplot as plt
-    #plt.plot(p, f, '-k', lw=3)
-    #plt.show()
-    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, gL, gR, psgL, psgR,
-            result)
+#    rL, pL, uL, rR, pR, uR = 1e3, 100000, -1, 1e3, 100000, 1
+#    rL, pL, uL, rR, pR, uR = 1e3, 150000, .3, 1e3, 140000, .3
+#    rL, pL, uL, rR, pR, uR = 1, .4, -2, 1, .4, 2
+    gL, gR, psgL, psgR = 4.4, 1.4, 6e5, 0
+#    #gL, gR, psgL, psgR = 1.4, 1.4, 0, 0
+#    gL, gR, psgL, psgR = 4.4, 4.4, 6e5, 6e5
+    n_points = 200
+    f = np.empty(n_points)
+    p = np.linspace(2000, 1e5, n_points)
+    for i in range(n_points):
+        result[1] = p[i]
+        compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, gL, gR, psgL, psgR,
+                result)
+        f[i] = result[0]
+    import matplotlib.pyplot as plt
+    plt.plot(p, f, '-k', lw=3)
+    plt.show()
+#    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, gL, gR, psgL, psgR,
+#            result)
     print('r, un, p, g, psg = ', result[:5])
     print('r_starL, r_starR, u_star, p_star = ', result[5:])
-    breakpoint()
+    #reakpoint()
 
     # Testing that the exact flux gives about the same thing as Roe
     #area_normal = np.array([np.cos(.8), np.sin(.8)]).reshape(2, 1)
