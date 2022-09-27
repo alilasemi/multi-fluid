@@ -109,14 +109,13 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
 
     // Solve nonlinear equation for pressure in the star region
     bool success = false;
-    std::vector<double> guesses = {.25*pL + .75*pR, .5*(pL + pR), .75*pL + .25*pR};
+    std::vector<double> guesses = {.5*(pL + pR), .25*pL + .75*pR, .75*pL + .25*pR};
     double p_star;
     double p_min = fmin(pL, pR);
     double p_max = fmax(pL, pR);
-    int out_of_bounds_counter = 0;
     for (auto p : guesses) {
         double old_guess;
-        int iter_max = 50;
+        int iter_max = 500;
         auto tol = 1e-6;
         for (int i = 0; i < iter_max; i++) {
             old_guess = p;
@@ -135,32 +134,20 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
             //cout << "rhs, rhs_plus/minus = " << rhs << ", " << rhs_plus << "  " << rhs_minus << endl;
             //cout << "d_rhs_d_p = " << d_rhs_d_p << endl;
             p -= .2 * rhs / d_rhs_d_p;
+            // Clip pressure to stay within the bounds
+            if (p > p_max) {
+                p = p_max;
+            } else if (p < p_min) {
+                p = p_min;
+            }
             // Check convergence
             if (abs(p - old_guess) / (.5 * (p + old_guess)) < tol) {
                 success = true;
                 break;
             }
-            // Check bounds
-            if (p < p_min or p > p_max) {
-                out_of_bounds_counter++;
-            }
-            // The solution is prone to oscillating at the bounds - if this
-            // happens, cut it off at that bound
-            if (out_of_bounds_counter > 10) {
-                if (p < p_min) {
-                    p_star = p_min;
-                } else {
-                    p_star = p_max;
-                }
-                break;
-            }
         }
         if (success) {
             p_star = p;
-            break;
-        }
-        if (out_of_bounds_counter > 10) {
-            success = true;
             break;
         }
     }
@@ -172,7 +159,9 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
                 << "rL, uL, pL | rR, uR, pR | gL/gR = "
                 << rL << ", " << uL << ", " << pL << " | " << rR << ", "
                 << uR << ", " << pR << " | " << gL << "/" << gR << ", " << endl;
-        throw std::runtime_error(ss.str());
+        //TODO hack
+        cout << ss.str() << endl;
+        //throw std::runtime_error(ss.str());
     }
 
     // Use this to get the velocity in the star region
@@ -335,10 +324,10 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
         psg_0 = psgR;
     }
 
-//    //TODO Hack to plot f vs p
-//    auto p = result[1];
-//    result[0] = f(p, pL, pR, AL, AR, BL, BR, DL, DR, rL, rR, cL, cR, uL,
-//            uR, gL, gR, psgL, psgR);
+    //TODO Hack to plot f vs p
+    //auto p = result[1];
+    //result[0] = f(p, pL, pR, AL, AR, BL, BR, DL, DR, rL, rR, cL, cR, uL,
+    //        uR, gL, gR, psgL, psgR);
     // Store result
     result[0] = r_0;
     result[1] = u_0;
