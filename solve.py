@@ -11,8 +11,8 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 81
-ny = 81
+nx = 31
+ny = 31
 #n_t = 5
 cfl = .2
 t_final = 2e-2#3.7e-5

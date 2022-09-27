@@ -27,7 +27,7 @@ double r_star_expansion(double r, double p_star, double p, double g) {
 double r_inside_expansion(double u, double rLR, double pLR, double g,
         double psg, double r_guess) {
     int iter_max = 200;
-    auto tol = r_guess * 1e-8;
+    auto tol = 1e-6;
     auto r = r_guess;
     bool success = false;
     for (int i = 0; i < iter_max; i++) {
@@ -40,7 +40,7 @@ double r_inside_expansion(double u, double rLR, double pLR, double g,
         // Newton iteration
         r -= rhs / d_rhs_d_r;
         // Check convergence
-        if (abs(r - r_guess) < tol) {
+        if (abs(r - r_guess) / (.5 * (r + r_guess)) < tol) {
             success = true;
             break;
         }
@@ -111,33 +111,56 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
     bool success = false;
     std::vector<double> guesses = {.25*pL + .75*pR, .5*(pL + pR), .75*pL + .25*pR};
     double p_star;
+    double p_min = fmin(pL, pR);
+    double p_max = fmax(pL, pR);
+    int out_of_bounds_counter = 0;
     for (auto p : guesses) {
         double old_guess;
-        int iter_max = 500;
-        auto tol = fmax(pL, pR) * 1e-5;
+        int iter_max = 50;
+        auto tol = 1e-6;
         for (int i = 0; i < iter_max; i++) {
             old_guess = p;
             // Compute RHS
             auto rhs = f(p, pL, pR, AL, AR, BL, BR, DL, DR, rL, rR, cL, cR, uL,
                     uR, gL, gR, psgL, psgR);
             // Compute derivative
-            auto delta_p = p * 1e-9;
+            auto delta_p = p * 1e-5;
             auto rhs_plus = f(p + delta_p, pL, pR, AL, AR, BL, BR, DL, DR, rL,
                     rR, cL, cR, uL, uR, gL, gR, psgL, psgR);
             auto rhs_minus = f(p - delta_p, pL, pR, AL, AR, BL, BR, DL, DR, rL,
                     rR, cL, cR, uL, uR, gL, gR, psgL, psgR);
             auto d_rhs_d_p = (rhs_plus - rhs_minus) / (2 * delta_p);
             // Newton iteration
-            cout << p << endl;
+            //cout << "p = " << p << endl;
+            //cout << "rhs, rhs_plus/minus = " << rhs << ", " << rhs_plus << "  " << rhs_minus << endl;
+            //cout << "d_rhs_d_p = " << d_rhs_d_p << endl;
             p -= .2 * rhs / d_rhs_d_p;
             // Check convergence
-            if (abs(p - old_guess) < tol) {
+            if (abs(p - old_guess) / (.5 * (p + old_guess)) < tol) {
                 success = true;
+                break;
+            }
+            // Check bounds
+            if (p < p_min or p > p_max) {
+                out_of_bounds_counter++;
+            }
+            // The solution is prone to oscillating at the bounds - if this
+            // happens, cut it off at that bound
+            if (out_of_bounds_counter > 10) {
+                if (p < p_min) {
+                    p_star = p_min;
+                } else {
+                    p_star = p_max;
+                }
                 break;
             }
         }
         if (success) {
             p_star = p;
+            break;
+        }
+        if (out_of_bounds_counter > 10) {
+            success = true;
             break;
         }
     }
@@ -312,6 +335,10 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
         psg_0 = psgR;
     }
 
+//    //TODO Hack to plot f vs p
+//    auto p = result[1];
+//    result[0] = f(p, pL, pR, AL, AR, BL, BR, DL, DR, rL, rR, cL, cR, uL,
+//            uR, gL, gR, psgL, psgR);
     // Store result
     result[0] = r_0;
     result[1] = u_0;

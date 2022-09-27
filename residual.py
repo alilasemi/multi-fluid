@@ -202,17 +202,29 @@ if __name__ == '__main__':
 
     # Testing Riemann problem between the same state
     result = np.empty(9)
-    rL, pL, uL, rR, pR, uR = 1e3, 1e5, 0, 1e3, 1e5, 0
-    gL, gR, psgL, psgR = 4.4, 4.4, 6e5, 6e5
-    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, gL, gR, psgL, psgR,
-            result)
+#    rL, pL, uL, rR, pR, uR = 1e3, 1e5, 0, 1e3, 1e5, 0
+#    gL, gR, psgL, psgR = 4.4, 4.4, 6e5, 6e5
+#    compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, gL, gR, psgL, psgR,
+#            result)
 
     # Now with slightly different state
-    rL, pL, uL, rR, pR, uR = 1e3, 1e5, 0, 1e3, 200000, 0
-    gL, gR, psgL, psgR = 4.4, 4.4, 6e5, 6e5
+    rL, pL, uL, rR, pR, uR = 1e3, 101000, 0, 1e3, 100000, 0
+    gL, gR, psgL, psgR = 4.4, 4.4, 6e8, 6e8
+#    n_points = 200
+#    f = np.empty(n_points)
+#    p = np.linspace(1e5, 101100, n_points)
+#    for i in range(n_points):
+#        result[1] = p[i]
+#        compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, gL, gR, psgL, psgR,
+#                result)
+#        f[i] = result[0]
+#    import matplotlib.pyplot as plt
+#    plt.plot(p, f, '-k', lw=3)
     compute_exact_riemann_problem(rL, pL, uL, rR, pR, uR, gL, gR, psgL, psgR,
             result)
-    breakpoint()
+    print('r, un, p, g, psg = ', result[:5])
+    print('r_starL, r_starR, u_star, p_star = ', result[5:])
+    #breakpoint()
 
     # Testing that the exact flux gives about the same thing as Roe
     #area_normal = np.array([np.cos(.8), np.sin(.8)]).reshape(2, 1)
