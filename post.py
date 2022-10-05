@@ -183,6 +183,7 @@ def post_process():
         save_plot('mesh', mesh)
 
     # Density, velocity, and pressure contour plots
+    radius = np.zeros(n_times)
     if plot_contour:
         if only_rho:
             num_vars = 1
@@ -251,6 +252,7 @@ def post_process():
                                 linewidths=2*lw_scale, linestyles='dashed')
 
                     # Loop over dual faces
+                    interface_counter = 0
                     for face_ID in range(mesh.n_faces):
                         points = mesh.get_face_point_coords(face_ID,
                                 edge_points_list, vol_points_list)
@@ -260,6 +262,13 @@ def post_process():
                         is_surrogate = phi[i] * phi[j] < 0
                         if is_surrogate:
                             ax.plot(points[:, 0], points[:, 1], 'k', lw=2)
+                            interface_counter += 1
+                            # Contribution to the radius from this surrogate
+                            # face
+                            radius[i_iter] += np.mean(np.linalg.norm(points, axis=1))
+                    # Normalize by the number of interfaces to get an average
+                    # radius
+                    radius[i_iter] /= interface_counter
                     progress.update(task1, advance=1)
 
         for idx in range(num_vars):
@@ -268,6 +277,9 @@ def post_process():
             axes[idx, 0].set_ylabel('y (m)', fontsize=10)
         # Save
         save_plot('contour', mesh)
+        # Write radius to file for separate processing
+        data = np.append(data.t_list.reshape(-1, 1), radius.reshape(-1, 1), axis=1)
+        np.savetxt('radius.txt', data, delimiter=",")
 
     print(f'Plots written to files ({mesh.nx}x{mesh.ny}).')
 

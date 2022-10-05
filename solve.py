@@ -11,19 +11,20 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 31
-ny = 31
+nx = 61
+ny = 61
 #n_t = 5
 cfl = .2
 t_final = 2e-2#3.7e-5
 max_n_t = 99999999999
-level_set_reinitialization_rate = 2000
+level_set_reinitialization_rate = 0
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
+linear_reconstruction = True
 
 # Physical parameters
 g = [4.4, 1.4]
-psg = [6e6, 0]#[6e8, 0]
+psg = [6e5, 0]#[6e8, 0]
 #g = [1.4, 1.4]
 #psg = [0, 0]
 
@@ -133,9 +134,10 @@ def main(show_progress_bar=True):
             compute_gradient_phi(data.phi, mesh.xy, mesh.neighbors,
                     data.grad_phi)
 
-            # TODO hack gradients to be zero
-            #data.gradU = np.zeros_like(data.gradU)
-            #data.grad_phi = np.zeros_like(data.grad_phi)
+            # If first order is requested, set the gradients to zero
+            if not linear_reconstruction:
+                data.gradU = np.zeros_like(data.gradU)
+                data.grad_phi = np.zeros_like(data.grad_phi)
 
             # Create ghost fluid interfaces
             if ghost_fluid_interfaces:
@@ -178,10 +180,6 @@ def main(show_progress_bar=True):
 
             # Reinitialize level set
             # TODO: This stuff is mostly just a hack for now
-            # Get radius and write to file
-            radius = np.linalg.norm(mesh.xy[np.argmin(data.phi**2)])
-            with open('radius.txt', 'a') as f:
-                f.write(str(data.t) + ' ' + str(radius) + '\n')
             global level_set_reinitialization_rate
             if level_set_reinitialization_rate == 0:
                 level_set_reinitialization_rate = max_n_t
@@ -300,7 +298,7 @@ def main(show_progress_bar=True):
             else:
                 write_index = np.max(last_write_indices) + 1
             # Store data once the time has come
-            if data.t >= data.t_list[write_index]:
+            if np.isclose(data.t, t_final, atol=0) or data.t >= data.t_list[write_index]:
                 # TODO: I do a mesh update before writing, to sync up phi with the
                 # mesh. Is this the best solution?
                 if adaptive:

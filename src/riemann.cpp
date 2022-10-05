@@ -20,8 +20,8 @@ double r_star_shock(double r, double p_star, double p, double g, double C) {
     return r_star;
 }
 
-double r_star_expansion(double r, double p_star, double p, double g) {
-    return r * pow(p_star / p, 1/g);
+double r_star_expansion(double r, double p_star, double p, double g, double psg) {
+    return r * pow((p_star + psg) / (p + psg), 1/g);
 }
 
 double r_inside_expansion(double u, double rLR, double pLR, double g,
@@ -192,8 +192,8 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
                 << rL << ", " << uL << ", " << pL << " | " << rR << ", "
                 << uR << ", " << pR << " | " << gL << "/" << gR << ", " << endl;
         //TODO hack
-        cout << ss.str() << endl;
-        //throw std::runtime_error(ss.str());
+        //cout << ss.str() << endl;
+        throw std::runtime_error(ss.str());
     }
 
     // Use this to get the velocity in the star region
@@ -206,12 +206,12 @@ void compute_exact_riemann_problem(double rL, double pL, double uL, double rR,
     if (p_star > pL) {
         r_starL = r_star_shock(rL, p_star, pL, gL, CL);
     } else {
-        r_starL = r_star_expansion(rL, p_star, pL, gL);
+        r_starL = r_star_expansion(rL, p_star, pL, gL, psgL);
     }
     if (p_star > pR) {
         r_starR = r_star_shock(rR, p_star, pR, gR, CR);
     } else {
-        r_starR = r_star_expansion(rR, p_star, pR, gR);
+        r_starR = r_star_expansion(rR, p_star, pR, gR, psgR);
     }
     //cout << p_star << "  " << u_star << "  " << r_starL << "  " << r_starR << endl;
 
