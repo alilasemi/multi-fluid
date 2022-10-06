@@ -11,8 +11,8 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 61
-ny = 61
+nx = 101
+ny = 101
 #n_t = 5
 cfl = .5
 t_final = 2e-2#3.7e-5
@@ -241,6 +241,13 @@ def main(show_progress_bar=True):
                             data.U[ghost_ID, k] = np.dot(c[:-1], mesh.xy[ghost_ID]) + c[-1]
                     # Use constant extrapolation
                     else:
+                        # Store old velocity and pressure
+                        fluid_ID_old = int(not data.fluid_ID[ghost_ID])
+                        g_old = data.g[fluid_ID_old]
+                        psg_old = data.psg[fluid_ID_old]
+                        V_ghost = conservative_to_primitive(*data.U[ghost_ID],
+                                g_old, psg_old)
+                        _, u_old, v_old, p_old = V_ghost
                         # Neighbor conservative state vectors
                         neighbor_U = data.U[fluid_neighbors]
                         # For each neighbor
@@ -255,10 +262,13 @@ def main(show_progress_bar=True):
                         # Average neighbor primitive variables
                         mean_V = np.mean(neighbor_V, axis=0)
                         # Convert back to conservative
+                        # TODO: Currently testing using old velocity and pressure
                         g_ghost = data.g[data.fluid_ID[ghost_ID]]
                         psg_ghost = data.psg[data.fluid_ID[ghost_ID]]
                         data.U[ghost_ID] = primitive_to_conservative(
                                 *mean_V, g_ghost, psg_ghost)
+                        #data.U[ghost_ID] = primitive_to_conservative(
+                        #        mean_V[0], u_old, v_old, p_old, g_ghost, psg_ghost)
 
             #if data.t > .008:
             #    V = np.empty_like(data.U)
