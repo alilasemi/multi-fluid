@@ -14,7 +14,7 @@ Problem = Cavitation
 nx = 61
 ny = 61
 #n_t = 5
-cfl = .2
+cfl = .5
 t_final = 2e-2#3.7e-5
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
@@ -130,13 +130,13 @@ def main(show_progress_bar=True):
 
             # Compute gradients
             compute_gradient(data.U, mesh.xy, mesh.stencil,
-                    data.gradU.reshape(-1), data.g, data.psg, data.fluid_ID)
+                    data.gradV.reshape(-1), data.g, data.psg, data.fluid_ID)
             compute_gradient_phi(data.phi, mesh.xy, mesh.neighbors,
                     data.grad_phi)
 
             # If first order is requested, set the gradients to zero
             if not linear_reconstruction:
-                data.gradU = np.zeros_like(data.gradU)
+                data.gradV = np.zeros_like(data.gradV)
                 data.grad_phi = np.zeros_like(data.grad_phi)
 
             # Create ghost fluid interfaces
@@ -216,6 +216,7 @@ def main(show_progress_bar=True):
                     if linear_ghost_extrapolation:
                         #TODO
                         print("Linear ghost extrapolation with primitive variables not implemented!")
+                        print("The code in this loop is wrong!")
                         # Loop over state variables
                         for k in range(4):
                             # Construct A matrix:
@@ -413,7 +414,7 @@ class SimulationData:
     U - np.array, solution
     phi - np.array, level set
     U_ghost - np.array, ghost state
-    gradU - np.array, gradient of solution
+    gradV - np.array, gradient of solution
     grad_phi - np.array, gradient of level set
     U_L - np.array, solution evaluated at the left side of each face
     U_R - np.array, solution evaluated at the right side of each face
@@ -440,7 +441,7 @@ class SimulationData:
         self.U = U
         self.phi = phi
         self.U_ghost = U_ghost
-        self.gradU = np.empty((nx*ny, 4, 2))
+        self.gradV = np.empty((nx*ny, 4, 2))
         self.grad_phi = np.empty((nx*ny, 2))
         self.U_L = np.empty((n_faces, 4))
         self.U_R = np.empty((n_faces, 4))

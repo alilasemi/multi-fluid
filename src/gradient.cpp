@@ -7,21 +7,21 @@ using std::cout, std::endl;
 #include <face_residual.h>
 
 void compute_gradient(matrix_ref<double> U, matrix_ref<double> xy,
-        std::vector<vector<long>>& stencil, vector_ref<double> gradU,
+        std::vector<vector<long>>& stencil, vector_ref<double> gradV,
         std::vector<double> g, std::vector<double> psg,
         vector_ref<long> fluid_ID) {
     // Number of cells
     int n = U.rows();
     // Loop over all cells
     for (int i = 0; i < n; i++) {
-        // Get this cell's gradU
-        matrix_map<double> gradU_i(&gradU(i*4*2), 4, 2);
+        // Get this cell's gradV
+        matrix_map<double> gradV_i(&gradV(i*4*2), 4, 2);
 
         auto n_points = stencil[i].rows();
         // If there are no other points in the stencil, then set the gradient to
         // zero
         if (n_points == 1) {
-            gradU_i = matrix<double>::Zero(4, 2);
+            gradV_i = matrix<double>::Zero(4, 2);
         // Otherwise, solve with least squares
         } else {
             // Get solution vectors for each stencil point
@@ -45,7 +45,7 @@ void compute_gradient(matrix_ref<double> U, matrix_ref<double> xy,
             matrix<double> c = (A.transpose() * A).partialPivLu().solve(
                     A.transpose() * V_stencil);
             // Since V = c0 x + c1 y + c2, then dV/dx = c0 and dV/dy = c1.
-            matrix<double> gradV_i = c(seq(0, 1), all).transpose();
+            gradV_i = c(seq(0, 1), all).transpose();
             // If any NaNs are found, that means the matrix inverse failed
             // (probably a singular combination of stencil points, such as all
             // points being in a straight line). In this case, set gradient to
@@ -55,21 +55,6 @@ void compute_gradient(matrix_ref<double> U, matrix_ref<double> xy,
                         << stencil[i].transpose() << endl;
                 gradV_i = matrix<double>::Zero(4, 2);
             }
-            // Otherwise, now gradV can be used to compute gradU using chain
-            // rule, since gradU = dU/dV * gradV.
-            matrix<double> dUdV(4, 4);
-            auto g_i = g[fluid_ID(i)];
-            auto psg_i = psg[fluid_ID(i)];
-            vector<double> V = conservative_to_primitive(U(i, all), g_i, psg_i);
-            auto r = V(0);
-            auto u = V(1);
-            auto v = V(2);
-            auto p = V(3);
-            dUdV << 1, 0, 0, 0,
-                    u, r, 0, 0,
-                    v, 0, r, 0,
-                    .5 * (u*u + v*v), r * u, r * v, 1 / (g_i - 1);
-            gradU_i = dUdV * gradV_i;
         }
     }
 }

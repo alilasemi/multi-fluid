@@ -16,7 +16,7 @@ using std::string;
 void compute_interior_face_residual(matrix_ref<double> U,
         matrix_ref<double> U_L, matrix_ref<double> U_R,
         vector_ref<long> interior_face_IDs, matrix_ref<long> edge,
-        matrix_ref<double> limiter, std::vector<double> gradU,
+        matrix_ref<double> limiter, std::vector<double> gradV,
         matrix_ref<double> xy, matrix_ref<double> area_normals_p1,
         matrix_ref<double> area, vector_ref<long> fluid_ID,
         std::vector<double> g, std::vector<double> psg,
@@ -30,23 +30,31 @@ void compute_interior_face_residual(matrix_ref<double> U,
         // Left and right cell IDs
         auto L = edge(face_ID, 0);
         auto R = edge(face_ID, 1);
+        // Get fluid data on left and right
+        auto gL = g[fluid_ID(L)];
+        auto gR = g[fluid_ID(R)];
+        auto psgL = psg[fluid_ID(L)];
+        auto psgR = psg[fluid_ID(R)];
 
         // Gradients for these cells
-        matrix_map<double> gradU_L(&gradU[L*4*2], 4, 2);
-        matrix_map<double> gradU_R(&gradU[R*4*2], 4, 2);
+        matrix_map<double> gradV_L(&gradV[L*4*2], 4, 2);
+        matrix_map<double> gradV_R(&gradV[R*4*2], 4, 2);
 
         // Evaluate solution at faces on left and right
-        // -- First order component -- #
-        U_L(face_ID, all) = U(L, all);
-        U_R(face_ID, all) = U(R, all);
+        // -- First order component, converted to primitive -- #
+        auto V_L = conservative_to_primitive(U(L, all), gL, psgL);
+        auto V_R = conservative_to_primitive(U(R, all), gR, psgR);
 
         // -- Second order component -- #
         matrix<double> edge_point = .5 * (xy(L, all) + xy(R, all)).transpose();
         // TODO: There has to be a cleaner way...
         for (int k = 0; k < 4; k++) {
-            U_L(face_ID, k) += limiter(L, k) * (gradU_L(k, all).transpose().cwiseProduct(edge_point - xy(L, all).transpose()).sum());
-            U_R(face_ID, k) += limiter(R, k) * (gradU_R(k, all).transpose().cwiseProduct(edge_point - xy(R, all).transpose()).sum());
+            V_L(k) += limiter(L, k) * (gradV_L(k, all).transpose().cwiseProduct(edge_point - xy(L, all).transpose()).sum());
+            V_R(k) += limiter(R, k) * (gradV_R(k, all).transpose().cwiseProduct(edge_point - xy(R, all).transpose()).sum());
         }
+        // Convert to conservative
+        U_L(face_ID, all) = primitive_to_conservative(V_L, gL, psgL);
+        U_R(face_ID, all) = primitive_to_conservative(V_R, gR, psgR);
     }
 
     // Loop over interior faces
@@ -76,7 +84,7 @@ void compute_interior_face_residual(matrix_ref<double> U,
 void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         vector_ref<long> interface_IDs, matrix_ref<long> edge,
         matrix_ref<double> quad_wts, std::vector<double> quad_pts_phys,
-        matrix_ref<double> limiter, std::vector<double> gradU,
+        matrix_ref<double> limiter, std::vector<double> gradV,
         matrix_ref<double> xy, std::vector<double> area_normals_p2,
         matrix_ref<double> area, vector_ref<long> fluid_ID,
         std::vector<double> g, std::vector<double> psg,
@@ -104,19 +112,19 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         if (print) cout << face_ID << endl;
 
         // Gradients for these cells
-        matrix_map<double> gradU_L(&gradU[L*4*2], 4, 2);
-        matrix_map<double> gradU_R(&gradU[R*4*2], 4, 2);
+        matrix_map<double> gradV_L(&gradV[L*4*2], 4, 2);
+        matrix_map<double> gradV_R(&gradV[R*4*2], 4, 2);
 
         // Loop over quadrature points
         vector<double> F_integral_L = vector<double>::Zero(4);
         vector<double> F_integral_R = vector<double>::Zero(4);
         for (auto i = 0; i < 2; i++) {
             // Evaluate solution at faces on left and right
-            // -- First order component -- #
-            U_L = U(L, all).transpose();
-            U_R = U(R, all).transpose();
+            // -- First order component, converted to primitive -- //
+            auto V_L = conservative_to_primitive(U(L, all), gL, psgL);
+            auto V_R = conservative_to_primitive(U(R, all), gR, psgR);
 
-            // -- Second order component -- #
+            // -- Second order component -- //
             // Get quadrature point in physical space
             // TODO: This looks a bit jank...issue is that Eigen cannot
             // handle 3D arrays. Wrapper of vector with strides??
@@ -125,9 +133,12 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             quad_pt(1) = quad_pts_phys[face_ID*2*2 + i*2 + 1];
             // TODO: There has to be a cleaner way...
             for (int k = 0; k < 4; k++) {
-                U_L(k) += limiter(L, k) * (gradU_L(k, all).transpose().cwiseProduct(quad_pt - xy(L, all).transpose()).sum());
-                U_R(k) += limiter(R, k) * (gradU_R(k, all).transpose().cwiseProduct(quad_pt - xy(R, all).transpose()).sum());
+                V_L(k) += limiter(L, k) * (gradV_L(k, all).transpose().cwiseProduct(quad_pt - xy(L, all).transpose()).sum());
+                V_R(k) += limiter(R, k) * (gradV_R(k, all).transpose().cwiseProduct(quad_pt - xy(R, all).transpose()).sum());
             }
+            // Convert to conservative
+            U_L = primitive_to_conservative(V_L, gL, psgL);
+            U_R = primitive_to_conservative(V_R, gR, psgR);
 
             // Package the normals
             matrix<double> area_normal(2, 1);
@@ -139,9 +150,6 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
 
             // TODO: Should this be before or after adding the second order
             // component??
-            // Convert left and right to primitive
-            auto V_L = conservative_to_primitive(U_L, gL, psgL);
-            auto V_R = conservative_to_primitive(U_R, gR, psgR);
             // Get normal/tangential component of velocity
             auto u_n_L = V_L(seq(1, 2)).dot(n_hat);
             auto u_n_R = V_R(seq(1, 2)).dot(n_hat);
@@ -219,7 +227,7 @@ vector<double> compute_ghost_state(vector<double> U, matrix_ref<double> U_global
 void compute_boundary_face_residual(matrix_ref<double> U,
         matrix_ref<long> bc_type, matrix_ref<double> quad_wts,
         std::vector<double> quad_pts_phys, matrix_ref<double> limiter,
-        std::vector<double> gradU, matrix_ref<double> xy,
+        std::vector<double> gradV, matrix_ref<double> xy,
         std::vector<double> area_normals_p2, matrix_ref<double> area,
         vector_ref<long> fluid_ID, std::vector<double> g,
         std::vector<double> psg, long num_boundaries, matrix<double> bc_data,
@@ -256,7 +264,7 @@ void compute_boundary_face_residual(matrix_ref<double> U,
         auto psgL = psg[fluid_ID(L)];
 
         // Gradients for this cell
-        matrix_map<double> gradU_L(&gradU[L*4*2], 4, 2);
+        matrix_map<double> gradV_L(&gradV[L*4*2], 4, 2);
 
         // TODO: This nq thing is a hack
         int nq;
@@ -270,8 +278,9 @@ void compute_boundary_face_residual(matrix_ref<double> U,
         vector<double> F_integral = vector<double>::Zero(4);
         for (auto i = 0; i < nq; i++) {
             // Evaluate solution at face on left
-            // -- First order component -- #
-            U_L = U(L, all).transpose();
+            // -- First order component, converted to primitive -- //
+            auto V_L = conservative_to_primitive(U(L, all), gL, psgL);
+
             // -- Second order component -- #
             matrix<double> quad_pt(2, 1);
             if (nq == 2) {
@@ -290,8 +299,10 @@ void compute_boundary_face_residual(matrix_ref<double> U,
             }
             // TODO: There has to be a cleaner way...
             for (int k = 0; k < 4; k++) {
-                U_L(k) += limiter(L, k) * (gradU_L(k, all).transpose().cwiseProduct(quad_pt - xy(L, all).transpose()).sum());
+                V_L(k) += limiter(L, k) * (gradV_L(k, all).transpose().cwiseProduct(quad_pt - xy(L, all).transpose()).sum());
             }
+            // Convert to conservative
+            U_L = primitive_to_conservative(V_L, gL, psgL);
 
             // Package the normals
             matrix<double> area_normal(2, 1);

@@ -8,13 +8,14 @@ from build.src.libpybind_bindings import (
         compute_interior_face_residual, compute_fluid_fluid_face_residual,
         compute_boundary_face_residual, compute_exact_riemann_problem,
         compute_flux, compute_flux_roe)
+from problem import conservative_to_primitive, primitive_to_conservative
 from lagrange import LagrangeSegment
 
 
 def get_residual(data, mesh, problem):
     # Unpack
     U = data.U
-    gradU = data.gradU
+    gradV = data.gradV
 
     residual = np.zeros_like(U)
 
@@ -22,26 +23,33 @@ def get_residual(data, mesh, problem):
     # This uses the multidimensional Barth-Jesperson limiter from:
     # https://arc.aiaa.org/doi/pdf/10.2514/6.1989-366
     # TODO Why is this damping needed?
-    damping = .7
+    damping = .8
     limiter = np.empty((mesh.n, 4))
+    # Compute primitives
+    V = np.empty_like(U)
+    for i in range(mesh.n):
+        # Get fluid data
+        g_i = data.g[data.fluid_ID[i]]
+        psg_i = data.psg[data.fluid_ID[i]]
+        V[i] = conservative_to_primitive(*U[i], g_i, psg_i)
     # Loop state vars
     for k in range(4):
         # Compute extrapolated value
         # In the paper, this is the value of u_i - u_A
-        U_face_diff = np.einsum('id, ijd -> ij', gradU[:, k],
+        V_face_diff = np.einsum('id, ijd -> ij', gradV[:, k],
                 mesh.cell_point_coords - mesh.xy.reshape((mesh.n, 1, 2)))
-        u_A_min = np.min(U[mesh.limiter_stencil, k], axis=1)
-        u_A_max = np.max(U[mesh.limiter_stencil, k], axis=1)
+        u_A_min = np.min(V[mesh.limiter_stencil, k], axis=1)
+        u_A_max = np.max(V[mesh.limiter_stencil, k], axis=1)
         # Limiter value for all face points of cell i
         limiter_j = np.empty((mesh.n, mesh.max_num_face_points))
         # Condition 1
-        index = np.nonzero(U_face_diff > 0)
-        limiter_j[index] = (u_A_max[index[0]] - U[index[0], k]) / U_face_diff[index]
+        index = np.nonzero(V_face_diff > 0)
+        limiter_j[index] = (u_A_max[index[0]] - V[index[0], k]) / V_face_diff[index]
         # Condition 2
-        index = np.nonzero(U_face_diff < 0)
-        limiter_j[index] = (u_A_min[index[0]] - U[index[0], k]) / U_face_diff[index]
+        index = np.nonzero(V_face_diff < 0)
+        limiter_j[index] = (u_A_min[index[0]] - V[index[0], k]) / V_face_diff[index]
         # Condition 3
-        index = np.nonzero(U_face_diff == 0)
+        index = np.nonzero(V_face_diff == 0)
         limiter_j[index] = 1
         # Take the minimum across each face point
         limiter[:, k] = damping * np.min(limiter_j, axis=1)
@@ -52,13 +60,13 @@ def get_residual(data, mesh, problem):
     # p1 wouldn't even work)
     # TODO: Passing 3D numpy arrays is kinda ugly right now...
     compute_interior_face_residual(U, data.U_L, data.U_R,
-            mesh.interior_face_IDs, mesh.edge, limiter, gradU.flatten().data,
+            mesh.interior_face_IDs, mesh.edge, limiter, gradV.flatten().data,
             mesh.xy, mesh.area_normals_p1, mesh.area, data.fluid_ID, data.g,
             data.psg, residual)
 
     # Compute the boundary face residual
     compute_boundary_face_residual(U, mesh.bc_type, LagrangeSegment.quad_wts,
-            mesh.bc_quad_pts_phys.flatten().data, limiter, gradU.flatten().data,
+            mesh.bc_quad_pts_phys.flatten().data, limiter, gradV.flatten().data,
             mesh.xy, mesh.bc_area_normals_p2.flatten().data, mesh.area,
             data.fluid_ID, data.g, data.psg, mesh.num_boundaries,
             problem.bc_data, problem.__class__.__name__, data.t, residual)
@@ -72,7 +80,7 @@ def get_residual(data, mesh, problem):
         # Compute the fluid-fluid interface residual
         compute_fluid_fluid_face_residual(U, mesh.interface_IDs, mesh.edge,
                 LagrangeSegment.quad_wts, mesh.quad_pts_phys.flatten().data,
-                limiter, gradU.flatten().data, mesh.xy,
+                limiter, gradV.flatten().data, mesh.xy,
                 mesh.area_normals_p2.flatten().data, mesh.area, data.fluid_ID,
                 data.g, data.psg, residual)
 
