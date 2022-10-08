@@ -11,13 +11,13 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 101
-ny = 101
+nx = 61
+ny = 61
 #n_t = 5
 cfl = .5
 t_final = 2e-2#3.7e-5
 max_n_t = 99999999999
-level_set_reinitialization_rate = 0
+level_set_reinitialization_rate = 1
 adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 linear_reconstruction = True

@@ -23,7 +23,7 @@ def get_residual(data, mesh, problem):
     # This uses the multidimensional Barth-Jesperson limiter from:
     # https://arc.aiaa.org/doi/pdf/10.2514/6.1989-366
     # TODO Why is this damping needed?
-    damping = .7
+    damping = .75
     limiter = np.empty((mesh.n, 4))
     # Compute primitives
     V = np.empty_like(U)
