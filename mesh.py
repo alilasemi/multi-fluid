@@ -3,6 +3,7 @@ import scipy.optimize
 
 from lagrange import (LagrangeSegmentP1, LagrangeSegmentP2, LagrangeTriangleP1,
         LagrangeTriangleP2)
+from update_mesh import update_mesh
 
 
 class Mesh:
@@ -426,150 +427,15 @@ class Mesh:
         '''
         Update the dual mesh to fit the interface better.
         '''
-        # TODO: This is with a hardcoded/exact phi. This is because I want to
-        # neglect error in phi for now.
-        def get_coords_from_barycentric(bary, node_coords):
-            xy1 = node_coords[0]
-            xy2 = node_coords[1]
-            xy3 = node_coords[2]
-            return bary[0]*xy1 + bary[1]*xy2 + (1 - bary[0] -
-                    bary[1])*xy3
-        def xi_to_xy(xi, xy1, xy2):
-            return xi*xy2 + (1 - xi) * xy1
-        def get_phi_squared(bary, node_coords, t):
-            coords = get_coords_from_barycentric(bary, node_coords).reshape(1, -1)
-            return problem.compute_exact_phi(coords, t)**2
-        def get_phi_squared_edge(xi, xy1, xy2, t):
-            coords = xi_to_xy(xi, xy1, xy2).reshape(1, -1)
-            return problem.compute_exact_phi(coords, t)**2
-        def get_grad_phi_squared(bary, node_coords, t):
-            coords = get_coords_from_barycentric(bary, node_coords).reshape(1, -1)
-            xy1 = node_coords[0]
-            xy2 = node_coords[1]
-            xy3 = node_coords[2]
-            dphi_dxy = (2 * problem.compute_exact_phi(coords, t)
-                    * problem.compute_exact_phi_gradient(coords, t))
-            dxy_dbary = np.array([xy1 - xy3, xy2 - xy3])
-            return dxy_dbary @ dphi_dxy
-        def get_grad_phi_squared_edge(xi, xy1, xy2, t):
-            coords = xi_to_xy(xi, xy1, xy2).reshape(1, -1)
-            dphi_dxy = (2 * problem.compute_exact_phi(coords, t)
-                    * problem.compute_exact_phi_gradient(coords, t))
-            dxy_dxi = xy2 - xy1
-            return np.dot(dphi_dxy[:, 0], dxy_dxi)
-
-        for face_ID in range(self.n_faces):
-            # TODO: Only works for interior faces
-            if self.is_boundary(face_ID): continue
-
-            # Get dual mesh neighbors
-            i, j = self.edge[face_ID]
-            # Check for interface
-            if data.phi[i] * data.phi[j] < 0:
-                # If it's an interface, move the face points towards phi = 0
-                for i_point in range(3):
-                    # -- Edge points -- #
-                    if i_point == 1:
-                        coords = self.edge_points[self.face_points[face_ID, i_point]]
-                        # Solve optimization problem for the new node locations,
-                        # by moving them as close as possible to the interface
-                        # (phi = 0) while still keeping the point between nodes
-                        # i and j
-                        # The guess value is important - several values are
-                        # tried and the minimum across all guesses is taken as
-                        # the final answer.
-                        #guesses = [0, .25, .5, .75, 1]
-                        guesses = np.linspace(0, 1, 5)
-                        success = False
-                        minimum_phi = 1e99
-                        min_x = np.min([self.xy[i, 0], self.xy[j, 0]])
-                        max_x = np.max([self.xy[i, 0], self.xy[j, 0]])
-                        min_y = np.min([self.xy[i, 1], self.xy[j, 1]])
-                        max_y = np.max([self.xy[i, 1], self.xy[j, 1]])
-                        bounds = ((min_x, max_x), (min_y, max_y))
-                        for guess in guesses:
-                            optimization = scipy.optimize.minimize(
-                                    get_phi_squared_edge, guess,
-                                    args=(self.xy[i], self.xy[j], data.t,),
-                                    jac=get_grad_phi_squared_edge,
-                                    bounds=((0, 1),), method='slsqp')
-                            if optimization.success:
-                                success = True
-                                best_opt = optimization
-                                if optimization.fun < minimum_phi:
-                                    minimum_phi = optimization.fun
-                                    optimal_xi = optimization.x.copy()
-                        if success:
-                            coords[:] = xi_to_xy(optimal_xi, self.xy[i],
-                                    self.xy[j])
-                        else:
-                            print(f'Oh no! Edge point of face {face_ID} failed to optimize!')
-                    # -- Volume points -- #
-                    else:
-                        def constraint_func(bary, node_coords):
-                            '''
-                            All barycentric coordinates need to be positive.
-                            Since s and t are already positive by the bounds
-                            given, then only 1 - s - t needs to be constrained
-                            to be positive.
-
-                            Thank you to andreasdr on Stack Overflow:
-                            https://stackoverflow.com/questions/2049582/how-to-determine-if-a-point-is-in-a-2d-triangle
-                            '''
-                            constraint = 1 - bary[0] - bary[1]
-                            return constraint
-                        def constraint_jac(bary, node_coords):
-                            '''
-                            Compute the Jacobian of the constraint.
-                            '''
-                            jac = np.array([-1, -1])
-                            return jac
-                        cell_ID = self.face_points[face_ID, i_point]
-                        coords = self.vol_points[cell_ID]
-                        # Get primal cell nodes
-                        nodes = self.primal_cell_to_nodes[cell_ID]
-                        node_coords = self.xy[nodes]
-                        # Various guesses around the primal cell
-                        guesses = [
-                                np.array([1/3, 1/3]),
-                                np.array([2/3, 1/6]),
-                                np.array([1/6, 2/3]),
-                                np.array([1/6, 1/6]),
-                        ]
-                        # Solve optimization problem for the new node locations,
-                        # by moving them as close as possible to the interface
-                        # (phi = 0) while still keeping the point within the
-                        # triangle
-                        success = False
-                        minimum_phi = 1e99
-                        constraints = [{
-                                'type': 'ineq',
-                                'fun': constraint_func,
-                                'jac': constraint_jac,
-                                'args': (node_coords,)}]
-                        for guess in guesses:
-                            optimization = scipy.optimize.minimize(
-                                    get_phi_squared, guess,
-                                    args=(node_coords, data.t,),
-                                    jac=get_grad_phi_squared,
-                                    constraints=constraints,
-                                    bounds=((0, None), (0, None)))
-                            if optimization.success:
-                                success = True
-                                best_opt = optimization
-                                if optimization.fun < minimum_phi:
-                                    minimum_phi = optimization.fun
-                                    optimal_bary = optimization.x.copy()
-                        if success:
-                            coords[:] = get_coords_from_barycentric(optimal_bary, node_coords)
-                        else:
-                            print(f'Oh no! Volume point of primal cell {cell_ID} failed to optimize!')
+        # Run mesh update
+        # TODO: Probably want to refactor this
+        update_mesh(self, data, problem)
 
         # Now that the face points have moved, the area of each dual mesh cell
         # has changed, and so have the face area normals. They must now be
         # recalculated.
         self.compute_cell_areas()
-        self.compute_face_area_normals()
+        self.compute_face_area_normals(problem.fluid_solid)
 
     def compute_cell_areas(self):
         '''
@@ -655,7 +521,7 @@ class Mesh:
                 # direction of boundary faces being outwards pointing normals.
                 # Is this going to be a problem?
 
-    def compute_face_area_normals(self):
+    def compute_face_area_normals(self, fluid_solid=True):
         '''
         Compute the area-weighted normals of each dual face.
         '''
@@ -695,8 +561,10 @@ class Mesh:
             self.area_normals_p2[face_ID, :, 0] = -y_seg.jac
             self.area_normals_p2[face_ID, :, 1] =  x_seg.jac
 
-        # Copy over to the BC faces as well
-        self.copy_bc_face_area_normals()
+        # If running a fluid-solid simulation, must copy over to the BC data as
+        # well, since solid interfaces are implemented as BCs
+        if fluid_solid:
+            self.copy_bc_face_area_normals()
 
     def copy_bc_face_area_normals(self):
         total_num_boundaries = self.bc_type.shape[0]

@@ -623,6 +623,7 @@ class Cavitation(Problem):
     https://en.wikipedia.org/wiki/Rayleigh%E2%80%93Plesset_equation
     '''
     fluid_solid = False
+    has_exact_phi = False
     # Domain
     xL = -2e-1
     xR = 2e-1

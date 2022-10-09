@@ -11,14 +11,14 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 61
-ny = 61
-#n_t = 5
-cfl = .5
-t_final = 2e-2#3.7e-5
+nx = 9
+ny = 9
+n_t = 1
+#cfl = .5
+t_final = 1e-12#2e-2
 max_n_t = 99999999999
-level_set_reinitialization_rate = 1
-adaptive = False
+level_set_reinitialization_rate = 0
+adaptive = True
 rho_levels = np.linspace(.15, 1.05, 19)
 linear_reconstruction = True
 
@@ -35,7 +35,7 @@ linear_ghost_extrapolation = False
 levelset = True
 
 # List of times at which the solution should be written to file
-t_list = np.linspace(0, t_final, 11).tolist()
+t_list = np.linspace(0, t_final, 2).tolist()
 
 def main(show_progress_bar=True):
     # Create mesh
