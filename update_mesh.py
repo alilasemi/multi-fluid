@@ -23,7 +23,7 @@ def update_mesh(mesh, data, problem):
                 else:
                     #TODO
                     pass
-                    #coords = optimize_vol_point(mesh, data, problem, i_point, face_ID)
+                    coords = optimize_vol_point(mesh, data, problem, i_point, face_ID)
 
 
 def optimize_edge_point(mesh, data, problem, i, j, face_ID):
@@ -42,6 +42,8 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
     i_primals = mesh.nodes_to_primal_cells[i]
     j_primals = mesh.nodes_to_primal_cells[j]
     primal_cells = np.intersect1d(i_primals, j_primals)
+    # TODO: Figure out what this should be
+    tol = 1e-12
     # Loop over both primal cells
     for primal_ID in primal_cells:
         guesses = np.linspace(0, 1, 5)
@@ -51,7 +53,7 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
             optimization = scipy.optimize.minimize(
                     f_edge, guess,
                     args=(mesh, data, problem, primal_ID, mesh.xy[i], mesh.xy[j], data.t,),
-                    jac=f_edge_jac,
+                    jac=f_edge_jac, tol=tol,
                     bounds=((0, 1),), method='slsqp')
             if optimization.success:
                 success = True
@@ -88,8 +90,8 @@ def optimize_vol_point(mesh, data, problem, i_point, face_ID):
     cell_ID = mesh.face_points[face_ID, i_point]
     coords = mesh.vol_points[cell_ID]
     # Get primal cell nodes
-    nodes = mesh.primal_cell_to_nodes[cell_ID]
-    node_coords = mesh.xy[nodes]
+    node_IDs = mesh.primal_cell_to_nodes[cell_ID]
+    node_coords = mesh.xy[node_IDs]
     # Various guesses around the primal cell
     guesses = [
             np.array([1/3, 1/3]),
@@ -108,11 +110,13 @@ def optimize_vol_point(mesh, data, problem, i_point, face_ID):
             'fun': constraint_func,
             'jac': constraint_jac,
             'args': (node_coords,)}]
+    #TODO: Figure out what this should be
+    tol = 1e-12
     for guess in guesses:
         optimization = scipy.optimize.minimize(
-                get_phi_squared, guess,
-                args=(node_coords, data.t,),
-                jac=get_grad_phi_squared,
+                f_vol, guess,
+                args=(mesh, data, problem, node_IDs, node_coords, data.t,),
+                jac=f_vol_jac, tol=tol,
                 constraints=constraints,
                 bounds=((0, None), (0, None)))
         if optimization.success:
@@ -198,17 +202,48 @@ def f_edge_jac(xi, mesh, data, problem, primal_ID, xy1, xy2, t):
         xy3 = node_coords[2]
         dbary_dxy = np.linalg.inv(np.array([xy1 - xy3, xy2 - xy3]))
         # Combine using chain rule to get d(phi)/d(xi)
-        f_jac = dphi_dbary @ dbary_dxy @ dxy_dxi
+        dphi_dxi = dphi_dbary @ dbary_dxy @ dxy_dxi
+        # Use chain rule to compute d(f)/d(xi)
+        f_jac = phi * dphi_dxi
     return f_jac
-def get_phi_squared(bary, node_coords, t):
+def f_vol(bary, mesh, data, problem, node_IDs, node_coords, t):
+    """Compute objective function for a volume point."""
     coords = get_coords_from_barycentric(bary, node_coords).reshape(1, -1)
-    return problem.compute_exact_phi(coords, t)**2
-def get_grad_phi_squared(bary, node_coords, t):
+    # If the problem has an exact level set
+    if problem.has_exact_phi:
+        # Compute objective function
+        f = .5 * problem.compute_exact_phi(coords, t)**2
+    # If using the numerically computed phi
+    else:
+        # Use barycentric interpolation to compute phi
+        basis = np.array([bary[0], bary[1], 1 - bary[0] - bary[1]])
+        phi = np.dot(basis, data.phi[node_IDs])
+        # Compute objective function
+        f = .5 * phi**2
+    return f
+def f_vol_jac(bary, mesh, data, problem, node_IDs, node_coords, t):
+    """Compute the Jacobian of the objective function for a volume point."""
     coords = get_coords_from_barycentric(bary, node_coords).reshape(1, -1)
     xy1 = node_coords[0]
     xy2 = node_coords[1]
     xy3 = node_coords[2]
-    dphi_dxy = (2 * problem.compute_exact_phi(coords, t)
-            * problem.compute_exact_phi_gradient(coords, t))
-    dxy_dbary = np.array([xy1 - xy3, xy2 - xy3])
-    return dxy_dbary @ dphi_dxy
+    # If the problem has an exact level set
+    if problem.has_exact_phi:
+        # Compute d(f)/d(xy)
+        df_dxy = (problem.compute_exact_phi(coords, t)
+                * problem.compute_exact_phi_gradient(coords, t))
+        # Compute d(xy)/d(bary)
+        dxy_dbary = np.array([xy1 - xy3, xy2 - xy3])
+        # Combine with chain rule to get d(f)/d(bary)
+        f_jac = df_dxy @ dxy_dbary
+    # If using the numerically computed phi
+    else:
+        # Use barycentric interpolation to compute phi
+        basis = np.array([bary[0], bary[1], 1 - bary[0] - bary[1]])
+        phi = np.dot(basis, data.phi[node_IDs])
+        # Compute d(phi)/d(bary)
+        phi1, phi2, phi3 = data.phi[node_IDs]
+        dphi_dbary = np.array([phi1 - phi3, phi2 - phi3])
+        # Use chain rule to compute d(f)/d(bary)
+        f_jac = phi * dphi_dbary
+    return f_jac

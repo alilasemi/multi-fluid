@@ -11,11 +11,12 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 9
-ny = 9
-n_t = 1
-#cfl = .5
-t_final = 1e-12#2e-2
+nx = 31
+ny = 31
+#n_t = 1
+cfl = .2
+#t_final = 1e-12
+t_final = 2e-2
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
 adaptive = True
@@ -35,7 +36,7 @@ linear_ghost_extrapolation = False
 levelset = True
 
 # List of times at which the solution should be written to file
-t_list = np.linspace(0, t_final, 2).tolist()
+t_list = np.linspace(0, t_final, 11).tolist()
 
 def main(show_progress_bar=True):
     # Create mesh
@@ -52,6 +53,8 @@ def main(show_progress_bar=True):
     data = SimulationData(mesh.nx, mesh.ny, mesh.n_faces, U, phi, U_ghost,
             t_list, g, psg, file_name)
     del U, phi, U_ghost
+    # TODO hack to save initial phi
+    initial_phi = data.phi.copy()
 
     # Set fluid identity based on phi
     data.fluid_ID = (data.phi < 0).astype(int)
@@ -180,10 +183,7 @@ def main(show_progress_bar=True):
 
             # Reinitialize level set
             # TODO: This stuff is mostly just a hack for now
-            global level_set_reinitialization_rate
-            if level_set_reinitialization_rate == 0:
-                level_set_reinitialization_rate = max_n_t
-            if i % level_set_reinitialization_rate == 0:
+            if level_set_reinitialization_rate != 0 and i % level_set_reinitialization_rate == 0:
                 reinitialize_level_set(data, mesh)
 
             # -- Update Ghost Fluid Cells -- #
