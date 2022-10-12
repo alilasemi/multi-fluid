@@ -11,12 +11,12 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 31
-ny = 31
+nx = 21
+ny = 21
 #n_t = 1
 cfl = .2
 #t_final = 1e-12
-t_final = 2e-2
+t_final = 1e-2
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
 adaptive = True
@@ -180,6 +180,16 @@ def main(show_progress_bar=True):
             else:
                 if levelset:
                     data.phi = update_phi(dt, data, mesh, problem)
+                    # TODO: This is a hack to try a prescribed phi
+                    theta = np.loadtxt('../../mnt/ind/projects/cavitation/simulations/case1/postpro/radius_theta.txt')
+                    k = 11
+                    X_hat = np.empty_like(theta)
+                    for i in range(k + 1):
+                        X_hat[i] = (data.t / 1e-2)**i
+                    radius = X_hat.T @ theta
+                    x = mesh.xy[:, 0]
+                    y = mesh.xy[:, 1]
+                    data.phi = np.sqrt(x**2 + y**2) - radius
 
             # Reinitialize level set
             # TODO: This stuff is mostly just a hack for now
