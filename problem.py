@@ -691,6 +691,14 @@ class Cavitation(Problem):
         # Range of theta
         n_points = 100
         theta = np.linspace(0, 2*np.pi, n_points)
+
+        coeffs = np.loadtxt('../../mnt/ind/projects/cavitation/simulations/case1/postpro/radius_theta.txt')
+        k = 11
+        X_hat = np.empty_like(coeffs)
+        for i in range(k + 1):
+            X_hat[i] = (t / 1e-2)**i
+        self.radius = X_hat.T @ coeffs
+
         # Convert to x and y
         x = self.radius * np.cos(theta)
         y = self.radius * np.sin(theta)

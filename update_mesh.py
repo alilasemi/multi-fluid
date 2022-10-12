@@ -43,7 +43,7 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
     j_primals = mesh.nodes_to_primal_cells[j]
     primal_cells = np.intersect1d(i_primals, j_primals)
     # TODO: Figure out what this should be
-    tol = 1e-12
+    tol = 1e-10
     # Loop over both primal cells
     for primal_ID in primal_cells:
         guesses = np.linspace(0, 1, 5)
@@ -111,7 +111,8 @@ def optimize_vol_point(mesh, data, problem, i_point, face_ID):
             'jac': constraint_jac,
             'args': (node_coords,)}]
     #TODO: Figure out what this should be
-    tol = 1e-12
+    #tol = 1e-12
+    tol = 1e-2 * .5 * np.min(data.phi[node_IDs]**2)
     for guess in guesses:
         optimization = scipy.optimize.minimize(
                 f_vol, guess,
