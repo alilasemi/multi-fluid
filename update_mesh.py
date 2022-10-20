@@ -45,7 +45,8 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
     # TODO: Figure out what this should be
     tol = 1e-10
     # Loop over both primal cells
-    for primal_ID in primal_cells:
+    new_coords = np.empty((2, 2))
+    for index, primal_ID in enumerate(primal_cells):
         guesses = np.linspace(0, 1, 5)
         success = False
         minimum_phi = 1e99
@@ -62,10 +63,13 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
                     minimum_phi = optimization.fun
                     optimal_xi = optimization.x.copy()
         if success:
-            coords[:] = xi_to_xy(optimal_xi, mesh.xy[i],
+            new_coords[index] = xi_to_xy(optimal_xi, mesh.xy[i],
                     mesh.xy[j])
         else:
             print(f'Oh no! Edge point of face {face_ID} failed to optimize!')
+
+    # Use the average of the results from the two primal cells
+    coords[:] = .5 * (new_coords[0] + new_coords[1])
 
 
 def optimize_vol_point(mesh, data, problem, i_point, face_ID):
