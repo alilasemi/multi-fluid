@@ -6,6 +6,11 @@ def update_mesh(mesh, data, problem):
     '''
     Update the dual mesh to fit the interface better.
     '''
+
+    # Construct the least squares fit to the level set, if needed
+    if not problem.has_exact_phi:
+        construct_level_set_fit(mesh, data)
+
     for face_ID in range(mesh.n_faces):
         # TODO: Only works for interior faces
         if mesh.is_boundary(face_ID): continue
@@ -24,6 +29,50 @@ def update_mesh(mesh, data, problem):
                     #TODO
                     pass
                     coords = optimize_vol_point(mesh, data, problem, i_point, face_ID)
+
+
+def construct_level_set_fit(mesh, data):
+    # TODO: Put this in the data class
+    data.phi_c = np.empty((mesh.n_primal_cells, 6))
+    # Loop over primal cells
+    for primal_ID in range(mesh.n_primal_cells):
+        # Get nodes of this primal cell
+        node_IDs = mesh.primal_cell_to_nodes[primal_ID]
+        node_coords = mesh.xy[node_IDs]
+        xy1 = node_coords[0, :]
+        xy2 = node_coords[1, :]
+        xy3 = node_coords[2, :]
+        # Calculate Jacobian matrix of barycentric transformation
+        dx_phys_dx = np.empty((2, 2))
+        dx_phys_dx[:, 0] = xy1 - xy3
+        dx_phys_dx[:, 1] = xy2 - xy3
+        # Get gradient of phi wrt barycentric coordinates
+        grad_phi_xy1 = data.grad_phi[node_IDs[0]] @ dx_phys_dx
+        grad_phi_xy2 = data.grad_phi[node_IDs[1]] @ dx_phys_dx
+        grad_phi_xy3 = data.grad_phi[node_IDs[2]] @ dx_phys_dx
+        # -- Construct A matrix -- #
+        A = np.empty((9, 6))
+        # Equations for phi at the nodes
+        A[0] = [1, 0, 0, 0, 0, 0]
+        A[1] = [1, 1, 0, 1, 0, 0]
+        A[2] = [1, 0, 1, 0, 1, 0]
+        # Equations for gradient of phi at the nodes
+        A[3] = [0, 1, 0, 2*xy1[0], 0,        xy1[1]]
+        A[4] = [0, 0, 1, 0,        2*xy1[1], xy1[0]]
+        A[5] = [0, 1, 0, 2*xy2[0], 0,        xy2[1]]
+        A[6] = [0, 0, 1, 0,        2*xy2[1], xy2[0]]
+        A[7] = [0, 1, 0, 2*xy3[0], 0,        xy3[1]]
+        A[8] = [0, 0, 1, 0,        2*xy3[1], xy3[0]]
+        # Construct b vector
+        b = np.array([
+            data.phi[node_IDs[0]], data.phi[node_IDs[1]], data.phi[node_IDs[2]],
+            grad_phi_xy1[0], grad_phi_xy1[1],
+            grad_phi_xy2[0], grad_phi_xy2[1],
+            grad_phi_xy3[0], grad_phi_xy3[1],
+        ])
+        # Solve with least squares
+        data.phi_c[primal_ID] = np.linalg.solve(A.T @ A, A.T @ b)
+    breakpoint()
 
 
 def optimize_edge_point(mesh, data, problem, i, j, face_ID):

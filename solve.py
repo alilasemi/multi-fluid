@@ -11,15 +11,15 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 101
-ny = 101
-#n_t = 1
-cfl = .5
+nx = 11
+ny = 11
+n_t = 1
+#cfl = .5
 #t_final = 1e-12
 t_final = 2e-2
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
-adaptive = False
+adaptive = True
 rho_levels = np.linspace(.15, 1.05, 19)
 linear_reconstruction = True
 
@@ -126,6 +126,9 @@ def main(show_progress_bar=True):
                 # Revert back to original face points
                 mesh.vol_points = mesh.original_vol_points.copy()
                 mesh.edge_points = mesh.original_edge_points.copy()
+                # Update gradient of phi
+                compute_gradient_phi(data.phi, mesh.xy, mesh.neighbors,
+                        data.grad_phi)
                 # Update the mesh
                 mesh.update(data, problem)
             # Update the stencil to not include points across the interface
