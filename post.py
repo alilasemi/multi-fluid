@@ -13,7 +13,7 @@ Problem = Cavitation
 file_name = 'data.npz'
 show_progress_bar = True
 plot_profile = False
-plot_mesh = False
+plot_mesh = True
 plot_contour = True
 mark_volume_points = False
 plot_phi_contours = True
@@ -53,36 +53,36 @@ def post_process():
     rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
     rc('text', usetex=True)
 
-    # TODO: This is basically a hack to plot mass conservation error
-    bubble_mass = np.empty(n_times)
-    for i_iter in range(n_times):
-        # Extract  data
-        V = V_list[i_iter]
-        r = V[:, 0]
-        phi = data.phi_list[i_iter]
-        t = data.t_list[i_iter]
-        edge_points = data.edge_points_list[i_iter]
-        vol_points = data.vol_points_list[i_iter]
-        # Get mesh areas
-        mesh.edge_points = edge_points
-        mesh.vol_points = vol_points
-        mesh.compute_cell_areas()
-
-        # Compute total mass of bubble
-        bubble_IDs = np.argwhere(phi < 0)[:, 0]
-        bubble_mass[i_iter] = np.sum(r[bubble_IDs] * mesh.area[bubble_IDs])
-    # Save data
-    from solve import adaptive
-    bubble_data = np.empty((n_times, 2))
-    bubble_data[:, 0] = data.t_list
-    bubble_data[:, 1] = bubble_mass
-    np.savetxt(f'bubble_data/bubble_data_{mesh.nx}_{adaptive}.txt', bubble_data)
-    quit()
-    # Plot
-    plt.plot(data.t_list, bubble_mass, '-k', lw=2)
-    plt.tight_layout()
-    plt.savefig(f'bubble_mass.pdf', bbox_inches='tight')
-    #plt.show()
+#    # TODO: This is basically a hack to plot mass conservation error
+#    bubble_mass = np.empty(n_times)
+#    for i_iter in range(n_times):
+#        # Extract  data
+#        V = V_list[i_iter]
+#        r = V[:, 0]
+#        phi = data.phi_list[i_iter]
+#        t = data.t_list[i_iter]
+#        edge_points = data.edge_points_list[i_iter]
+#        vol_points = data.vol_points_list[i_iter]
+#        # Get mesh areas
+#        mesh.edge_points = edge_points
+#        mesh.vol_points = vol_points
+#        mesh.compute_cell_areas()
+#
+#        # Compute total mass of bubble
+#        bubble_IDs = np.argwhere(phi < 0)[:, 0]
+#        bubble_mass[i_iter] = np.sum(r[bubble_IDs] * mesh.area[bubble_IDs])
+#    # Save data
+#    from solve import adaptive
+#    bubble_data = np.empty((n_times, 2))
+#    bubble_data[:, 0] = data.t_list
+#    bubble_data[:, 1] = bubble_mass
+#    np.savetxt(f'bubble_data/bubble_data_{mesh.nx}_{adaptive}.txt', bubble_data)
+#    quit()
+#    # Plot
+#    plt.plot(data.t_list, bubble_mass, '-k', lw=2)
+#    plt.tight_layout()
+#    plt.savefig(f'bubble_mass.pdf', bbox_inches='tight')
+#    #plt.show()
 
     # Density, velocity, and pressure profiles
     if plot_profile:

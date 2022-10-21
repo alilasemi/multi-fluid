@@ -29,6 +29,7 @@ def update_mesh(mesh, data, problem):
                     #TODO
                     pass
                     coords = optimize_vol_point(mesh, data, problem, i_point, face_ID)
+            break# TODO Hack
 
 
 def construct_level_set_fit(mesh, data):
@@ -72,8 +73,25 @@ def construct_level_set_fit(mesh, data):
         ])
         # Solve with least squares
         data.phi_c[primal_ID] = np.linalg.solve(A.T @ A, A.T @ b)
-    breakpoint()
 
+def evaluate_level_set_fit(data, primal_ID, bary):
+    x, y = bary
+    # Compute basis
+    basis = np.array([1, x, y, x**2, y**2, x*y])
+    # Evaluate phi
+    phi = data.phi_c[primal_ID] @ basis
+    return phi
+
+def evaluate_level_set_gradient(data, primal_ID, bary):
+    x, y = bary
+    # Compute basis gradient
+    d_basis_dx = np.array([0, 1, 0, 2*x, 0, y])
+    d_basis_dy = np.array([0, 0, 1, 0, 2*y, x])
+    # Evaluate phi gradient
+    d_phi_dbary = np.empty(2)
+    d_phi_dbary[0] = data.phi_c[primal_ID] @ d_basis_dx
+    d_phi_dbary[1] = data.phi_c[primal_ID] @ d_basis_dy
+    return d_phi_dbary
 
 def optimize_edge_point(mesh, data, problem, i, j, face_ID):
     coords = mesh.edge_points[mesh.face_points[face_ID, 1]]
@@ -91,14 +109,16 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
     i_primals = mesh.nodes_to_primal_cells[i]
     j_primals = mesh.nodes_to_primal_cells[j]
     primal_cells = np.intersect1d(i_primals, j_primals)
-    # TODO: Figure out what this should be
-    tol = 1e-10
     # Loop over both primal cells
     new_coords = np.empty((2, 2))
+    print('Optimizing: ', coords)
     for index, primal_ID in enumerate(primal_cells):
         guesses = np.linspace(0, 1, 5)
         success = False
         minimum_phi = 1e99
+        # TODO: Figure out what this should be
+        node_IDs = mesh.primal_cell_to_nodes[primal_ID]
+        tol = 1e-2 * .5 * np.min(data.phi[node_IDs]**2)
         for guess in guesses:
             optimization = scipy.optimize.minimize(
                     f_edge, guess,
@@ -117,6 +137,7 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
         else:
             print(f'Oh no! Edge point of face {face_ID} failed to optimize!')
 
+    breakpoint()
     # Use the average of the results from the two primal cells
     coords[:] = .5 * (new_coords[0] + new_coords[1])
 
@@ -218,11 +239,11 @@ def f_edge(xi, mesh, data, problem, primal_ID, xy1, xy2, t):
         node_coords = mesh.xy[node_IDs]
         # Get barycentric coordinates
         bary = get_barycentric_from_coords(coords, node_coords)
-        # Use barycentric interpolation to compute phi
-        basis = np.array([bary[0], bary[1], 1 - bary[0] - bary[1]])
-        phi = np.dot(basis, data.phi[node_IDs])
+        # Compute phi from the fit
+        phi = evaluate_level_set_fit(data, primal_ID, bary)
         # Compute objective function
         f = .5 * phi**2
+        print(f)
     return f
 def f_edge_jac(xi, mesh, data, problem, primal_ID, xy1, xy2, t):
     """Compute the Jacobian of the objective function for an edge point."""
@@ -244,12 +265,10 @@ def f_edge_jac(xi, mesh, data, problem, primal_ID, xy1, xy2, t):
         node_coords = mesh.xy[node_IDs]
         # Get barycentric coordinates
         bary = get_barycentric_from_coords(coords, node_coords)
-        # Use barycentric interpolation to compute phi
-        basis = np.array([bary[0], bary[1], 1 - bary[0] - bary[1]])
-        phi = np.dot(basis, data.phi[node_IDs])
-        # Compute d(phi)/d(bary)
-        phi1, phi2, phi3 = data.phi[node_IDs]
-        dphi_dbary = np.array([phi1 - phi3, phi2 - phi3])
+        # Compute phi from the fit
+        phi = evaluate_level_set_fit(data, primal_ID, bary)
+        # Compute d(phi)/d(bary) from the fit
+        dphi_dbary = evaluate_level_set_gradient(data, primal_ID, bary)
         # Compute d(bary)/d(xy) as the inverse of d(xy)/d(bary)
         xy1 = node_coords[0]
         xy2 = node_coords[1]
@@ -259,6 +278,7 @@ def f_edge_jac(xi, mesh, data, problem, primal_ID, xy1, xy2, t):
         dphi_dxi = dphi_dbary @ dbary_dxy @ dxy_dxi
         # Use chain rule to compute d(f)/d(xi)
         f_jac = phi * dphi_dxi
+        print(f_jac)
     return f_jac
 def f_vol(bary, mesh, data, problem, node_IDs, node_coords, t):
     """Compute objective function for a volume point."""
