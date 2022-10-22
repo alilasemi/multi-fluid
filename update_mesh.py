@@ -47,6 +47,7 @@ def construct_level_set_fit(mesh, data):
         dx_phys_dx = np.empty((2, 2))
         dx_phys_dx[:, 0] = xy1 - xy3
         dx_phys_dx[:, 1] = xy2 - xy3
+        dx_phys_dx = dx_phys_dx.T
         # Get gradient of phi wrt barycentric coordinates
         grad_phi_xy1 = data.grad_phi[node_IDs[0]] @ dx_phys_dx
         grad_phi_xy2 = data.grad_phi[node_IDs[1]] @ dx_phys_dx
@@ -111,8 +112,8 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
     primal_cells = np.intersect1d(i_primals, j_primals)
     # Loop over both primal cells
     new_coords = np.empty((2, 2))
-    print('Optimizing: ', coords)
     for index, primal_ID in enumerate(primal_cells):
+        print('Optimizing: ', coords, ' Primal =', primal_ID)
         guesses = np.linspace(0, 1, 5)
         success = False
         minimum_phi = 1e99
@@ -120,6 +121,7 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
         node_IDs = mesh.primal_cell_to_nodes[primal_ID]
         tol = 1e-2 * .5 * np.min(data.phi[node_IDs]**2)
         for guess in guesses:
+            print('Guess = ', guess)
             optimization = scipy.optimize.minimize(
                     f_edge, guess,
                     args=(mesh, data, problem, primal_ID, mesh.xy[i], mesh.xy[j], data.t,),
@@ -131,15 +133,16 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
                 if optimization.fun < minimum_phi:
                     minimum_phi = optimization.fun
                     optimal_xi = optimization.x.copy()
+                    breakpoint()
         if success:
             new_coords[index] = xi_to_xy(optimal_xi, mesh.xy[i],
                     mesh.xy[j])
         else:
             print(f'Oh no! Edge point of face {face_ID} failed to optimize!')
 
-    breakpoint()
     # Use the average of the results from the two primal cells
     coords[:] = .5 * (new_coords[0] + new_coords[1])
+    breakpoint()
 
 
 def optimize_vol_point(mesh, data, problem, i_point, face_ID):
@@ -243,7 +246,7 @@ def f_edge(xi, mesh, data, problem, primal_ID, xy1, xy2, t):
         phi = evaluate_level_set_fit(data, primal_ID, bary)
         # Compute objective function
         f = .5 * phi**2
-        print(f)
+        print('xi, f = ', xi, f)
     return f
 def f_edge_jac(xi, mesh, data, problem, primal_ID, xy1, xy2, t):
     """Compute the Jacobian of the objective function for an edge point."""
@@ -269,16 +272,17 @@ def f_edge_jac(xi, mesh, data, problem, primal_ID, xy1, xy2, t):
         phi = evaluate_level_set_fit(data, primal_ID, bary)
         # Compute d(phi)/d(bary) from the fit
         dphi_dbary = evaluate_level_set_gradient(data, primal_ID, bary)
+        print('bary ', bary)
         # Compute d(bary)/d(xy) as the inverse of d(xy)/d(bary)
         xy1 = node_coords[0]
         xy2 = node_coords[1]
         xy3 = node_coords[2]
-        dbary_dxy = np.linalg.inv(np.array([xy1 - xy3, xy2 - xy3]))
+        dbary_dxy = np.linalg.inv(np.array([xy1 - xy3, xy2 - xy3]).T)
         # Combine using chain rule to get d(phi)/d(xi)
         dphi_dxi = dphi_dbary @ dbary_dxy @ dxy_dxi
         # Use chain rule to compute d(f)/d(xi)
         f_jac = phi * dphi_dxi
-        print(f_jac)
+        print('f_jac = ', f_jac)
     return f_jac
 def f_vol(bary, mesh, data, problem, node_IDs, node_coords, t):
     """Compute objective function for a volume point."""
@@ -321,3 +325,24 @@ def f_vol_jac(bary, mesh, data, problem, node_IDs, node_coords, t):
         # Use chain rule to compute d(f)/d(bary)
         f_jac = phi * dphi_dbary
     return f_jac
+
+if __name__ == "__main__":
+    # TODO: Put these in unit tests
+    xy1 = np.array([-.067, -.067])
+    xy2 = np.array([-.022, -.022])
+    class MeshMock:
+        primal_cell_to_nodes = np.array([[0, 1, 2]])
+        #xy = np.array([[1, 0], [0, 1], [0, 0]])
+        xy = np.array([[-0.06666667, -0.06666667],
+               [-0.02222222, -0.02222222],
+               [-0.06666667, -0.02222222]])
+    class DataMock:
+        #phi_c = np.array([[1, -1, -1, 0, 0, 0]])
+        phi_c = np.array([[ 0.05411418,  0.01338193, -0.02645798, -0.07596969,  0.00268392,
+                0.04843283]])
+    class ProblemMock:
+        has_exact_phi = False
+    primal_ID = 0
+    fe = f_edge(0.053159, MeshMock(), DataMock(), ProblemMock, primal_ID, xy1, xy2, None)
+    #fej = f_edge_jac(0, MeshMock(), DataMock(), ProblemMock, primal_ID, xy1, xy2, None)
+    breakpoint()
