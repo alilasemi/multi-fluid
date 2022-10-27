@@ -47,7 +47,6 @@ def construct_level_set_fit(mesh, data):
         dx_phys_dx = np.empty((2, 2))
         dx_phys_dx[:, 0] = xy1 - xy3
         dx_phys_dx[:, 1] = xy2 - xy3
-        dx_phys_dx = dx_phys_dx.T
         # Get gradient of phi wrt barycentric coordinates
         grad_phi_xy1 = data.grad_phi[node_IDs[0]] @ dx_phys_dx
         grad_phi_xy2 = data.grad_phi[node_IDs[1]] @ dx_phys_dx
