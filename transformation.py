@@ -87,3 +87,12 @@ def faceref_to_elemref_jacobian(elem_node_coords, face_node_coords):
     d_xy_d_zeta = faceref_to_physical_jacobian(face_node_coords)
     d_xi_eta_d_zeta = np.linalg.inv(d_xy_d_xi_eta) @ d_xy_d_zeta
     return d_xi_eta_d_zeta
+
+if __name__ == '__main__':
+    elem_node_coords = np.array([
+        [0, 0], [1, 0], [0, 1]
+    ])
+    face_node_coords = np.array([
+        [0, 1], [1, 0]
+    ])
+    jac = faceref_to_elemref_jacobian(elem_node_coords, face_node_coords)
