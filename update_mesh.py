@@ -208,24 +208,6 @@ def optimize_vol_point(mesh, data, problem, i_point, face_ID):
         print(f'Oh no! Volume point of primal cell {cell_ID} failed to optimize!')
 
 
-def get_coords_from_barycentric(bary, node_coords):
-    xy1 = node_coords[0]
-    xy2 = node_coords[1]
-    xy3 = node_coords[2]
-    return bary[0]*xy1 + bary[1]*xy2 + (1 - bary[0] -
-            bary[1])*xy3
-# TODO Solve this linear system exactly
-def get_barycentric_from_coords(coords, node_coords):
-    xy1 = node_coords[0]
-    xy2 = node_coords[1]
-    xy3 = node_coords[2]
-    A = np.empty((2, 2))
-    A[:, 0] = xy1 - xy3
-    A[:, 1] = xy2 - xy3
-    b = coords.flatten() - xy3
-    return np.linalg.solve(A, b)
-def xi_to_xy(xi, xy1, xy2):
-    return xi*xy2 + (1 - xi) * xy1
 def f_edge(xi, mesh, data, problem, primal_ID, xy1, xy2, t):
     """Compute objective function for an edge point."""
     # Convert reference to physical coordinates
