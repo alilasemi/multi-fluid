@@ -393,7 +393,7 @@ class Mesh:
     def is_boundary(self, face_ID):
         return self.face_points[face_ID, 2] == -1
 
-    def get_face_point_coords(self, i_face, edge_points=None, vol_points=None,):
+    def get_face_point_coords(self, i_face, edge_points=None, vol_points=None):
         '''
         Get coordinates of points on a given dual mesh face.
         '''

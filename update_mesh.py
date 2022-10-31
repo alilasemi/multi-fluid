@@ -14,6 +14,12 @@ def update_mesh(mesh, data, problem):
     if not problem.has_exact_phi:
         construct_level_set_fit(mesh, data)
 
+    # Mapping of volume points to their edge points
+    vol_points_to_edge_points = np.empty(mesh.n_primal_cells, dtype=object)
+    for i in range(mesh.n_primal_cells):
+        vol_points_to_edge_points[i] = []
+
+    # First, loop to update edge points
     for face_ID in range(mesh.n_faces):
         # TODO: Only works for interior faces
         if mesh.is_boundary(face_ID): continue
@@ -22,14 +28,30 @@ def update_mesh(mesh, data, problem):
         i, j = mesh.edge[face_ID]
         # Check for interface
         if data.phi[i] * data.phi[j] < 0:
-            # If it's an interface, move the face points towards phi = 0
-            for i_point in range(3):
-                # -- Edge points -- #
-                if i_point == 1:
-                    optimize_edge_point(mesh, data, problem, i, j, face_ID)
-                # -- Volume points -- #
-                else:
-                    optimize_vol_point(mesh, data, problem, i_point, face_ID)
+            # Optimize
+            optimize_edge_point(mesh, data, problem, i, j, face_ID)
+            # Store neighboring volume points
+            primal_ID_L = mesh.face_points[face_ID, 0]
+            primal_ID_R = mesh.face_points[face_ID, 2]
+            vol_points_to_edge_points[primal_ID_L].append(face_ID)
+            vol_points_to_edge_points[primal_ID_R].append(face_ID)
+
+    # Now that edge points are updated, update volume points
+    for face_ID in range(mesh.n_faces):
+        # TODO: Only works for interior faces
+        if mesh.is_boundary(face_ID): continue
+
+        # Get dual mesh neighbors
+        i, j = mesh.edge[face_ID]
+        # Check for interface
+        if data.phi[i] * data.phi[j] < 0:
+            for i_point in [0, 2]:
+                primal_ID = mesh.face_points[face_ID, i_point]
+                # Get edge points connected to this volume point
+                edge_point_coords = mesh.edge_points[
+                        vol_points_to_edge_points[primal_ID]]
+                optimize_vol_point(mesh, data, problem, i_point, face_ID,
+                        edge_point_coords)
 
 
 def construct_level_set_fit(mesh, data):
@@ -140,7 +162,7 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
     coords[:] = .5 * (new_coords[0] + new_coords[1])
 
 
-def optimize_vol_point(mesh, data, problem, i_point, face_ID):
+def optimize_vol_point(mesh, data, problem, i_point, face_ID, edge_point_coords):
     def constraint_func(xi_eta, node_coords):
         '''
         All barycentric coordinates need to be positive.
