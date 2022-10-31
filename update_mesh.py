@@ -37,21 +37,15 @@ def update_mesh(mesh, data, problem):
             vol_points_to_edge_points[primal_ID_R].append(face_ID)
 
     # Now that edge points are updated, update volume points
-    for face_ID in range(mesh.n_faces):
-        # TODO: Only works for interior faces
-        if mesh.is_boundary(face_ID): continue
-
-        # Get dual mesh neighbors
-        i, j = mesh.edge[face_ID]
-        # Check for interface
-        if data.phi[i] * data.phi[j] < 0:
-            for i_point in [0, 2]:
-                primal_ID = mesh.face_points[face_ID, i_point]
-                # Get edge points connected to this volume point
-                edge_point_coords = mesh.edge_points[
-                        vol_points_to_edge_points[primal_ID]]
-                optimize_vol_point(mesh, data, problem, i_point, face_ID,
-                        edge_point_coords)
+    for primal_ID in range(mesh.n_primal_cells):
+        # Skip volume points that are not involved in an interface
+        if len(vol_points_to_edge_points[primal_ID]) == 0: continue
+        # Get edge points connected to this volume point
+        edge_point_coords = mesh.edge_points[
+                vol_points_to_edge_points[primal_ID]]
+        # Optimize
+        optimize_vol_point(mesh, data, problem, primal_ID, face_ID,
+                edge_point_coords)
 
 
 def construct_level_set_fit(mesh, data):
@@ -162,7 +156,7 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
     coords[:] = .5 * (new_coords[0] + new_coords[1])
 
 
-def optimize_vol_point(mesh, data, problem, i_point, face_ID, edge_point_coords):
+def optimize_vol_point(mesh, data, problem, cell_ID, face_ID, edge_point_coords):
     def constraint_func(xi_eta, node_coords):
         '''
         All barycentric coordinates need to be positive.
@@ -182,7 +176,6 @@ def optimize_vol_point(mesh, data, problem, i_point, face_ID, edge_point_coords)
         '''
         jac = np.array([-1, -1])
         return jac
-    cell_ID = mesh.face_points[face_ID, i_point]
     coords = mesh.vol_points[cell_ID]
     # Get primal cell nodes
     node_IDs = mesh.primal_cell_to_nodes[cell_ID]
@@ -211,7 +204,7 @@ def optimize_vol_point(mesh, data, problem, i_point, face_ID, edge_point_coords)
     for guess in guesses:
         optimization = scipy.optimize.minimize(
                 f_vol, guess,
-                args=(data, problem, node_coords, cell_ID),
+                args=(data, problem, node_coords, cell_ID, edge_point_coords),
                 jac=f_vol_jac, tol=tol,
                 constraints=constraints,
                 bounds=((0, None), (0, None)))
@@ -284,8 +277,10 @@ def f_edge_jac(zeta, mesh, data, problem, primal_ID, face_node_coords, t):
         # Use chain rule to compute d(f)/d(zeta)
         f_jac = phi * d_phi_d_zeta
     return f_jac
-def f_vol(xi_eta, data, problem, node_coords, primal_ID):
+factor = 0.1
+def f_vol(xi_eta, data, problem, node_coords, primal_ID, edge_point_coords):
     """Compute objective function for a volume point."""
+    xy = elemref_to_physical(xi_eta, node_coords)
     # If the problem has an exact level set
     if problem.has_exact_phi:
         coords = get_coords_from_barycentric(bary, node_coords).reshape(1, -1)
@@ -297,9 +292,12 @@ def f_vol(xi_eta, data, problem, node_coords, primal_ID):
         phi = evaluate_level_set_fit(data, primal_ID, xi_eta)
         # Compute objective function
         f = .5 * phi**2
+        for edge_point in edge_point_coords:
+            f += factor * .5 * np.linalg.norm(xy - edge_point)**2
     return f
-def f_vol_jac(xi_eta, data, problem, node_coords, primal_ID):
+def f_vol_jac(xi_eta, data, problem, node_coords, primal_ID, edge_point_coords):
     """Compute the Jacobian of the objective function for a volume point."""
+    xy = elemref_to_physical(xi_eta, node_coords)
     # If the problem has an exact level set
     if problem.has_exact_phi:
         coords = get_coords_from_barycentric(bary, node_coords).reshape(1, -1)
@@ -321,6 +319,10 @@ def f_vol_jac(xi_eta, data, problem, node_coords, primal_ID):
         d_phi_d_xi_eta = evaluate_level_set_gradient(data, primal_ID, xi_eta)
         # Use chain rule to compute d(f)/d(xi, eta)
         f_jac = phi * d_phi_d_xi_eta
+        # Add contribution from edge point terms
+        jac = elemref_to_physical_jacobian(node_coords)
+        for edge_point in edge_point_coords:
+            f_jac += factor * (xy - edge_point) @ jac
     return f_jac
 
 if __name__ == "__main__":
