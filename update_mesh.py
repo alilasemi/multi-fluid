@@ -56,9 +56,10 @@ def construct_level_set_fit(mesh, data):
         # Get nodes of this primal cell
         node_IDs = mesh.primal_cell_to_nodes[primal_ID]
         node_coords = mesh.xy[node_IDs]
-        xy1 = node_coords[0, :]
-        xy2 = node_coords[1, :]
-        xy3 = node_coords[2, :]
+        # Element reference coordinates of nodes
+        xi1, eta1 = [0, 0]
+        xi2, eta2 = [1, 0]
+        xi3, eta3 = [0, 1]
         # Calculate Jacobian matrix of barycentric transformation
         jac = elemref_to_physical_jacobian(node_coords)
         # Get gradient of phi wrt barycentric coordinates
@@ -72,12 +73,12 @@ def construct_level_set_fit(mesh, data):
         A[1] = [1, 1, 0, 1, 0, 0]
         A[2] = [1, 0, 1, 0, 1, 0]
         # Equations for gradient of phi at the nodes
-        A[3] = [0, 1, 0, 2*xy1[0], 0,        xy1[1]]
-        A[4] = [0, 0, 1, 0,        2*xy1[1], xy1[0]]
-        A[5] = [0, 1, 0, 2*xy2[0], 0,        xy2[1]]
-        A[6] = [0, 0, 1, 0,        2*xy2[1], xy2[0]]
-        A[7] = [0, 1, 0, 2*xy3[0], 0,        xy3[1]]
-        A[8] = [0, 0, 1, 0,        2*xy3[1], xy3[0]]
+        A[3] = [0, 1, 0, 2*xi1, 0,        eta1]
+        A[4] = [0, 0, 1, 0,        2*eta1, xi1]
+        A[5] = [0, 1, 0, 2*xi2, 0,        eta2]
+        A[6] = [0, 0, 1, 0,        2*eta2, xi2]
+        A[7] = [0, 1, 0, 2*xi3, 0,        eta3]
+        A[8] = [0, 0, 1, 0,        2*eta3, xi3]
         # Construct b vector
         b = np.array([
             data.phi[node_IDs[0]], data.phi[node_IDs[1]], data.phi[node_IDs[2]],
@@ -143,8 +144,8 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
                     bounds=((0, 1),), method='slsqp')
             if optimization.success:
                 success = True
-                best_opt = optimization
                 if optimization.fun < minimum_phi:
+                    best_opt = optimization
                     minimum_phi = optimization.fun
                     optimal_zeta = optimization.x.copy()
         if success:
@@ -199,7 +200,6 @@ def optimize_vol_point(mesh, data, problem, cell_ID, face_ID, edge_point_coords)
             'jac': constraint_jac,
             'args': (node_coords,)}]
     #TODO: Figure out what this should be
-    #tol = 1e-12
     tol = 1e-5 * .5 * np.min(data.phi[node_IDs]**2)
     for guess in guesses:
         optimization = scipy.optimize.minimize(
@@ -210,11 +210,14 @@ def optimize_vol_point(mesh, data, problem, cell_ID, face_ID, edge_point_coords)
                 bounds=((0, None), (0, None)))
         if optimization.success:
             success = True
-            best_opt = optimization
             if optimization.fun < minimum_phi:
+                best_opt = optimization
                 minimum_phi = optimization.fun
                 optimal_xi_eta = optimization.x.copy()
     if success:
+        if np.all(np.isclose(coords,
+                np.array([-(.5 + 1/3) * (.4 / 19), -(.5 + 2/3) * (.4 /19)]))):
+            breakpoint()
         coords[:] = elemref_to_physical(optimal_xi_eta, node_coords)
     else:
         print(f'Oh no! Volume point of primal cell {cell_ID} failed to optimize!')
@@ -324,23 +327,3 @@ def f_vol_jac(xi_eta, data, problem, node_coords, primal_ID, edge_point_coords):
         for edge_point in edge_point_coords:
             f_jac += factor * (xy - edge_point) @ jac
     return f_jac
-
-if __name__ == "__main__":
-    # TODO: Put these in unit tests
-    xy1 = np.array([-.067, -.067])
-    xy2 = np.array([-.022, -.022])
-    class MeshMock:
-        primal_cell_to_nodes = np.array([[0, 1, 2]])
-        #xy = np.array([[1, 0], [0, 1], [0, 0]])
-        xy = np.array([[-0.06666667, -0.06666667],
-               [-0.02222222, -0.02222222],
-               [-0.06666667, -0.02222222]])
-    class DataMock:
-        #phi_c = np.array([[1, -1, -1, 0, 0, 0]])
-        phi_c = np.array([[ 0.05411418,  0.01338193, -0.02645798, -0.07596969,  0.00268392,
-                0.04843283]])
-    class ProblemMock:
-        has_exact_phi = False
-    primal_ID = 0
-    fe = f_edge(0.053159, MeshMock(), DataMock(), ProblemMock, primal_ID, xy1, xy2, None)
-    #fej = f_edge_jac(0, MeshMock(), DataMock(), ProblemMock, primal_ID, xy1, xy2, None)
