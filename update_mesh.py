@@ -3,6 +3,7 @@ import scipy.optimize
 
 from transformation import (elemref_to_physical_jacobian, physical_to_elemref,
         faceref_to_elemref_jacobian, elemref_to_physical, faceref_to_physical)
+from build.src.libpybind_bindings import (f_edge, f_edge_jac)
 
 
 def update_mesh(mesh, data, problem):
@@ -121,6 +122,9 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
     # This is done for both neighboring primal cells and the result is averaged,
     # since the reconstruction of phi need not be continuous.
 
+    if problem.has_exact_phi:
+        print("Exact level set is no longer supported!")
+
     # Get the two primal cells on either side of this edge
     i_primals = mesh.nodes_to_primal_cells[i]
     j_primals = mesh.nodes_to_primal_cells[j]
@@ -137,7 +141,8 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
         for guess in guesses:
             optimization = scipy.optimize.minimize(
                     f_edge, guess,
-                    args=(mesh, data, problem, primal_ID, face_node_coords, data.t,),
+                    args=(mesh.xy, mesh.primal_cell_to_nodes, data.phi_c,
+                        primal_ID, face_node_coords),
                     jac=f_edge_jac, tol=tol,
                     bounds=((0, 1),), method='slsqp')
             if optimization.success:
@@ -217,64 +222,6 @@ def optimize_vol_point(mesh, data, problem, cell_ID, face_ID, edge_point_coords)
     else:
         print(f'Oh no! Volume point of primal cell {cell_ID} failed to optimize!')
 
-
-def f_edge(zeta, mesh, data, problem, primal_ID, face_node_coords, t):
-    """Compute objective function for an edge point."""
-    # If the problem has an exact level set
-    if problem.has_exact_phi:
-        print("This part of the code (exact level set) may be outdated!")
-        # Convert reference to physical coordinates
-        coords = xi_to_xy(xi, xy1, xy2).reshape(1, -1)
-        # Compute objective function
-        f = .5 * problem.compute_exact_phi(coords, t)**2
-    # If using the numerically computed phi
-    else:
-        # Compute physical coordinates
-        xy = faceref_to_physical(zeta, face_node_coords)
-        # Get nodes of this primal cell
-        node_IDs = mesh.primal_cell_to_nodes[primal_ID]
-        elem_node_coords = mesh.xy[node_IDs]
-        # Compute element reference coordinates
-        xi_eta = physical_to_elemref(xy, elem_node_coords)
-        # Compute phi from the fit
-        phi = evaluate_level_set_fit(data, primal_ID, xi_eta)
-        # Compute objective function
-        f = .5 * phi**2
-    return f
-def f_edge_jac(zeta, mesh, data, problem, primal_ID, face_node_coords, t):
-    """Compute the Jacobian of the objective function for an edge point."""
-    # If the problem has an exact level set
-    if problem.has_exact_phi:
-        print("This part of the code (exact level set) may be outdated!")
-        # Convert reference to physical coordinates
-        coords = xi_to_xy(xi, xy1, xy2).reshape(1, -1)
-        # Compute d(xy)/d(xi)
-        dxy_dxi = xy2 - xy1
-        # Compute d(phi)/d(xy) using chain rule
-        dphi_dxy = (problem.compute_exact_phi(coords, t)
-                * problem.compute_exact_phi_gradient(coords, t))
-        # Combine (chain rule) to get d(phi)/d(xi)
-        f_jac = np.dot(dphi_dxy[:, 0], dxy_dxi)
-    # If using the numerically computed phi
-    else:
-        # Compute physical coordinates
-        xy = faceref_to_physical(zeta, face_node_coords)
-        # Get nodes of this primal cell
-        node_IDs = mesh.primal_cell_to_nodes[primal_ID]
-        elem_node_coords = mesh.xy[node_IDs]
-        # Compute element reference coordinates
-        xi_eta = physical_to_elemref(xy, elem_node_coords)
-        # Compute phi from the fit
-        phi = evaluate_level_set_fit(data, primal_ID, xi_eta)
-        # Compute d(phi)/d(xi, eta) from the fit
-        d_phi_d_xi_eta = evaluate_level_set_gradient(data, primal_ID, xi_eta)
-        # Compute Jacobian
-        d_xi_eta_d_zeta = faceref_to_elemref_jacobian(elem_node_coords, face_node_coords)
-        # Combine using chain rule to get d(phi)/d(zeta)
-        d_phi_d_zeta = d_phi_d_xi_eta @ d_xi_eta_d_zeta
-        # Use chain rule to compute d(f)/d(zeta)
-        f_jac = phi * d_phi_d_zeta
-    return f_jac
 factor = 0.1
 def f_vol(xi_eta, data, problem, node_coords, primal_ID, edge_point_coords):
     """Compute objective function for a volume point."""

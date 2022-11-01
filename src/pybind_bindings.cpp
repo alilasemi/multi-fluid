@@ -3,6 +3,7 @@
 #include <gradient.h>
 #include <riemann.h>
 #include <roe.h>
+#include <optimization.h>
 
 PYBIND11_MODULE(libpybind_bindings, m) {
     //TODO docstrings
@@ -23,5 +24,9 @@ PYBIND11_MODULE(libpybind_bindings, m) {
     m.def("compute_flux", &compute_flux,
             "A function that...");
     m.def("compute_flux_roe", &compute_flux_roe,
+            "A function that...");
+    m.def("f_edge", &f_edge,
+            "A function that...");
+    m.def("f_edge_jac", &f_edge_jac,
             "A function that...");
 }
