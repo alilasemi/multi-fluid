@@ -11,12 +11,12 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 # Solver inputs
 Problem = Cavitation
-nx = 30
-ny = 30
-n_t = 1
-#cfl = .5
-#t_final = 1e-12
-t_final = 1e-10#2e-2
+nx = 21
+ny = 21
+#n_t = 1
+cfl = .5
+#t_final = 1e-10
+t_final = 2e-2
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
 adaptive = True
@@ -36,7 +36,7 @@ linear_ghost_extrapolation = False
 levelset = True
 
 # List of times at which the solution should be written to file
-t_list = np.linspace(0, t_final, 2).tolist()
+t_list = np.linspace(0, t_final, 11).tolist()
 
 def main(show_progress_bar=True):
     # Create mesh
@@ -183,16 +183,16 @@ def main(show_progress_bar=True):
             else:
                 if levelset:
                     data.phi = update_phi(dt, data, mesh, problem)
-                    # TODO: This is a hack to try a prescribed phi
-                    theta = np.loadtxt('../../mnt/ind/projects/cavitation/simulations/case1/postpro/radius_theta.txt')
-                    k = 11
-                    X_hat = np.empty_like(theta)
-                    for i in range(k + 1):
-                        X_hat[i] = (data.t / 1e-2)**i
-                    radius = X_hat.T @ theta
-                    x = mesh.xy[:, 0]
-                    y = mesh.xy[:, 1]
-                    data.phi = np.sqrt(x**2 + y**2) - radius
+#                    # TODO: This is a hack to try a prescribed phi
+#                    theta = np.loadtxt('../../mnt/ind/projects/cavitation/simulations/case1/postpro/radius_theta.txt')
+#                    k = 11
+#                    X_hat = np.empty_like(theta)
+#                    for i in range(k + 1):
+#                        X_hat[i] = (data.t / 1e-2)**i
+#                    radius = X_hat.T @ theta
+#                    x = mesh.xy[:, 0]
+#                    y = mesh.xy[:, 1]
+#                    data.phi = np.sqrt(x**2 + y**2) - radius
 
             # Reinitialize level set
             # TODO: This stuff is mostly just a hack for now
@@ -254,13 +254,6 @@ def main(show_progress_bar=True):
                             data.U[ghost_ID, k] = np.dot(c[:-1], mesh.xy[ghost_ID]) + c[-1]
                     # Use constant extrapolation
                     else:
-                        # Store old velocity and pressure
-                        fluid_ID_old = int(not data.fluid_ID[ghost_ID])
-                        g_old = data.g[fluid_ID_old]
-                        psg_old = data.psg[fluid_ID_old]
-                        V_ghost = conservative_to_primitive(*data.U[ghost_ID],
-                                g_old, psg_old)
-                        _, u_old, v_old, p_old = V_ghost
                         # Neighbor conservative state vectors
                         neighbor_U = data.U[fluid_neighbors]
                         # For each neighbor
@@ -275,13 +268,10 @@ def main(show_progress_bar=True):
                         # Average neighbor primitive variables
                         mean_V = np.mean(neighbor_V, axis=0)
                         # Convert back to conservative
-                        # TODO: Currently testing using old velocity and pressure
                         g_ghost = data.g[data.fluid_ID[ghost_ID]]
                         psg_ghost = data.psg[data.fluid_ID[ghost_ID]]
                         data.U[ghost_ID] = primitive_to_conservative(
                                 *mean_V, g_ghost, psg_ghost)
-                        #data.U[ghost_ID] = primitive_to_conservative(
-                        #        mean_V[0], u_old, v_old, p_old, g_ghost, psg_ghost)
 
             #if data.t > .008:
             #    V = np.empty_like(data.U)

@@ -128,7 +128,6 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
     # Loop over both primal cells
     new_coords = np.empty((2, 2))
     for index, primal_ID in enumerate(primal_cells):
-        print('Optimizing: ', coords, ' Primal =', primal_ID)
         guesses = np.linspace(0, 1, 5)
         success = False
         minimum_phi = 1e99
@@ -136,7 +135,6 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
         node_IDs = mesh.primal_cell_to_nodes[primal_ID]
         tol = 1e-5 * .5 * np.min(data.phi[node_IDs]**2)
         for guess in guesses:
-            print('Guess = ', guess)
             optimization = scipy.optimize.minimize(
                     f_edge, guess,
                     args=(mesh, data, problem, primal_ID, face_node_coords, data.t,),
@@ -215,9 +213,6 @@ def optimize_vol_point(mesh, data, problem, cell_ID, face_ID, edge_point_coords)
                 minimum_phi = optimization.fun
                 optimal_xi_eta = optimization.x.copy()
     if success:
-        if np.all(np.isclose(coords,
-                np.array([-(.5 + 1/3) * (.4 / 19), -(.5 + 2/3) * (.4 /19)]))):
-            breakpoint()
         coords[:] = elemref_to_physical(optimal_xi_eta, node_coords)
     else:
         print(f'Oh no! Volume point of primal cell {cell_ID} failed to optimize!')
