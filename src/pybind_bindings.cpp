@@ -29,4 +29,8 @@ PYBIND11_MODULE(libpybind_bindings, m) {
             "A function that...");
     m.def("f_edge_jac", &f_edge_jac,
             "A function that...");
+    m.def("f_vol", &f_vol,
+            "A function that...");
+    m.def("f_vol_jac", &f_vol_jac,
+            "A function that...");
 }
