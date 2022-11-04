@@ -1,8 +1,7 @@
 import numpy as np
 import scipy.optimize
 
-from lagrange import (LagrangeSegmentP1, LagrangeSegmentP2, LagrangeTriangleP1,
-        LagrangeTriangleP2)
+from lagrange import LagrangeSegmentP1, LagrangeSegmentP2, LagrangeTriangleP2
 from update_mesh import update_mesh
 
 
@@ -449,10 +448,10 @@ class Mesh:
             # Coordinates of the three points on the face
             face_point_coords = self.get_face_point_coords(face_ID)
 
+            # The six points defining a second order triangle element
+            points = np.empty((6, 2))
             # If it's an interior face, use second order elements
             if face_point_coords.shape[0] == 3:
-                # The six points defining a second order triangle element
-                points = np.empty((6, 2))
                 # -- Triangle on side of node i -- #
                 # Point 0 is the left node
                 points[0] = self.xy[i]
@@ -490,31 +489,41 @@ class Mesh:
                 self.area[j] += tri.area
 
             # If it's a boundary face, use first order elements
-            if face_point_coords.shape[0] == 2:
-                # The three points defining a first order triangle element
-                points = np.empty((3, 2))
+            elif face_point_coords.shape[0] == 2:
                 # -- Triangle on side of node i -- #
                 # Point 0 is the left node
                 points[0] = self.xy[i]
-                # Point 1 is the edge point
-                points[1] = face_point_coords[1]
                 # Point 2 is the primal mesh centroid
                 points[2] = face_point_coords[0]
+                # Point 1 is halfway between 0 and 2
+                points[1] = .5 * (points[0] + points[2])
+                # Point 5 is the edge point
+                points[5] = face_point_coords[1]
+                # Point 3 is halfway between 0 and 5
+                points[3] = .5 * (points[0] + points[5])
+                # Point 4 is halfway between 2 and 5
+                points[4] = .5 * (points[2] + points[5])
                 # Create a Lagrange triangle
-                tri = LagrangeTriangleP1(points)
+                tri = LagrangeTriangleP2(points)
                 # Add contribution to area
                 self.area[i] += np.abs(tri.area)
 
                 # -- Triangle on side of node j -- #
-                # Point 0 is the left node
+                # Point 0 is the right node
                 points[0] = self.xy[j]
-                # Point 1 is the primal mesh centroid
-                points[1] = face_point_coords[0]
                 # Point 2 is the edge point
                 points[2] = face_point_coords[1]
+                # Point 1 is halfway between 0 and 2
+                points[1] = .5 * (points[0] + points[2])
+                # Point 5 is the primal mesh centroid
+                points[5] = face_point_coords[0]
+                # Point 3 is halfway between 0 and 5
+                points[3] = .5 * (points[0] + points[5])
+                # Point 4 is halfway between 2 and 5
+                points[4] = .5 * (points[2] + points[5])
                 # Create a Lagrange triangle
-                tri = LagrangeTriangleP1(points)
-                # Add contribution to self.area
+                tri = LagrangeTriangleP2(points)
+                # Add contribution to area
                 self.area[j] += np.abs(tri.area)
 
                 # TODO: The np.abs is added since I do not guarantee the

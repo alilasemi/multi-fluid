@@ -185,68 +185,6 @@ class LagrangeSegmentP2(LagrangeSegment):
         return basis_grad
 
 
-class LagrangeTriangleP1(LagrangeTriangle):
-    '''
-    Class for performing Langrange interpolation and quadrature on triangles.
-
-    Hardcoded for first order interpolants.
-    '''
-    # Number of basis functions
-    nb = 3
-
-    # Nodes for the interpolation on the reference triangle
-    xy_nodes = np.array([ [0, 0], [1, 0], [0, 1] ])
-
-    def get_basis_values(self, xy):
-        '''
-        Compute values of Lagrange basis at a set of points.
-
-        Inputs:
-        -------
-        xy - array of points (n, 2)
-
-        Outputs:
-        --------
-        basis_val - array of basis values evaluated at xy (n, nb)
-        '''
-        n = xy.shape[0]
-        basis_val = np.empty((n, self.nb))
-        x = xy[:, 0]
-        y = xy[:, 1]
-        # Evaluate Lagrange basis functions
-        basis_val[:, 0] = 1 - x - y
-        basis_val[:, 1] = x
-        basis_val[:, 2] = y
-        return basis_val
-
-    def get_basis_gradient(self, xy):
-        '''
-        Compute gradient of Lagrange basis at a set of points.
-
-        Inputs:
-        -------
-        xy - array of points (n, 2)
-
-        Outputs:
-        --------
-        basis_grad - array of basis values evaluated at xy (n, nb)
-        '''
-        n = xy.shape[0]
-        basis_grad = np.empty((n, self.nb, 2))
-        x = xy[:, 0]
-        y = xy[:, 1]
-        # Evaluate Lagrange basis gradient
-        # x - direction
-        basis_grad[:, 0, 0] = -1
-        basis_grad[:, 1, 0] = 1
-        basis_grad[:, 2, 0] = 0
-        # y - direction
-        basis_grad[:, 0, 1] = -1
-        basis_grad[:, 1, 1] = 0
-        basis_grad[:, 2, 1] = 1
-        return basis_grad
-
-
 class LagrangeTriangleP2(LagrangeTriangle):
     '''
     Class for performing Langrange interpolation and quadrature on triangles.
