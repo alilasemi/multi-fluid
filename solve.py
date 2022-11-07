@@ -10,9 +10,9 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 
 # Solver inputs
-Problem = AdvectedBubble
-nx = 20
-ny = 20
+Problem = Cavitation
+nx = 31
+ny = 31
 #n_t = 1
 cfl = .2
 #t_final = 1e-6
@@ -25,7 +25,7 @@ linear_reconstruction = True
 
 # Physical parameters
 g = [4.4, 1.4]
-psg = [6e4, 0]#[6e8, 0]
+psg = [6e5, 0]#[6e8, 0]
 #g = [1.4, 1.4]
 #psg = [0, 0]
 
