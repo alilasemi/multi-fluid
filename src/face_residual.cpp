@@ -73,9 +73,18 @@ void compute_interior_face_residual(matrix_ref<double> U,
                 U_R(face_ID, all).transpose(), area_normals,
                 gL, gR, psgL, psgR, F);
 
+        //if (L == 11 or R == 11) {
+        //    cout << "_______________________ interior _____________________" << endl;
+        //    cout << "L = " << L << ", R = " << R << endl;
+        //    cout << U_L(face_ID, all) << endl;
+        //    cout << U_R(face_ID, all) << endl;
+        //    cout << area_normals.transpose() << endl;
+        //    cout << F.transpose() << endl;
+        //}
+
         // Update residual of cells on the left and right
-        residual(L, all) += -1 / area(L, 0) * F;
-        residual(R, all) +=  1 / area(R, 0) * F;
+        residual(L, all) -= 1 / area(L, 0) * F;
+        residual(R, all) += 1 / area(R, 0) * F;
     }
 }
 
@@ -89,6 +98,7 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         matrix_ref<double> area, vector_ref<long> fluid_ID,
         std::vector<double> g, std::vector<double> psg,
         matrix_ref<double> residual) {
+    auto nq = quad_wts.rows();
     // Create buffers
     matrix<double> U_L(4, 1);
     matrix<double> U_R(4, 1);
@@ -118,7 +128,7 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         // Loop over quadrature points
         vector<double> F_integral_L = vector<double>::Zero(4);
         vector<double> F_integral_R = vector<double>::Zero(4);
-        for (auto i = 0; i < 2; i++) {
+        for (auto i = 0; i < nq; i++) {
             // Evaluate solution at faces on left and right
             // -- First order component, converted to primitive -- //
             auto V_L = conservative_to_primitive(U(L, all), gL, psgL);
@@ -129,8 +139,8 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             // TODO: This looks a bit jank...issue is that Eigen cannot
             // handle 3D arrays. Wrapper of vector with strides??
             matrix<double> quad_pt(2, 1);
-            quad_pt(0) = quad_pts_phys[face_ID*2*2 + i*2 + 0];
-            quad_pt(1) = quad_pts_phys[face_ID*2*2 + i*2 + 1];
+            quad_pt(0) = quad_pts_phys[face_ID*nq*2 + i*2 + 0];
+            quad_pt(1) = quad_pts_phys[face_ID*nq*2 + i*2 + 1];
             // TODO: There has to be a cleaner way...
             for (int k = 0; k < 4; k++) {
                 V_L(k) += limiter(L, k) * (gradV_L(k, all).transpose().cwiseProduct(quad_pt - xy(L, all).transpose()).sum());
@@ -142,8 +152,8 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
 
             // Package the normals
             matrix<double> area_normal(2, 1);
-            area_normal(0, 0) = area_normals_p2[face_ID*2*2 + i*2 + 0];
-            area_normal(1, 0) = area_normals_p2[face_ID*2*2 + i*2 + 1];
+            area_normal(0, 0) = area_normals_p2[face_ID*nq*2 + i*2 + 0];
+            area_normal(1, 0) = area_normals_p2[face_ID*nq*2 + i*2 + 1];
             vector<double> n_hat = area_normal(all, 0).normalized();
             vector<double> t_hat(2);
             t_hat << -n_hat(1), n_hat(0);
@@ -181,28 +191,39 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             //    }
             //}
 
+            //if (L == 11 or R == 11) {
+            //    cout << "_______________________ i = " << i << " _____________________" << endl;
+            //    cout << "L = " << L << ", R = " << R << endl;
+            //    cout << U_L_Riemann.transpose() << endl;
+            //    cout << U_R_Riemann.transpose() << endl;
+            //    cout << area_normal.transpose() << endl;
+            //}
             // Evaluate left interior flux, using the left fluid data (this is
             // why gL and psgL are repeated)
             compute_flux(U_L, U_L_Riemann, area_normal, gL, gL, psgL, psgL, F);
-            //if (L == 549 or R == 549) {
-            //    cout << "L = " << L << ", R = " << R << endl;
-            //    cout << result.transpose() << endl;
-            //    cout << U_L_Riemann.transpose() << endl;
-            //    cout << U_R_Riemann.transpose() << endl;
-            //    cout << F << endl;
-            //}
             // Add contribution to quadrature
             F_integral_L += F * quad_wts(i, 0);
+            //if (L == 11 or R == 11) {
+            //    cout << F.transpose() << endl;
+            //}
             // Evaluate right interior flux, using the right fluid data (this is
             // why gR and psgR are repeated)
             compute_flux(U_R_Riemann, U_R, area_normal, gR, gR, psgR, psgR, F);
             // Add contribution to quadrature
             F_integral_R += F * quad_wts(i, 0);
+            //if (L == 11 or R == 11) {
+            //    cout << F.transpose() << endl;
+            //}
         }
 
+        //if (L == 11 or R == 11) {
+        //    cout << " === INTEGRAL === " << endl;
+        //    cout << F_integral_L.transpose() << endl;
+        //    cout << F_integral_R.transpose() << endl;
+        //}
         // Update residual of cells on the left and right
-        residual(L, all) += -1 / area(L, 0) * F_integral_L;
-        residual(R, all) +=  1 / area(R, 0) * F_integral_R;
+        residual(L, all) -= 1 / area(L, 0) * F_integral_L;
+        residual(R, all) += 1 / area(R, 0) * F_integral_R;
 
         if (print) {
             cout << "integral" << endl;

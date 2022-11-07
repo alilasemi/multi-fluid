@@ -54,6 +54,22 @@ def get_residual(data, mesh, problem):
         # Take the minimum across each face point
         limiter[:, k] = damping * np.min(limiter_j, axis=1)
 
+    #TODO: This is just for testing, remove
+    faces = []
+    net_area = np.zeros(2)
+    net_area_p2 = np.zeros(2)
+    quad_wts = np.array([ (18 - np.sqrt(30)) / 36, (18 + np.sqrt(30)) / 36, (18 + np.sqrt(30)) / 36, (18 - np.sqrt(30)) / 36 ]) / 2
+    for face_ID in range(mesh.edge.shape[0]):
+        L, R = mesh.edge[face_ID]
+        if L == 11 or R == 11:
+            faces.append(face_ID)
+            if L == 11:
+                net_area += mesh.area_normals_p1[face_ID]
+                net_area_p2 += quad_wts @ mesh.area_normals_p2[face_ID]
+            else:
+                net_area -= mesh.area_normals_p1[face_ID]
+                net_area_p2 -= quad_wts @ mesh.area_normals_p2[face_ID]
+
     # Compute the interior face residual
     # TODO: is Pybind OOP a thing? Seems to not be...
     # TODO: Ditch the whole area_normals_p2 vs regular normals thing (actually

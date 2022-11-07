@@ -23,9 +23,17 @@ class LagrangeSegment(Lagrange):
     # https://en.wikipedia.org/wiki/Gaussian_quadrature
     # This is the 2-point Guass-Legendre quadrature rule from this page.
     # Quadrature points
-    quad_pts = np.array([-1/(2*np.sqrt(3)) + 1/2, 1/(2*np.sqrt(3)) + 1/2])
+    #quad_pts = np.array([-1/(2*np.sqrt(3)) + 1/2, 1/(2*np.sqrt(3)) + 1/2])
+    quad_pts = np.array([
+        -np.sqrt(3/7 + 2/7*np.sqrt(6/5)), -np.sqrt(3/7 - 2/7*np.sqrt(6/5)),
+        np.sqrt(3/7 - 2/7*np.sqrt(6/5)), np.sqrt(3/7 + 2/7*np.sqrt(6/5)),
+    ]) / 2 + 1/2
     # Quadrature weights
-    quad_wts = np.array([1/2, 1/2])
+    #quad_wts = np.array([1/2, 1/2])
+    quad_wts = np.array([
+        (18 - np.sqrt(30)) / 36, (18 + np.sqrt(30)) / 36, (18 + np.sqrt(30)) / 36, (18 - np.sqrt(30)) / 36
+    ]) / 2
+    nq = quad_pts.size
 
     def get_jacobian(self, x):
         '''

@@ -80,31 +80,30 @@ class RiemannProblem(Problem):
             .125, 50, 0, 1e4, 1
     ])
 
-    # Ratio of specific heats
-    g = 1.4
-
     # The exact solution is defined
     exact = True
 
-    def __init__(self, xy, t_list):
-        super().__init__(xy, t_list)
-        # Unpack
-        r4, u4, v4, p4, phi4 = self.state_4
-        r1, u1, v1, p1, phi1 = self.state_1
-        g = self.g
-        # Get exact solution to this Riemann Problem
-        exact_solution(
-                r4, p4, u4, v4, r1, p1, u1, v1, g, t_list)
+    # TODO Make this work for stiffened gas
+#    def __init__(self, xy, t_list):
+#        super().__init__(xy, t_list)
+#        # Unpack
+#        r4, u4, v4, p4, phi4 = self.state_4
+#        r1, u1, v1, p1, phi1 = self.state_1
+#        g = self.g
+#        # Get exact solution to this Riemann Problem
+#        exact_solution(
+#                r4, p4, u4, v4, r1, p1, u1, v1, g, t_list)
 
     def get_initial_conditions(self):
         # Unpack
         r4, u4, v4, p4, phi4 = self.state_4
         r1, u1, v1, p1, phi1 = self.state_1
-        g = self.g
+        g4, g1 = self.g
+        psg4, psg1 = self.psg
 
         # Get initial conditions as conservatives
-        W4 = primitive_to_conservative(r4, u4, v4, p4, g)
-        W1 = primitive_to_conservative(r1, u1, v1, p1, g)
+        W4 = primitive_to_conservative(r4, u4, v4, p4, g4, psg4)
+        W1 = primitive_to_conservative(r1, u1, v1, p1, g4, psg4)
 
         # Set left and right state with the contact at x = 0
         U = np.empty((self.n, 4))
@@ -116,7 +115,7 @@ class RiemannProblem(Problem):
 
     def set_bc_data(self):
         # Set BC 0 to be the interfaces
-        self.set_bc(0, 'interface')
+        self.set_bc(0, 'advected interface')
         # Set BC 1 to be the walls
         self.set_bc(1, 'wall')
         # Set BC 2 to be the left state
@@ -165,6 +164,10 @@ class AdvectedContact(RiemannProblem):
             .125, u, 0, 1e5, 1
     ])
 
+    # Ignore exact phi to use advected level set
+    fluid_solid = False
+    has_exact_phi = False
+
     def compute_exact_phi(self, coords, t):
         '''
         Compute the exact phi, which is a plane advecting at constant speed.
@@ -181,14 +184,16 @@ class AdvectedContact(RiemannProblem):
         gphi = np.array([1, 0])
         return gphi
 
-    def plot_exact_interface(self, axis, mesh, t):
-        axis.vlines(self.u * t, mesh.yL, mesh.yR, color='r')
+    def plot_exact_interface(self, axis, mesh, t, lw_scale):
+        axis.vlines(self.u * t, mesh.yL, mesh.yR, color='r', lw=2*lw_scale)
 
 class AdvectedBubble(Problem):
     '''
     Class for a bubble advecting at constant velocity.
     '''
     fluid_solid = False
+    # Ignore exact phi to use advected level set
+    has_exact_phi = False
     # Domain
     xL = -1
     xR = 1
@@ -208,18 +213,17 @@ class AdvectedBubble(Problem):
 
     # Radius of bubble
     radius = .25
-    # Ratio of specific heats
-    g = 1.4
 
     def get_initial_conditions(self):
         # Unpack
         r0, u0, v0, p0, phi0 = self.ambient
         r1, u1, v1, p1, phi1 = self.bubble
-        g = self.g
+        g0, g1 = self.g
+        psg0, psg1 = self.psg
 
         # Get initial conditions as conservatives
-        W0 = primitive_to_conservative(r0, u0, v0, p0, g)
-        W1 = primitive_to_conservative(r1, u1, v1, p1, g)
+        W0 = primitive_to_conservative(r0, u0, v0, p0, g0, psg0)
+        W1 = primitive_to_conservative(r1, u1, v1, p1, g1, psg1)
 
         # Set bubble in the center of the domain
         U = W0 * np.ones((self.n, 4))
@@ -232,12 +236,12 @@ class AdvectedBubble(Problem):
 
     def compute_exact_phi(self, coords, t):
         '''
-        Compute the exact phi, which is a paraboloid advecting at constant
+        Compute the exact phi, which is a cone advecting at constant
         speed.
         '''
         x = coords[:, 0]
         y = coords[:, 1]
-        phi = (x - self.u * t)**2 + y**2 - self.radius**2
+        phi = np.sqrt((x - self.u * t)**2 + y**2) - self.radius
         return phi
 
     def compute_exact_phi_gradient(self, coords, t):

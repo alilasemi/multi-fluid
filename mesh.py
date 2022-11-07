@@ -534,9 +534,47 @@ class Mesh:
         '''
         Compute the area-weighted normals of each dual face.
         '''
-        self.area_normals_p2 = np.empty((self.n_faces, 2, 2))
-        self.quad_pts_phys = np.empty((self.n_faces, 2, 2))
+        interface_primals = set()
+        # Loop over interfaces to find which primal cells intersect an
+        # interface
+        for interface_ID in self.interface_IDs:
+            face_points = self.face_points[interface_ID]
+            # If an interface hit a boundary, stop the simulation. This is not
+            # currently supported.
+            # TODO Support this (literal) edge case
+            if face_points.size == 2:
+                raise RuntimeError('The interface has reached the boundary - '
+                        'this edge case is not yet supported!')
+            # Get primal IDs of neighboring primal cells
+            primal_IDs = face_points[[0, 2]]
+            # Add to set
+            interface_primals.update(primal_IDs)
+
+        rotation90 = np.array([[0, -1], [1, 0]])
+        # Loop over interior faces to update area normals of faces that share a
+        # volume point with an interface
+        for face_ID in self.interior_face_IDs:
+            face_points = self.face_points[face_ID]
+            # Get primal IDs of neighboring primal cells
+            primal_IDs = face_points[[0, 2]]
+            # If either primal is part of an interface
+            if any([ID in interface_primals for ID in primal_IDs]):
+                coords = self.get_face_point_coords(face_ID)
+                # Vector from left volume point to edge point
+                left_to_edge = coords[1] - coords[0]
+                # Vector from edge point to right volume point
+                edge_to_right = coords[2] - coords[1]
+                # Rotate both by 90 degrees
+                area_normal_1 = rotation90 @ left_to_edge
+                area_normal_2 = rotation90 @ edge_to_right
+                # The sum is the new area normal
+                self.area_normals_p1[face_ID] = area_normal_1 + area_normal_2
+
+        nq = LagrangeSegmentP2.nq
+        self.area_normals_p2 = np.empty((self.n_faces, nq, 2))
+        self.quad_pts_phys = np.empty((self.n_faces, nq, 2))
         # Loop over faces
+        # TODO: This really only needs to update the interfaces!
         for face_ID in range(self.n_faces):
             # Get dual mesh neighbors
             i, j = self.edge[face_ID]

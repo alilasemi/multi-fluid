@@ -10,22 +10,22 @@ from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
 
 
 # Solver inputs
-Problem = Cavitation
-nx = 21
-ny = 21
+Problem = AdvectedBubble
+nx = 20
+ny = 20
 #n_t = 1
-cfl = .5
-#t_final = 1e-10
+cfl = .2
+#t_final = 1e-6
 t_final = 2e-2
 max_n_t = 99999999999
-level_set_reinitialization_rate = 5
+level_set_reinitialization_rate = 0
 adaptive = True
 rho_levels = np.linspace(.15, 1.05, 19)
 linear_reconstruction = True
 
 # Physical parameters
 g = [4.4, 1.4]
-psg = [6e5, 0]#[6e8, 0]
+psg = [6e4, 0]#[6e8, 0]
 #g = [1.4, 1.4]
 #psg = [0, 0]
 
@@ -64,6 +64,9 @@ def main(show_progress_bar=True):
         data.save_current_state(mesh)
         written_times[0] = 0
         data.t_list[0] = 0
+    # Create initial ghost fluid interfaces
+    if ghost_fluid_interfaces:
+        mesh.create_interfaces(data, problem.fluid_solid)
 
     print('---- Solving ----')
     # Set up progress bar
