@@ -7,18 +7,19 @@ from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
         primitive_to_conservative)
 from residual import get_residual, get_residual_phi
 from build.src.libpybind_bindings import compute_gradient, compute_gradient_phi
+from lagrange import LagrangeSegmentP2
 
 
 # Solver inputs
 Problem = Cavitation
-nx = 31
-ny = 31
+nx = 101
+ny = 101
 #n_t = 1
-cfl = .2
+cfl = .05
 #t_final = 1e-6
 t_final = 2e-2
 max_n_t = 99999999999
-level_set_reinitialization_rate = 0
+level_set_reinitialization_rate = 5
 adaptive = True
 rho_levels = np.linspace(.15, 1.05, 19)
 linear_reconstruction = True
@@ -120,7 +121,6 @@ def main(show_progress_bar=True):
                         'provided!')
             data.dt = dt
 
-
             # -- Update Mesh -- #
             if adaptive:
                 # Store copy of original in case this iteration crashes
@@ -179,8 +179,16 @@ def main(show_progress_bar=True):
                 raise err
             data.t += dt
 
-            # -- Copy phi, Then Update -- #
             phi_old = data.phi.copy()
+            # Reinitialize level set
+            # TODO: This stuff is mostly just a hack for now
+            if level_set_reinitialization_rate != 0 and i % level_set_reinitialization_rate == 0:
+                if adaptive:
+                    reinitialize_level_set_higher_order(data, mesh)
+                else:
+                    reinitialize_level_set(data, mesh)
+
+            # -- Update Phi -- #
             if problem.fluid_solid:
                 data.phi = problem.compute_exact_phi(mesh.xy, data.t)
             else:
@@ -196,11 +204,6 @@ def main(show_progress_bar=True):
 #                    x = mesh.xy[:, 0]
 #                    y = mesh.xy[:, 1]
 #                    data.phi = np.sqrt(x**2 + y**2) - radius
-
-            # Reinitialize level set
-            # TODO: This stuff is mostly just a hack for now
-            if level_set_reinitialization_rate != 0 and i % level_set_reinitialization_rate == 0:
-                reinitialize_level_set(data, mesh)
 
             # -- Update Ghost Fluid Cells -- #
             if ghost_fluid_interfaces and update_ghost_fluid_cells:
@@ -406,6 +409,51 @@ def reinitialize_level_set(data, mesh):
     for i in range(mesh.n):
         distances = np.linalg.norm(interface_points - mesh.xy[i], axis=1)
         data.phi[i] *= np.min(distances)
+
+    # Update gradient
+    compute_gradient_phi(data.phi, mesh.xy, mesh.neighbors, data.grad_phi)
+
+# TODO: This will fail if you have an interface on a boundary
+def reinitialize_level_set_higher_order(data, mesh):
+    # Check to see if there are any interfaces
+    if mesh.interface_IDs.size == 0:
+        print('Level set reinitialization requested, but there are no '
+                'interfaces!')
+        return
+    # Array of points on the interface
+    n_points_per_face = 10
+    ref_coords = np.linspace(0, 1, n_points_per_face)
+    interface_points = np.empty((n_points_per_face * mesh.interface_IDs.size, 2))
+    # For each interface
+    for i, interface_ID in enumerate(mesh.interface_IDs):
+        # Get face points
+        face_point_coords = mesh.get_face_point_coords(interface_ID)
+        x = face_point_coords[:, 0]
+        y = face_point_coords[:, 1]
+        # Create a Lagrange segment
+        x_seg = LagrangeSegmentP2(x)
+        y_seg = LagrangeSegmentP2(y)
+        # Evaluate location of points in physical space
+        physical_x = np.matmul(
+                x_seg.get_basis_values(ref_coords), x_seg.coords)
+        physical_y = np.matmul(
+                y_seg.get_basis_values(ref_coords), y_seg.coords)
+        # Store
+        interface_points[i*n_points_per_face : (i + 1)*n_points_per_face, 0] = (
+                physical_x)
+        interface_points[i*n_points_per_face : (i + 1)*n_points_per_face, 1] = (
+                physical_y)
+
+    eps = 1e-15
+    # Set phi to be the signed distance to the nearest point on the interface
+    data.phi = np.sign(data.phi)
+    for i in range(mesh.n):
+        distances = np.linalg.norm(interface_points - mesh.xy[i], axis=1)
+        min_distance = np.min(distances)
+        # Prevent this from reaching exactly zero
+        min_distance = np.max([min_distance, eps])
+        # Update phi
+        data.phi[i] *= min_distance
 
     # Update gradient
     compute_gradient_phi(data.phi, mesh.xy, mesh.neighbors, data.grad_phi)
