@@ -15,12 +15,12 @@ Problem = Cavitation
 nx = 101
 ny = 101
 #n_t = 1
-cfl = .05
+cfl = .5
 #t_final = 1e-6
 t_final = 2e-2
 max_n_t = 99999999999
 level_set_reinitialization_rate = 5
-adaptive = True
+adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 linear_reconstruction = True
 
@@ -41,7 +41,8 @@ t_list = np.linspace(0, t_final, 11).tolist()
 
 def main(show_progress_bar=True):
     # Create mesh
-    mesh = Mesh(nx, ny, Problem.xL, Problem.xR, Problem.yL, Problem.yR)
+    mesh = Mesh(nx, ny, Problem.xL, Problem.xR, Problem.yL, Problem.yR,
+            adaptive)
     vol_points_copy = mesh.vol_points.copy()
     edge_points_copy = mesh.edge_points.copy()
 
@@ -90,6 +91,25 @@ def main(show_progress_bar=True):
             # Set fluid identity based on phi
             data.fluid_ID = (data.phi < 0).astype(int)
 
+            # -- Update Mesh -- #
+            if adaptive:
+                # Store copy of original in case this iteration crashes
+                vol_points_copy = mesh.vol_points.copy()
+                edge_points_copy = mesh.edge_points.copy()
+                # Revert back to original face points
+                mesh.vol_points = mesh.original_vol_points.copy()
+                mesh.edge_points = mesh.original_edge_points.copy()
+                # Update gradient of phi
+                compute_gradient_phi(data.phi, mesh.xy, mesh.neighbors,
+                        data.grad_phi)
+                # Update the mesh
+                mesh.update(data, problem)
+            # Update the stencil to not include points across the interface
+            mesh.update_stencil(data.phi)
+
+            # -- Choose Timestep -- #
+            # This should happen after the mesh update, so that the updated cell
+            # areas are used in the CFL condition.
             # If told to compute timestep using CFL
             if 'cfl' in globals():
                 # Get fluid data for each cell
@@ -121,22 +141,6 @@ def main(show_progress_bar=True):
                         'provided!')
             data.dt = dt
 
-            # -- Update Mesh -- #
-            if adaptive:
-                # Store copy of original in case this iteration crashes
-                vol_points_copy = mesh.vol_points.copy()
-                edge_points_copy = mesh.edge_points.copy()
-                # Revert back to original face points
-                mesh.vol_points = mesh.original_vol_points.copy()
-                mesh.edge_points = mesh.original_edge_points.copy()
-                # Update gradient of phi
-                compute_gradient_phi(data.phi, mesh.xy, mesh.neighbors,
-                        data.grad_phi)
-                # Update the mesh
-                mesh.update(data, problem)
-            # Update the stencil to not include points across the interface
-            mesh.update_stencil(data.phi)
-
             # Compute gradients
             compute_gradient(data.U, mesh.xy, mesh.stencil,
                     data.gradV.reshape(-1), data.g, data.psg, data.fluid_ID)
@@ -151,6 +155,12 @@ def main(show_progress_bar=True):
             # Create ghost fluid interfaces
             if ghost_fluid_interfaces:
                 mesh.create_interfaces(data, problem.fluid_solid)
+            # Allocate according to new interfaces
+            data.U_L_p1 = np.empty((mesh.interior_face_IDs.size, 4))
+            data.U_R_p1 = np.empty_like(data.U_L_p1)
+            data.U_L_p2 = np.empty((mesh.interface_IDs.size,
+                LagrangeSegmentP2.nq, 4))
+            data.U_R_p2 = np.empty_like(data.U_L_p2)
 
             #print('bubdensity', data.U[4, 0])
             #print(data.phi[0])
@@ -507,6 +517,10 @@ class SimulationData:
         self.U_ghost = U_ghost
         self.gradV = np.empty((nx*ny, 4, 2))
         self.grad_phi = np.empty((nx*ny, 2))
+        self.U_L_p1 = None
+        self.U_R_p1 = None
+        self.U_L_p2 = None
+        self.U_R_p2 = None
         self.U_L = np.empty((n_faces, 4))
         self.U_R = np.empty((n_faces, 4))
         self.fluid_ID = np.empty(nx*ny, dtype=int)

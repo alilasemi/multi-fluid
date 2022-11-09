@@ -13,7 +13,7 @@ class Mesh:
     diagonals of the triangles go from bottom-left to top-right. The mesh used
     for the actual computation is the dual mesh.
     '''
-    def __init__(self, nx, ny, xL, xR, yL, yR):
+    def __init__(self, nx, ny, xL, xR, yL, yR, higher_order):
         self.nx = nx
         self.ny = ny
         self.xL = xL
@@ -53,7 +53,7 @@ class Mesh:
 
         # Compute geometric quantities
         self.compute_cell_areas()
-        self.compute_face_area_normals()
+        self.compute_face_area_normals(higher_order)
 
     def create_dual_faces(self):
         '''
@@ -434,7 +434,8 @@ class Mesh:
         # has changed, and so have the face area normals. They must now be
         # recalculated.
         self.compute_cell_areas()
-        self.compute_face_area_normals(problem.fluid_solid)
+        self.compute_face_area_normals(higher_order=True,
+                fluid_solid=problem.fluid_solid)
 
     def compute_cell_areas(self):
         '''
@@ -530,7 +531,7 @@ class Mesh:
                 # direction of boundary faces being outwards pointing normals.
                 # Is this going to be a problem?
 
-    def compute_face_area_normals(self, fluid_solid=True):
+    def compute_face_area_normals(self, higher_order=False, fluid_solid=True):
         '''
         Compute the area-weighted normals of each dual face.
         '''
@@ -595,11 +596,22 @@ class Mesh:
                 x_seg = LagrangeSegmentP1(x[:2])
                 y_seg = LagrangeSegmentP1(y[:2])
 
+            # Choose quadrature point locations. If using the higher order
+            # interfaces, use the true quadrature point location specified by
+            # the quadrature rule. Otherwise, set all quadrature points to be
+            # the midpoint.
+            if higher_order:
+                x_quad_pts = x_seg.quad_pts
+                y_quad_pts = y_seg.quad_pts
+            else:
+                x_quad_pts = .5 * np.ones(nq)
+                y_quad_pts = .5 * np.ones(nq)
+
             # Evaluate location of quadrature points in physical space
             self.quad_pts_phys[face_ID, :, 0] = np.matmul(
-                    x_seg.get_basis_values(x_seg.quad_pts), x_seg.coords)
+                    x_seg.get_basis_values(x_quad_pts), x_seg.coords)
             self.quad_pts_phys[face_ID, :, 1] = np.matmul(
-                    y_seg.get_basis_values(y_seg.quad_pts), y_seg.coords)
+                    y_seg.get_basis_values(y_quad_pts), y_seg.coords)
 
             # Now have d x / d xi and d y / d eta, and this represents the
             # length-weighted vectors along the face. Rotate by 90 degrees

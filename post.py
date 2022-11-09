@@ -7,7 +7,7 @@ from rich.progress import track, Progress
 from mesh import Mesh
 from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
         CollapsingCylinder, Star, Cavitation, conservative_to_primitive)
-from solve import SimulationData
+from solve import SimulationData, adaptive
 
 Problem = Cavitation
 file_name = 'data.npz'
@@ -29,7 +29,8 @@ def post_process():
     data = SimulationData.read_from_file(file_name)
     n_times = len(data.t_list)
     # Create mesh
-    mesh = Mesh(data.nx, data.ny, Problem.xL, Problem.xR, Problem.yL, Problem.yR)
+    mesh = Mesh(data.nx, data.ny, Problem.xL, Problem.xR, Problem.yL,
+            Problem.yR, adaptive)
     # Create problem
     problem = Problem(mesh.xy, data.t_list, mesh.bc_type, data.g, data.psg)
     has_exact_phi = hasattr(problem, 'plot_exact_interface') and callable(
