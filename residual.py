@@ -75,7 +75,7 @@ def get_residual(data, mesh, problem):
     # TODO: Ditch the whole area_normals_p2 vs regular normals thing (actually
     # p1 wouldn't even work)
     # TODO: Passing 3D numpy arrays is kinda ugly right now...
-    compute_interior_face_residual(U, data.U_L, data.U_R,
+    compute_interior_face_residual(U, data.U_L_p1, data.U_R_p1,
             mesh.interior_face_IDs, mesh.edge, limiter, gradV.flatten().data,
             mesh.xy, mesh.area_normals_p1, mesh.area, data.fluid_ID, data.g,
             data.psg, residual)
@@ -94,11 +94,17 @@ def get_residual(data, mesh, problem):
         pass
     else:
         # Compute the fluid-fluid interface residual
-        compute_fluid_fluid_face_residual(U, mesh.interface_IDs, mesh.edge,
+        U_L_p2 = np.empty_like(data.U_L_p2).flatten()
+        U_R_p2 = np.empty_like(data.U_R_p2).flatten()
+        compute_fluid_fluid_face_residual(U, U_L_p2,
+                U_R_p2, mesh.interface_IDs, mesh.edge,
                 LagrangeSegment.quad_wts, mesh.quad_pts_phys.flatten().data,
                 limiter, gradV.flatten().data, mesh.xy,
                 mesh.area_normals_p2.flatten().data, mesh.area, data.fluid_ID,
                 data.g, data.psg, residual)
+        # TODO: Look into cleaner ways to pass multidimensional arrays back
+        data.U_L_p2 = U_L_p2.reshape(data.U_L_p2.shape)
+        data.U_R_p2 = U_R_p2.reshape(data.U_R_p2.shape)
 
     return residual
 
@@ -106,15 +112,23 @@ def get_residual_phi(data, mesh, problem):
     # Unpack
     U = data.U
     phi = data.phi
-    U_L = data.U_L
-    U_R = data.U_R
-    # Left and right cell IDs
-    L = mesh.edge[:, 0]
-    R = mesh.edge[:, 1]
+    U_L_p1 = data.U_L_p1
+    U_R_p1 = data.U_R_p1
+    U_L_p2 = data.U_L_p2
+    U_R_p2 = data.U_R_p2
+    nq = U_L_p2.shape[1]
+    interior_face_IDs = mesh.interior_face_IDs
+    interface_IDs = mesh.interface_IDs
+
     # Flux function
     flux_phi = Upwind()
 
     residual_phi = np.zeros_like(phi)
+
+    # -- Interior Faces -- #
+    # Left and right cell IDs
+    L = mesh.edge[interior_face_IDs, 0]
+    R = mesh.edge[interior_face_IDs, 1]
     # Evaluate phi at faces on left and right: first order component
     phi_L = phi[L]
     phi_R = phi[R]
@@ -122,11 +136,43 @@ def get_residual_phi(data, mesh, problem):
     quad_pts = .5 * (mesh.xy[L] + mesh.xy[R])
     phi_L += np.einsum('ik, ik -> i', data.grad_phi[L], quad_pts - mesh.xy[L])
     phi_R += np.einsum('ik, ik -> i', data.grad_phi[R], quad_pts - mesh.xy[R])
-
     # Evalute interior fluxes
-    F = flux_phi.compute_flux(U_L, U_R, phi_L, phi_R,
-            mesh.area_normals_p1)
+    F = flux_phi.compute_flux(U_L_p1, U_R_p1, phi_L, phi_R,
+            mesh.area_normals_p1[interior_face_IDs])
 
+    # Interior face contribution to residual
+    np.add.at(residual_phi, L, -1 / mesh.area[L] * F)
+    np.add.at(residual_phi, R,  1 / mesh.area[R] * F)
+
+    # -- Interfaces -- #
+    # Left and right cell IDs
+    L = mesh.edge[interface_IDs, 0]
+    R = mesh.edge[interface_IDs, 1]
+    # Evaluate phi at faces on left and right: first order component
+    phi_L = phi[L]
+    phi_R = phi[R]
+    # Copy for each quadrature point
+    phi_L = np.tile(phi_L, [4, 1]).T
+    phi_R = np.tile(phi_R, [4, 1]).T
+    # Second order component
+    quad_pts = mesh.quad_pts_phys[interface_IDs]
+    phi_L += np.einsum('ik, ijk -> ij', data.grad_phi[L],
+            quad_pts - mesh.xy[L].reshape(-1, 1, 2))
+    phi_R += np.einsum('ik, ijk -> ij', data.grad_phi[R],
+            quad_pts - mesh.xy[R].reshape(-1, 1, 2))
+    # Evalute interior fluxes
+    F = np.empty((interface_IDs.size, nq))
+    for i in range(nq):
+        F[:, i] = flux_phi.compute_flux(U_L_p2[:, i], U_R_p2[:, i], phi_L[:, i],
+                phi_R[:, i], mesh.area_normals_p2[interface_IDs, i])
+    # Quadrature rule
+    F = F @ LagrangeSegment.quad_wts
+
+    # Interface contribution to residual
+    np.add.at(residual_phi, L, -1 / mesh.area[L] * F)
+    np.add.at(residual_phi, R,  1 / mesh.area[R] * F)
+
+    # -- Boundary Faces -- #
     # Compute ghost phi
     phi_ghost = np.empty((mesh.bc_type.shape[0]))
     problem.compute_ghost_phi(phi, phi_ghost, mesh.bc_type)
@@ -136,10 +182,7 @@ def get_residual_phi(data, mesh, problem):
     F_bc = flux_phi.compute_flux(U[mesh.bc_type[:, 0]], U_ghost,
             phi[mesh.bc_type[:, 0]], phi_ghost, mesh.bc_area_normal)
 
-    # Update cells on the left and right sides, for interior faces
-    np.add.at(residual_phi, L, -1 / mesh.area[L] * F)
-    np.add.at(residual_phi, R,  1 / mesh.area[R] * F)
-    # Incorporate boundary faces
+    # Boundary face contribution to residual
     L = mesh.bc_type[:, 0]
     np.add.at(residual_phi, L, -1 / mesh.area[L] * F_bc)
     return residual_phi
