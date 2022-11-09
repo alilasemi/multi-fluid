@@ -13,7 +13,7 @@ Problem = Cavitation
 file_name = 'data.npz'
 show_progress_bar = True
 plot_profile = False
-plot_mesh = False
+plot_mesh = True
 plot_contour = True
 mark_volume_points = False
 plot_phi_contours = True
@@ -276,6 +276,7 @@ def post_process():
 
                     # Plot phi contours on top of density plot
                     if plot_phi_contours and idx == 0:
+                        phi[np.argwhere(np.isnan(phi))[:,0]] = -10
                         contour = ax.tricontour(mesh.xy[:, 0], mesh.xy[:, 1],
                                 phi, colors='k', extend='both',
                                 linewidths=1*lw_scale)

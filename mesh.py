@@ -433,15 +433,42 @@ class Mesh:
         # Now that the face points have moved, the area of each dual mesh cell
         # has changed, and so have the face area normals. They must now be
         # recalculated.
-        self.compute_cell_areas()
+        self.compute_cell_areas(data=data, near_interface_only=True)
         self.compute_face_area_normals(higher_order=True,
                 fluid_solid=problem.fluid_solid)
 
-    def compute_cell_areas(self):
+    def compute_cell_areas(self, data=None, near_interface_only=False):
         '''
         Compute the area of each dual cell.
         '''
-        self.area = np.zeros(self.n)
+        # Primal cells which intersect an interface
+        interface_primals = np.concatenate([
+            self.face_points[self.interface_IDs, 0],
+            self.face_points[self.interface_IDs, 2]])
+        # The nodes which are near them
+        nodes_near_interface_primal = (
+                self.primal_cell_to_nodes[interface_primals].flatten())
+
+        if near_interface_only:
+            # Array of nodes which need their areas computed
+            should_compute = np.empty(self.n, dtype=bool)
+            for i in range(self.n):
+                # Figure out if this node is near an interface
+                phi_product = data.phi[i] * data.phi[self.stencil[i]]
+                should_compute[i] = np.any(phi_product <= 0)
+                # Also, if it's near an interface primal cell, include those too
+                if i in nodes_near_interface_primal:
+                    should_compute[i] = True
+
+            # For nodes near an interface, set their area to zero - it will be
+            # recomputed
+            self.area[should_compute] = 0
+        else:
+            # If computing all areas, initialize all to zero
+            self.area = np.zeros(self.n)
+            should_compute = np.ones(self.n, dtype=bool)
+
+        points = np.empty((6, 2))
         # Loop over faces
         for face_ID in range(self.n_faces):
             # Get dual mesh neighbors
@@ -449,83 +476,85 @@ class Mesh:
             # Coordinates of the three points on the face
             face_point_coords = self.get_face_point_coords(face_ID)
 
-            # The six points defining a second order triangle element
-            points = np.empty((6, 2))
             # If it's an interior face, use second order elements
             if face_point_coords.shape[0] == 3:
                 # -- Triangle on side of node i -- #
-                # Point 0 is the left node
-                points[0] = self.xy[i]
-                # Point 2 is the right primal mesh centroid
-                points[2] = face_point_coords[2]
-                # Point 1 is halfway between 0 and 2
-                points[1] = .5 * (points[0] + points[2])
-                # Point 5 is the left primal mesh centroid
-                points[5] = face_point_coords[0]
-                # Point 3 is halfway between 0 and 5
-                points[3] = .5 * (points[0] + points[5])
-                # Point 4 is the edge point
-                points[4] = face_point_coords[1]
-                # Create a Lagrange triangle
-                tri = LagrangeTriangleP2(points)
-                # Add contribution to self.area
-                self.area[i] += tri.area
+                if should_compute[i]:
+                    # Point 0 is the left node
+                    points[0] = self.xy[i]
+                    # Point 2 is the right primal mesh centroid
+                    points[2] = face_point_coords[2]
+                    # Point 1 is halfway between 0 and 2
+                    points[1] = .5 * (points[0] + points[2])
+                    # Point 5 is the left primal mesh centroid
+                    points[5] = face_point_coords[0]
+                    # Point 3 is halfway between 0 and 5
+                    points[3] = .5 * (points[0] + points[5])
+                    # Point 4 is the edge point
+                    points[4] = face_point_coords[1]
+                    # Create a Lagrange triangle
+                    tri = LagrangeTriangleP2(points)
+                    # Add contribution to self.area
+                    self.area[i] += tri.area
 
                 # -- Triangle on side of node j -- #
-                # Point 0 is the right node
-                points[0] = self.xy[j]
-                # Point 2 is the left primal mesh centroid
-                points[2] = face_point_coords[0]
-                # Point 1 is halfway between 0 and 2
-                points[1] = .5 * (points[0] + points[2])
-                # Point 5 is the right primal mesh centroid
-                points[5] = face_point_coords[2]
-                # Point 3 is halfway between 0 and 5
-                points[3] = .5 * (points[0] + points[5])
-                # Point 4 is the edge point
-                points[4] = face_point_coords[1]
-                # Create a Lagrange triangle
-                tri = LagrangeTriangleP2(points)
-                # Add contribution to area
-                self.area[j] += tri.area
+                if should_compute[j]:
+                    # Point 0 is the right node
+                    points[0] = self.xy[j]
+                    # Point 2 is the left primal mesh centroid
+                    points[2] = face_point_coords[0]
+                    # Point 1 is halfway between 0 and 2
+                    points[1] = .5 * (points[0] + points[2])
+                    # Point 5 is the right primal mesh centroid
+                    points[5] = face_point_coords[2]
+                    # Point 3 is halfway between 0 and 5
+                    points[3] = .5 * (points[0] + points[5])
+                    # Point 4 is the edge point
+                    points[4] = face_point_coords[1]
+                    # Create a Lagrange triangle
+                    tri = LagrangeTriangleP2(points)
+                    # Add contribution to area
+                    self.area[j] += tri.area
 
             # If it's a boundary face, use first order elements
             elif face_point_coords.shape[0] == 2:
                 # -- Triangle on side of node i -- #
-                # Point 0 is the left node
-                points[0] = self.xy[i]
-                # Point 2 is the primal mesh centroid
-                points[2] = face_point_coords[0]
-                # Point 1 is halfway between 0 and 2
-                points[1] = .5 * (points[0] + points[2])
-                # Point 5 is the edge point
-                points[5] = face_point_coords[1]
-                # Point 3 is halfway between 0 and 5
-                points[3] = .5 * (points[0] + points[5])
-                # Point 4 is halfway between 2 and 5
-                points[4] = .5 * (points[2] + points[5])
-                # Create a Lagrange triangle
-                tri = LagrangeTriangleP2(points)
-                # Add contribution to area
-                self.area[i] += np.abs(tri.area)
+                if should_compute[i]:
+                    # Point 0 is the left node
+                    points[0] = self.xy[i]
+                    # Point 2 is the primal mesh centroid
+                    points[2] = face_point_coords[0]
+                    # Point 1 is halfway between 0 and 2
+                    points[1] = .5 * (points[0] + points[2])
+                    # Point 5 is the edge point
+                    points[5] = face_point_coords[1]
+                    # Point 3 is halfway between 0 and 5
+                    points[3] = .5 * (points[0] + points[5])
+                    # Point 4 is halfway between 2 and 5
+                    points[4] = .5 * (points[2] + points[5])
+                    # Create a Lagrange triangle
+                    tri = LagrangeTriangleP2(points)
+                    # Add contribution to area
+                    self.area[i] += np.abs(tri.area)
 
                 # -- Triangle on side of node j -- #
-                # Point 0 is the right node
-                points[0] = self.xy[j]
-                # Point 2 is the edge point
-                points[2] = face_point_coords[1]
-                # Point 1 is halfway between 0 and 2
-                points[1] = .5 * (points[0] + points[2])
-                # Point 5 is the primal mesh centroid
-                points[5] = face_point_coords[0]
-                # Point 3 is halfway between 0 and 5
-                points[3] = .5 * (points[0] + points[5])
-                # Point 4 is halfway between 2 and 5
-                points[4] = .5 * (points[2] + points[5])
-                # Create a Lagrange triangle
-                tri = LagrangeTriangleP2(points)
-                # Add contribution to area
-                self.area[j] += np.abs(tri.area)
+                if should_compute[j]:
+                    # Point 0 is the right node
+                    points[0] = self.xy[j]
+                    # Point 2 is the edge point
+                    points[2] = face_point_coords[1]
+                    # Point 1 is halfway between 0 and 2
+                    points[1] = .5 * (points[0] + points[2])
+                    # Point 5 is the primal mesh centroid
+                    points[5] = face_point_coords[0]
+                    # Point 3 is halfway between 0 and 5
+                    points[3] = .5 * (points[0] + points[5])
+                    # Point 4 is halfway between 2 and 5
+                    points[4] = .5 * (points[2] + points[5])
+                    # Create a Lagrange triangle
+                    tri = LagrangeTriangleP2(points)
+                    # Add contribution to area
+                    self.area[j] += np.abs(tri.area)
 
                 # TODO: The np.abs is added since I do not guarantee the
                 # direction of boundary faces being outwards pointing normals.
@@ -535,21 +564,10 @@ class Mesh:
         '''
         Compute the area-weighted normals of each dual face.
         '''
-        interface_primals = set()
-        # Loop over interfaces to find which primal cells intersect an
-        # interface
-        for interface_ID in self.interface_IDs:
-            face_points = self.face_points[interface_ID]
-            # If an interface hit a boundary, stop the simulation. This is not
-            # currently supported.
-            # TODO Support this (literal) edge case
-            if face_points.size == 2:
-                raise RuntimeError('The interface has reached the boundary - '
-                        'this edge case is not yet supported!')
-            # Get primal IDs of neighboring primal cells
-            primal_IDs = face_points[[0, 2]]
-            # Add to set
-            interface_primals.update(primal_IDs)
+        # Primal cells which intersect an interface
+        interface_primals = set(np.concatenate([
+            self.face_points[self.interface_IDs, 0],
+            self.face_points[self.interface_IDs, 2]]))
 
         rotation90 = np.array([[0, -1], [1, 0]])
         # Loop over interior faces to update area normals of faces that share a
