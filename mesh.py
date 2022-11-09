@@ -435,7 +435,7 @@ class Mesh:
         # recalculated.
         self.compute_cell_areas(data=data, near_interface_only=True)
         self.compute_face_area_normals(higher_order=True,
-                fluid_solid=problem.fluid_solid)
+                fluid_solid=problem.fluid_solid, near_interface_only=True)
 
     def compute_cell_areas(self, data=None, near_interface_only=False):
         '''
@@ -560,7 +560,8 @@ class Mesh:
                 # direction of boundary faces being outwards pointing normals.
                 # Is this going to be a problem?
 
-    def compute_face_area_normals(self, higher_order=False, fluid_solid=True):
+    def compute_face_area_normals(self, higher_order=False, fluid_solid=True,
+            near_interface_only=False):
         '''
         Compute the area-weighted normals of each dual face.
         '''
@@ -572,12 +573,15 @@ class Mesh:
         rotation90 = np.array([[0, -1], [1, 0]])
         # Loop over interior faces to update area normals of faces that share a
         # volume point with an interface
+        face_near_interface_primal = np.zeros(self.n_faces, dtype=bool)
         for face_ID in self.interior_face_IDs:
             face_points = self.face_points[face_ID]
             # Get primal IDs of neighboring primal cells
             primal_IDs = face_points[[0, 2]]
             # If either primal is part of an interface
-            if any([ID in interface_primals for ID in primal_IDs]):
+            face_near_interface_primal[face_ID] = any(
+                    [ID in interface_primals for ID in primal_IDs])
+            if face_near_interface_primal[face_ID]:
                 coords = self.get_face_point_coords(face_ID)
                 # Vector from left volume point to edge point
                 left_to_edge = coords[1] - coords[0]
@@ -590,11 +594,17 @@ class Mesh:
                 self.area_normals_p1[face_ID] = area_normal_1 + area_normal_2
 
         nq = LagrangeSegmentP2.nq
-        self.area_normals_p2 = np.empty((self.n_faces, nq, 2))
-        self.quad_pts_phys = np.empty((self.n_faces, nq, 2))
+        # Only update the requested faces
+        if near_interface_only:
+            faces_to_update = np.concatenate([
+                self.interface_IDs,
+                np.argwhere(face_near_interface_primal)[:, 0]])
+        else:
+            self.area_normals_p2 = np.empty((self.n_faces, nq, 2))
+            self.quad_pts_phys = np.empty((self.n_faces, nq, 2))
+            faces_to_update = range(self.n_faces)
         # Loop over faces
-        # TODO: This really only needs to update the interfaces!
-        for face_ID in range(self.n_faces):
+        for face_ID in faces_to_update:
             # Get dual mesh neighbors
             i, j = self.edge[face_ID]
             # Coordinates of the three points on the face
