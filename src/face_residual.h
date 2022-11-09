@@ -14,6 +14,7 @@ void compute_interior_face_residual(matrix_ref<double> U,
 
 // Compute the fluid-fluid interfaces' contributions to the residual.
 void compute_fluid_fluid_face_residual(matrix_ref<double> U,
+        std::vector<double> U_L_p2, std::vector<double> U_R_p2,
         vector_ref<long> interface_IDs, matrix_ref<long> edge,
         matrix_ref<double> quad_wts, std::vector<double> quad_pts_phys,
         matrix_ref<double> limiter, std::vector<double> gradV,

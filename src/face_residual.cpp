@@ -25,8 +25,10 @@ void compute_interior_face_residual(matrix_ref<double> U,
     auto n_faces = U_L.rows();
     // Create buffers
     vector<double> F(4);
-    // Loop over all faces
-    for (int face_ID = 0; face_ID < n_faces; face_ID++) {
+    // Loop over interior faces
+    for (int i = 0; i < interior_face_IDs.size(); i++) {
+        // Face ID
+        auto face_ID = interior_face_IDs[i];
         // Left and right cell IDs
         auto L = edge(face_ID, 0);
         auto R = edge(face_ID, 1);
@@ -53,12 +55,14 @@ void compute_interior_face_residual(matrix_ref<double> U,
             V_R(k) += limiter(R, k) * (gradV_R(k, all).transpose().cwiseProduct(edge_point - xy(R, all).transpose()).sum());
         }
         // Convert to conservative
-        U_L(face_ID, all) = primitive_to_conservative(V_L, gL, psgL);
-        U_R(face_ID, all) = primitive_to_conservative(V_R, gR, psgR);
+        U_L(i, all) = primitive_to_conservative(V_L, gL, psgL);
+        U_R(i, all) = primitive_to_conservative(V_R, gR, psgR);
     }
 
     // Loop over interior faces
-    for (const auto face_ID : interior_face_IDs) {
+    for (int i = 0; i < interior_face_IDs.size(); i++) {
+        // Face ID
+        auto face_ID = interior_face_IDs[i];
         // Left and right cell IDs
         auto L = edge(face_ID, 0);
         auto R = edge(face_ID, 1);
@@ -69,8 +73,8 @@ void compute_interior_face_residual(matrix_ref<double> U,
         auto psgR = psg[fluid_ID(R)];
         // Evaluate fluxes
         matrix<double> area_normals = area_normals_p1(face_ID, all).transpose();
-        compute_flux(U_L(face_ID, all).transpose(),
-                U_R(face_ID, all).transpose(), area_normals,
+        compute_flux(U_L(i, all).transpose(),
+                U_R(i, all).transpose(), area_normals,
                 gL, gR, psgL, psgR, F);
 
         //if (L == 11 or R == 11) {
@@ -91,6 +95,7 @@ void compute_interior_face_residual(matrix_ref<double> U,
 
 // Compute the fluid-fluid faces' contributions to the residual.
 void compute_fluid_fluid_face_residual(matrix_ref<double> U,
+        std::vector<double> U_L_p2, std::vector<double> U_R_p2,
         vector_ref<long> interface_IDs, matrix_ref<long> edge,
         matrix_ref<double> quad_wts, std::vector<double> quad_pts_phys,
         matrix_ref<double> limiter, std::vector<double> gradV,
@@ -104,7 +109,9 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
     matrix<double> U_R(4, 1);
     vector<double> F(4);
     // Loop over faces
-    for (const auto face_ID : interface_IDs) {
+    for (int i_face = 0; i_face < interface_IDs.size(); i_face++) {
+        // Face ID
+        auto face_ID = interface_IDs[i_face];
         // Left and right cell IDs
         auto L = edge(face_ID, 0);
         auto R = edge(face_ID, 1);
@@ -149,6 +156,11 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             // Convert to conservative
             U_L = primitive_to_conservative(V_L, gL, psgL);
             U_R = primitive_to_conservative(V_R, gR, psgR);
+            // Store
+            for (int k = 0; k < 4; k++) {
+                U_L_p2[i_face*nq*4 + i*4 + k] = U_L(k);
+                U_R_p2[i_face*nq*4 + i*4 + k] = U_R(k);
+            }
 
             // Package the normals
             matrix<double> area_normal(2, 1);

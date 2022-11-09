@@ -521,8 +521,6 @@ class SimulationData:
         self.U_R_p1 = None
         self.U_L_p2 = None
         self.U_R_p2 = None
-        self.U_L = np.empty((n_faces, 4))
-        self.U_R = np.empty((n_faces, 4))
         self.fluid_ID = np.empty(nx*ny, dtype=int)
         self.fluid_ID_list = []
         # Lists of data for each stored timestep
