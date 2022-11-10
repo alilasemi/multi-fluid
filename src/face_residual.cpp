@@ -12,19 +12,13 @@ using std::string;
 #include <roe.h>
 
 
-// Compute the interior faces' contributions to the residual.
-void compute_interior_face_residual(matrix_ref<double> U,
-        matrix_ref<double> U_L, matrix_ref<double> U_R,
+// Evaluate the solution at the center of each edge.
+void evaluate_solution_at_interior_faces(matrix_ref<double> U,
         vector_ref<long> interior_face_IDs, matrix_ref<long> edge,
         matrix_ref<double> limiter, std::vector<double> gradV,
-        matrix_ref<double> xy, matrix_ref<double> area_normals_p1,
-        matrix_ref<double> area, vector_ref<long> fluid_ID,
+        matrix_ref<double> xy, vector_ref<long> fluid_ID,
         std::vector<double> g, std::vector<double> psg,
-        matrix_ref<double> residual) {
-    // Sizing
-    auto n_faces = U_L.rows();
-    // Create buffers
-    vector<double> F(4);
+        matrix_ref<double> U_L, matrix_ref<double> U_R) {
     // Loop over interior faces
     for (int i = 0; i < interior_face_IDs.size(); i++) {
         // Face ID
@@ -58,7 +52,22 @@ void compute_interior_face_residual(matrix_ref<double> U,
         U_L(i, all) = primitive_to_conservative(V_L, gL, psgL);
         U_R(i, all) = primitive_to_conservative(V_R, gR, psgR);
     }
+}
 
+// Compute the interior faces' contributions to the residual.
+void compute_interior_face_residual(matrix_ref<double> U,
+        matrix_ref<double> U_L, matrix_ref<double> U_R,
+        vector_ref<long> interior_face_IDs, matrix_ref<long> edge,
+        matrix_ref<double> limiter, std::vector<double> gradV,
+        matrix_ref<double> xy, matrix_ref<double> area_normals_p1,
+        matrix_ref<double> area, vector_ref<long> fluid_ID,
+        std::vector<double> g, std::vector<double> psg,
+        matrix_ref<double> residual) {
+    // Compute U_L and U_R
+    evaluate_solution_at_interior_faces(U, interior_face_IDs, edge, limiter,
+            gradV, xy, fluid_ID, g, psg, U_L, U_R);
+
+    vector<double> F(4);
     // Loop over interior faces
     for (int i = 0; i < interior_face_IDs.size(); i++) {
         // Face ID
@@ -77,18 +86,70 @@ void compute_interior_face_residual(matrix_ref<double> U,
                 U_R(i, all).transpose(), area_normals,
                 gL, gR, psgL, psgR, F);
 
-        //if (L == 11 or R == 11) {
-        //    cout << "_______________________ interior _____________________" << endl;
-        //    cout << "L = " << L << ", R = " << R << endl;
-        //    cout << U_L(face_ID, all) << endl;
-        //    cout << U_R(face_ID, all) << endl;
-        //    cout << area_normals.transpose() << endl;
-        //    cout << F.transpose() << endl;
-        //}
-
         // Update residual of cells on the left and right
         residual(L, all) -= 1 / area(L, 0) * F;
         residual(R, all) += 1 / area(R, 0) * F;
+    }
+}
+
+
+// Evaluate the solution at the interface quadrature points.
+void evaluate_solution_at_interfaces(matrix_ref<double> U,
+        vector_ref<long> interface_IDs, matrix_ref<long> edge,
+        matrix_ref<double> quad_wts, std::vector<double> quad_pts_phys,
+        matrix_ref<double> limiter, std::vector<double> gradV,
+        matrix_ref<double> xy, vector_ref<long> fluid_ID,
+        std::vector<double> g, std::vector<double> psg,
+        vector_ref<double> U_L_p2, vector_ref<double> U_R_p2) {
+    auto nq = quad_wts.rows();
+    // Create buffers
+    matrix<double> U_L(4, 1);
+    matrix<double> U_R(4, 1);
+    // Loop over faces
+    for (int i_face = 0; i_face < interface_IDs.size(); i_face++) {
+        // Face ID
+        auto face_ID = interface_IDs[i_face];
+        // Left and right cell IDs
+        auto L = edge(face_ID, 0);
+        auto R = edge(face_ID, 1);
+        // Get fluid data on left and right
+        auto gL = g[fluid_ID(L)];
+        auto gR = g[fluid_ID(R)];
+        auto psgL = psg[fluid_ID(L)];
+        auto psgR = psg[fluid_ID(R)];
+
+        // Gradients for these cells
+        matrix_map<double> gradV_L(&gradV[L*4*2], 4, 2);
+        matrix_map<double> gradV_R(&gradV[R*4*2], 4, 2);
+
+        // Loop over quadrature points
+        for (auto i = 0; i < nq; i++) {
+            // Evaluate solution at faces on left and right
+            // -- First order component, converted to primitive -- //
+            auto V_L = conservative_to_primitive(U(L, all), gL, psgL);
+            auto V_R = conservative_to_primitive(U(R, all), gR, psgR);
+
+            // -- Second order component -- //
+            // Get quadrature point in physical space
+            // TODO: This looks a bit jank...issue is that Eigen cannot
+            // handle 3D arrays. Wrapper of vector with strides??
+            matrix<double> quad_pt(2, 1);
+            quad_pt(0) = quad_pts_phys[face_ID*nq*2 + i*2 + 0];
+            quad_pt(1) = quad_pts_phys[face_ID*nq*2 + i*2 + 1];
+            // TODO: There has to be a cleaner way...
+            for (int k = 0; k < 4; k++) {
+                V_L(k) += limiter(L, k) * (gradV_L(k, all).transpose().cwiseProduct(quad_pt - xy(L, all).transpose()).sum());
+                V_R(k) += limiter(R, k) * (gradV_R(k, all).transpose().cwiseProduct(quad_pt - xy(R, all).transpose()).sum());
+            }
+            // Convert to conservative
+            U_L = primitive_to_conservative(V_L, gL, psgL);
+            U_R = primitive_to_conservative(V_R, gR, psgR);
+            // Store
+            for (int k = 0; k < 4; k++) {
+                U_L_p2[i_face*nq*4 + i*4 + k] = U_L(k);
+                U_R_p2[i_face*nq*4 + i*4 + k] = U_R(k);
+            }
+        }
     }
 }
 
@@ -104,6 +165,12 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         std::vector<double> g, std::vector<double> psg,
         matrix_ref<double> residual) {
     auto nq = quad_wts.rows();
+
+    // Compute U_L and U_R
+    evaluate_solution_at_interfaces(U, interface_IDs, edge, quad_wts,
+            quad_pts_phys, limiter, gradV, xy, fluid_ID, g, psg, U_L_p2,
+            U_R_p2);
+
     // Create buffers
     matrix<double> U_L(4, 1);
     matrix<double> U_R(4, 1);
@@ -136,31 +203,14 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         vector<double> F_integral_L = vector<double>::Zero(4);
         vector<double> F_integral_R = vector<double>::Zero(4);
         for (auto i = 0; i < nq; i++) {
-            // Evaluate solution at faces on left and right
-            // -- First order component, converted to primitive -- //
-            auto V_L = conservative_to_primitive(U(L, all), gL, psgL);
-            auto V_R = conservative_to_primitive(U(R, all), gR, psgR);
-
-            // -- Second order component -- //
-            // Get quadrature point in physical space
-            // TODO: This looks a bit jank...issue is that Eigen cannot
-            // handle 3D arrays. Wrapper of vector with strides??
-            matrix<double> quad_pt(2, 1);
-            quad_pt(0) = quad_pts_phys[face_ID*nq*2 + i*2 + 0];
-            quad_pt(1) = quad_pts_phys[face_ID*nq*2 + i*2 + 1];
-            // TODO: There has to be a cleaner way...
+            // Solution at faces
             for (int k = 0; k < 4; k++) {
-                V_L(k) += limiter(L, k) * (gradV_L(k, all).transpose().cwiseProduct(quad_pt - xy(L, all).transpose()).sum());
-                V_R(k) += limiter(R, k) * (gradV_R(k, all).transpose().cwiseProduct(quad_pt - xy(R, all).transpose()).sum());
+                U_L(k) = U_L_p2[i_face*nq*4 + i*4 + k];
+                U_R(k) = U_R_p2[i_face*nq*4 + i*4 + k];
             }
-            // Convert to conservative
-            U_L = primitive_to_conservative(V_L, gL, psgL);
-            U_R = primitive_to_conservative(V_R, gR, psgR);
-            // Store
-            for (int k = 0; k < 4; k++) {
-                U_L_p2[i_face*nq*4 + i*4 + k] = U_L(k);
-                U_R_p2[i_face*nq*4 + i*4 + k] = U_R(k);
-            }
+            // Convert to primitive
+            auto V_L = conservative_to_primitive(U_L, gL, psgL);
+            auto V_R = conservative_to_primitive(U_R, gR, psgR);
 
             // Package the normals
             matrix<double> area_normal(2, 1);
@@ -246,7 +296,6 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             }
         }
     }
-    //cout << "EEEEEEND " << endl;
 }
 
 

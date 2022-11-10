@@ -6,37 +6,35 @@ import scipy.optimize
 
 from build.src.libpybind_bindings import (
         compute_interior_face_residual, compute_fluid_fluid_face_residual,
-        compute_boundary_face_residual, compute_exact_riemann_problem,
-        compute_flux, compute_flux_roe)
+        compute_boundary_face_residual,
+        evaluate_solution_at_interior_faces, evaluate_solution_at_interfaces,
+        compute_exact_riemann_problem, compute_flux, compute_flux_roe,
+        compute_gradient)
 from problem import conservative_to_primitive, primitive_to_conservative
 from lagrange import LagrangeSegment
 
 
-def get_residual(data, mesh, problem):
-    # Unpack
-    U = data.U
-    gradV = data.gradV
+def compute_limiter(data, mesh):
+    """Compute the limiter value for each cell.
 
-    residual = np.zeros_like(U)
-
-    # Compute the limiter value
-    # This uses the multidimensional Barth-Jesperson limiter from:
-    # https://arc.aiaa.org/doi/pdf/10.2514/6.1989-366
+    This uses the multidimensional Barth-Jesperson limiter from:
+    https://arc.aiaa.org/doi/pdf/10.2514/6.1989-366
+    """
     # TODO Why is this damping needed?
     damping = .7
     limiter = np.empty((mesh.n, 4))
     # Compute primitives
-    V = np.empty_like(U)
+    V = np.empty_like(data.U)
     for i in range(mesh.n):
         # Get fluid data
         g_i = data.g[data.fluid_ID[i]]
         psg_i = data.psg[data.fluid_ID[i]]
-        V[i] = conservative_to_primitive(*U[i], g_i, psg_i)
+        V[i] = conservative_to_primitive(*data.U[i], g_i, psg_i)
     # Loop state vars
     for k in range(4):
         # Compute extrapolated value
         # In the paper, this is the value of u_i - u_A
-        V_face_diff = np.einsum('id, ijd -> ij', gradV[:, k],
+        V_face_diff = np.einsum('id, ijd -> ij', data.gradV[:, k],
                 mesh.cell_point_coords - mesh.xy.reshape((mesh.n, 1, 2)))
         u_A_min = np.min(V[mesh.limiter_stencil, k], axis=1)
         u_A_max = np.max(V[mesh.limiter_stencil, k], axis=1)
@@ -53,22 +51,22 @@ def get_residual(data, mesh, problem):
         limiter_j[index] = 1
         # Take the minimum across each face point
         limiter[:, k] = damping * np.min(limiter_j, axis=1)
+    return limiter
 
-    #TODO: This is just for testing, remove
-    faces = []
-    net_area = np.zeros(2)
-    net_area_p2 = np.zeros(2)
-    quad_wts = np.array([ (18 - np.sqrt(30)) / 36, (18 + np.sqrt(30)) / 36, (18 + np.sqrt(30)) / 36, (18 - np.sqrt(30)) / 36 ]) / 2
-    for face_ID in range(mesh.edge.shape[0]):
-        L, R = mesh.edge[face_ID]
-        if L == 11 or R == 11:
-            faces.append(face_ID)
-            if L == 11:
-                net_area += mesh.area_normals_p1[face_ID]
-                net_area_p2 += quad_wts @ mesh.area_normals_p2[face_ID]
-            else:
-                net_area -= mesh.area_normals_p1[face_ID]
-                net_area_p2 -= quad_wts @ mesh.area_normals_p2[face_ID]
+
+def get_residual(data, mesh, problem):
+    # Unpack
+    U = data.U
+    gradV = data.gradV
+
+    # Recompute gradient of solution
+    compute_gradient(data.U, mesh.xy, mesh.stencil,
+            data.gradV.reshape(-1), data.g, data.psg, data.fluid_ID)
+
+    residual = np.zeros_like(U)
+
+    # Compute limiter
+    limiter = compute_limiter(data, mesh)
 
     # Compute the interior face residual
     # TODO: is Pybind OOP a thing? Seems to not be...
@@ -112,11 +110,6 @@ def get_residual_phi(data, mesh, problem):
     # Unpack
     U = data.U
     phi = data.phi
-    U_L_p1 = data.U_L_p1
-    U_R_p1 = data.U_R_p1
-    U_L_p2 = data.U_L_p2
-    U_R_p2 = data.U_R_p2
-    nq = U_L_p2.shape[1]
     interior_face_IDs = mesh.interior_face_IDs
     interface_IDs = mesh.interface_IDs
 
@@ -125,7 +118,16 @@ def get_residual_phi(data, mesh, problem):
 
     residual_phi = np.zeros_like(phi)
 
+    # Compute limiter
+    limiter = compute_limiter(data, mesh)
+
     # -- Interior Faces -- #
+    # Evaluate solution at left and right
+    U_L_p1 = data.U_L_p1
+    U_R_p1 = data.U_R_p1
+    evaluate_solution_at_interior_faces(U, mesh.interior_face_IDs, mesh.edge,
+            limiter, data.gradV.flatten().data, mesh.xy, data.fluid_ID,
+            data.g, data.psg, U_L_p1, U_R_p1)
     # Left and right cell IDs
     L = mesh.edge[interior_face_IDs, 0]
     R = mesh.edge[interior_face_IDs, 1]
@@ -145,6 +147,18 @@ def get_residual_phi(data, mesh, problem):
     np.add.at(residual_phi, R,  1 / mesh.area[R] * F)
 
     # -- Interfaces -- #
+    # Evaluate solution at left and right
+    U_L_p2 = np.empty_like(data.U_L_p2).flatten()
+    U_R_p2 = np.empty_like(data.U_R_p2).flatten()
+    evaluate_solution_at_interfaces(U, mesh.interface_IDs, mesh.edge,
+            LagrangeSegment.quad_wts, mesh.quad_pts_phys.flatten().data,
+            limiter, data.gradV.flatten().data, mesh.xy, data.fluid_ID,
+            data.g, data.psg, U_L_p2, U_R_p2)
+    data.U_L_p2 = U_L_p2.reshape(data.U_L_p2.shape)
+    data.U_R_p2 = U_R_p2.reshape(data.U_R_p2.shape)
+    U_L_p2 = data.U_L_p2
+    U_R_p2 = data.U_R_p2
+    nq = U_L_p2.shape[1]
     # Left and right cell IDs
     L = mesh.edge[interface_IDs, 0]
     R = mesh.edge[interface_IDs, 1]
@@ -160,7 +174,7 @@ def get_residual_phi(data, mesh, problem):
             quad_pts - mesh.xy[L].reshape(-1, 1, 2))
     phi_R += np.einsum('ik, ijk -> ij', data.grad_phi[R],
             quad_pts - mesh.xy[R].reshape(-1, 1, 2))
-    # Evalute interior fluxes
+    # Evaluate interior fluxes
     F = np.empty((interface_IDs.size, nq))
     for i in range(nq):
         F[:, i] = flux_phi.compute_flux(U_L_p2[:, i], U_R_p2[:, i], phi_L[:, i],

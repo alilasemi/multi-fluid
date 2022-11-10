@@ -276,6 +276,8 @@ def post_process():
 
                     # Plot phi contours on top of density plot
                     if plot_phi_contours and idx == 0:
+                        if np.any(np.isnan(phi)):
+                            print('Warning: NaNs detected in phi!')
                         phi[np.argwhere(np.isnan(phi))[:,0]] = -10
                         contour = ax.tricontour(mesh.xy[:, 0], mesh.xy[:, 1],
                                 phi, colors='k', extend='both',

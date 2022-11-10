@@ -648,6 +648,12 @@ class Mesh:
             self.area_normals_p2[face_ID, :, 0] = -y_seg.jac
             self.area_normals_p2[face_ID, :, 1] =  x_seg.jac
 
+        # Fix "collapsed" faces which have almost zero area
+        eps = 1e-20
+        idx = np.nonzero(
+                np.linalg.norm(self.area_normals_p2, axis=2) < eps)
+        self.area_normals_p2[idx] = eps
+
         # If running a fluid-solid simulation, must copy over to the BC data as
         # well, since solid interfaces are implemented as BCs
         if fluid_solid:

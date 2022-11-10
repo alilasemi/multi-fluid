@@ -33,6 +33,21 @@ void compute_boundary_face_residual(matrix_ref<double> U,
         std::vector<double> psg, long num_boundaries, matrix<double> bc_data,
         std::string problem_name, double t, matrix_ref<double> residual);
 
+void evaluate_solution_at_interior_faces(matrix_ref<double> U,
+        vector_ref<long> interior_face_IDs, matrix_ref<long> edge,
+        matrix_ref<double> limiter, std::vector<double> gradV,
+        matrix_ref<double> xy, vector_ref<long> fluid_ID,
+        std::vector<double> g, std::vector<double> psg,
+        matrix_ref<double> U_L, matrix_ref<double> U_R);
+
+void evaluate_solution_at_interfaces(matrix_ref<double> U,
+        vector_ref<long> interface_IDs, matrix_ref<long> edge,
+        matrix_ref<double> quad_wts, std::vector<double> quad_pts_phys,
+        matrix_ref<double> limiter, std::vector<double> gradV,
+        matrix_ref<double> xy, vector_ref<long> fluid_ID,
+        std::vector<double> g, std::vector<double> psg,
+        vector_ref<double> U_L_p2, vector_ref<double> U_R_p2);
+
 vector<double> conservative_to_primitive(vector<double> U, double g,
         double psg);
 

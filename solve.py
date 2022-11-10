@@ -12,14 +12,14 @@ from lagrange import LagrangeSegmentP2
 
 # Solver inputs
 Problem = Cavitation
-nx = 7
-ny = 7
-n_t = 1
-#cfl = .2
-t_final = 5e-3
-#t_final = 2e-2
+nx = 81
+ny = 81
+#n_t = 1
+cfl = .05
+#t_final = 5e-3
+t_final = 2e-2
 max_n_t = 99999999999
-level_set_reinitialization_rate = 5
+level_set_reinitialization_rate = 40
 adaptive = True
 rho_levels = np.linspace(.15, 1.05, 19)
 linear_reconstruction = True
@@ -37,14 +37,12 @@ linear_ghost_extrapolation = False
 levelset = True
 
 # List of times at which the solution should be written to file
-t_list = np.linspace(0, t_final, 2).tolist()
+t_list = np.linspace(0, t_final, 11).tolist()
 
 def main(show_progress_bar=True):
     # Create mesh
     mesh = Mesh(nx, ny, Problem.xL, Problem.xR, Problem.yL, Problem.yR,
             adaptive)
-    vol_points_copy = mesh.vol_points.copy()
-    edge_points_copy = mesh.edge_points.copy()
 
     # Initial solution
     problem = Problem(mesh.xy, t_list, mesh.bc_type, g, psg)
@@ -63,6 +61,11 @@ def main(show_progress_bar=True):
     # Save initial condition, if desired
     written_times = -np.ones_like(t_list)
     if 0 in t_list:
+        # Update gradient of phi
+        compute_gradient_phi(data.phi, mesh.xy, mesh.neighbors, data.grad_phi)
+        # Update the mesh
+        mesh.update(data, problem)
+        # Save
         data.save_current_state(mesh)
         written_times[0] = 0
         data.t_list[0] = 0
@@ -93,9 +96,6 @@ def main(show_progress_bar=True):
 
             # -- Update Mesh -- #
             if adaptive:
-                # Store copy of original in case this iteration crashes
-                vol_points_copy = mesh.vol_points.copy()
-                edge_points_copy = mesh.edge_points.copy()
                 # Revert back to original face points
                 mesh.vol_points = mesh.original_vol_points.copy()
                 mesh.edge_points = mesh.original_edge_points.copy()
@@ -148,6 +148,7 @@ def main(show_progress_bar=True):
                     data.grad_phi)
 
             # If first order is requested, set the gradients to zero
+            # TODO: this doesn't set them to zero in the residual of phi!
             if not linear_reconstruction:
                 data.gradV = np.zeros_like(data.gradV)
                 data.grad_phi = np.zeros_like(data.grad_phi)
