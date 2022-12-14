@@ -641,18 +641,27 @@ class Cavitation(Problem):
 
     # Bubble state (rho, u, v, p)
     bubble = np.array([
-            1, 0, 0, 2e3
+            1, 0, 0, 2e4
     ])
 
+#    #TODO: Hack initial state
+#    ambient = np.array([
+#            1000, 0, 0, 2e3
+#    ])
+#    bubble = np.array([
+#            1, 0, 0, 1e5
+#    ])
+
     # Initial radius
-    radius = .4e-1
+    radius = .3e-1
 
     # Levels to use for contour plots
     levels = [
             np.linspace(0, ambient[0], 11),
             None,#np.linspace(-400, 400, 17),
             None,#np.linspace(-400, 400, 17),
-            np.linspace(0, 1.5*ambient[3], 16)]
+            #np.linspace(0, 1.5*ambient[3], 16)]
+            np.linspace(2e3, 1e5, 32)]
 
     def get_initial_conditions(self):
         g = self.g
@@ -719,17 +728,17 @@ class Cavitation(Problem):
     def set_bc_data(self):
         # Set BC 0 to be the interfaces
         self.set_bc(0, 'advected interface')
-        # Set BC 1, 2, and 3 to be ambient state
-        self.set_bc(1, 'full state', self.ambient)
-        self.set_bc(2, 'full state', self.ambient)
-        self.set_bc(3, 'full state', self.ambient)
+        # Set BC 1, 2, and 3 to be walls
+        self.set_bc(1, 'wall')
+        self.set_bc(2, 'wall')
+        self.set_bc(3, 'wall')
 
     def compute_ghost_phi(self, phi, phi_ghost, bc_type):
         # Loop over each boundary cell
         for i in range(phi_ghost.shape[0]):
             cell_ID, bc = bc_type[i]
-            # Compute ambient ghost state
-            if bc == 2:
+            # Compute wall ghost state
+            if bc == 1:
                 # Just use the neighboring value
                 phi_ghost[i] = phi[cell_ID]
             # Compute advected interface ghost state

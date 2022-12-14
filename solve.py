@@ -12,21 +12,21 @@ from lagrange import LagrangeSegmentP2
 
 # Solver inputs
 Problem = Cavitation
-nx = 81
-ny = 81
+nx = 61
+ny = 61
 #n_t = 1
-cfl = .05
+cfl = .2
 #t_final = 5e-3
 t_final = 2e-2
 max_n_t = 99999999999
-level_set_reinitialization_rate = 40
-adaptive = True
+level_set_reinitialization_rate = 0
+adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 linear_reconstruction = True
 
 # Physical parameters
 g = [4.4, 1.4]
-psg = [6e5, 0]#[6e8, 0]
+psg = [3e5, 0]#[6e8, 0]
 #g = [1.4, 1.4]
 #psg = [0, 0]
 
@@ -37,7 +37,7 @@ linear_ghost_extrapolation = False
 levelset = True
 
 # List of times at which the solution should be written to file
-t_list = np.linspace(0, t_final, 11).tolist()
+t_list = np.linspace(0, t_final, 51).tolist()
 
 def main(show_progress_bar=True):
     # Create mesh
@@ -61,10 +61,11 @@ def main(show_progress_bar=True):
     # Save initial condition, if desired
     written_times = -np.ones_like(t_list)
     if 0 in t_list:
-        # Update gradient of phi
-        compute_gradient_phi(data.phi, mesh.xy, mesh.neighbors, data.grad_phi)
-        # Update the mesh
-        mesh.update(data, problem)
+        if adaptive:
+            # Update gradient of phi
+            compute_gradient_phi(data.phi, mesh.xy, mesh.neighbors, data.grad_phi)
+            # Update the mesh
+            mesh.update(data, problem)
         # Save
         data.save_current_state(mesh)
         written_times[0] = 0

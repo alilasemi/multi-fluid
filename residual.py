@@ -68,6 +68,27 @@ def get_residual(data, mesh, problem):
     # Compute limiter
     limiter = compute_limiter(data, mesh)
 
+    g = [4.4, 1.4]
+    psg = [6e5, 0]
+    g_i = np.array(g)[data.fluid_ID]
+    psg_i = np.array(psg)[data.fluid_ID]
+    r  = data.U[:, 0]
+    ru = data.U[:, 1]
+    rv = data.U[:, 2]
+    re = data.U[:, 3]
+    # Compute pressure
+    p = (g_i - 1) * (re - .5 * (ru**2 + rv**2) / r) - g_i * psg_i;
+#    if np.any(p < 0):
+#        #TODO Ultrahack
+#        U[p<0, 3] = ( (100 + g_i[p<0] * psg_i[p<0]) / (g_i[p<0] - 1)
+#                + .5 * (ru[p<0]**2 + rv[p<0]**2) / r[p<0] )
+#        limiter[p<0] = 0
+    #mask = np.linalg.norm(mesh.xy, axis=1) > .1
+    #limiter[mask] = 0
+    #if data.i ==13:
+    #    reakpoint()
+
+
     # Compute the interior face residual
     # TODO: is Pybind OOP a thing? Seems to not be...
     # TODO: Ditch the whole area_normals_p2 vs regular normals thing (actually
