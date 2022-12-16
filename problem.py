@@ -636,12 +636,12 @@ class Cavitation(Problem):
 
     # Ambient state (rho, u, v, p)
     ambient = np.array([
-            1000, 0, 0, 1e5
+            1000, 0, 0, 7e4
     ])
 
     # Bubble state (rho, u, v, p)
     bubble = np.array([
-            1, 0, 0, 2e4
+            10, 0, 0, 2e4
     ])
 
 #    #TODO: Hack initial state

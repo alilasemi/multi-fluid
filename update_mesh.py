@@ -137,7 +137,7 @@ def optimize_edge_point(mesh, data, problem, i, j, face_ID):
         minimum_phi = 1e99
         # TODO: Figure out what this should be
         node_IDs = mesh.primal_cell_to_nodes[primal_ID]
-        tol = 1e-5 * .5 * np.min(data.phi[node_IDs]**2)
+        tol = 1e-2 * .5 * np.min(data.phi[node_IDs]**2)
         for guess in guesses:
             optimization = scipy.optimize.minimize(
                     f_edge, guess,
@@ -203,7 +203,7 @@ def optimize_vol_point(mesh, data, problem, cell_ID, face_ID, edge_point_coords)
             'jac': constraint_jac,
             'args': (node_coords,)}]
     #TODO: Figure out what this should be
-    tol = 1e-5 * .5 * np.min(data.phi[node_IDs]**2)
+    tol = 1e-2 * .5 * np.min(data.phi[node_IDs]**2)
     for guess in guesses:
         optimization = scipy.optimize.minimize(
                 f_vol, guess,

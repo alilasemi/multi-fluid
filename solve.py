@@ -12,12 +12,12 @@ from lagrange import LagrangeSegmentP2
 
 # Solver inputs
 Problem = Cavitation
-nx = 61
-ny = 61
-#n_t = 1
+nx = 51
+ny = 51
+#n_t = 5
 cfl = .2
 #t_final = 5e-3
-t_final = 2e-2
+t_final = 3e-2
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
 adaptive = False
@@ -26,7 +26,7 @@ linear_reconstruction = True
 
 # Physical parameters
 g = [4.4, 1.4]
-psg = [3e5, 0]#[6e8, 0]
+psg = [1e5, 0]#[6e8, 0]
 #g = [1.4, 1.4]
 #psg = [0, 0]
 
@@ -42,6 +42,9 @@ t_list = np.linspace(0, t_final, 51).tolist()
 def main(show_progress_bar=True):
     # Create mesh
     mesh = Mesh(nx, ny, Problem.xL, Problem.xR, Problem.yL, Problem.yR,
+            adaptive)
+    # Make backup mesh - only used for reinitialization
+    reinit_mesh = Mesh(nx, ny, Problem.xL, Problem.xR, Problem.yL, Problem.yR,
             adaptive)
 
     # Initial solution
@@ -198,7 +201,15 @@ def main(show_progress_bar=True):
                 if adaptive:
                     reinitialize_level_set_higher_order(data, mesh)
                 else:
-                    reinitialize_level_set(data, mesh)
+                    #reinitialize_level_set(data, mesh)
+                    #TODO: instead of using the lower-order initialization, use
+                    # the higher order one with a backup mesh to adapt. Not sure
+                    # if this the best method, but seems to be ok.
+                    # Update the reinitialization mesh
+                    reinit_mesh.create_interfaces(data, problem.fluid_solid)
+                    reinit_mesh.update(data, problem)
+                    # Use higher order reinit
+                    reinitialize_level_set_higher_order(data, reinit_mesh)
 
             # -- Update Phi -- #
             if problem.fluid_solid:

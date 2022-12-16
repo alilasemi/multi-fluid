@@ -286,35 +286,15 @@ def post_process():
                                 phi, levels = [0,], colors='purple',
                                 linewidths=2*lw_scale, linestyles='dashed')
                         # Plot nodes near interface
-                        cutoff = .007
+                        cutoff = .009
                         near_interface = np.abs(phi) < cutoff
                         ax.plot(mesh.xy[near_interface, 0],
                                 mesh.xy[near_interface, 1], 'r.', ms=5)
                         # Update radius based on a weighted average of these
                         # points
-                        weights = (1 - np.abs(phi[near_interface]) / cutoff) / (
-                                1 + np.abs(phi[near_interface]) / cutoff)
+                        weights = 1 - np.abs(phi[near_interface]) / cutoff
                         radii = np.linalg.norm(mesh.xy[near_interface], axis=1)
                         radius[i_iter] = (weights @ radii) / np.sum(weights)
-
-#                    # Loop over dual faces
-#                    interface_counter = 0
-#                    for face_ID in range(mesh.n_faces):
-#                        points = mesh.get_face_point_coords(face_ID,
-#                                edge_points_list, vol_points_list)
-#                        # Get dual mesh neighbors
-#                        i, j = mesh.edge[face_ID]
-#                        # Check if this is a surrogate boundary
-#                        is_surrogate = phi[i] * phi[j] < 0
-#                        if is_surrogate:
-#                            ax.plot(points[:, 0], points[:, 1], 'k', lw=2)
-#                            interface_counter += 1
-#                            # Contribution to the radius from this surrogate
-#                            # face
-#                            radius[i_iter] += np.mean(np.linalg.norm(points, axis=1))
-#                    # Normalize by the number of interfaces to get an average
-#                    # radius
-#                    radius[i_iter] /= interface_counter
 
                     # Update progress bar
                     progress.update(task1, advance=1)
