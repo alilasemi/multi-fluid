@@ -12,15 +12,15 @@ from lagrange import LagrangeSegmentP2
 
 # Solver inputs
 Problem = Cavitation
-nx = 101
-ny = 101
+nx = 71
+ny = 71
 #n_t = 5
 cfl = .2
 #t_final = 5e-3
-t_final = 1e-2
+t_final = 4e-3
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
-adaptive = True
+adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 linear_reconstruction = True
 

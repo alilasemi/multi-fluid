@@ -35,6 +35,8 @@ def post_process():
     problem = Problem(mesh.xy, data.t_list, mesh.bc_type, data.g, data.psg)
     has_exact_phi = hasattr(problem, 'plot_exact_interface') and callable(
             problem.plot_exact_interface)
+    # TODO: This is disabled for now
+    has_exact_phi = False
 
     # Final primitives
     V_list = []
