@@ -12,21 +12,21 @@ from lagrange import LagrangeSegmentP2
 
 # Solver inputs
 Problem = Cavitation
-nx = 51
-ny = 51
+nx = 101
+ny = 101
 #n_t = 5
 cfl = .2
 #t_final = 5e-3
-t_final = 3e-2
+t_final = 1e-2
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
-adaptive = False
+adaptive = True
 rho_levels = np.linspace(.15, 1.05, 19)
 linear_reconstruction = True
 
 # Physical parameters
 g = [4.4, 1.4]
-psg = [1e5, 0]#[6e8, 0]
+psg = [1e7, 0]#[6e8, 0]
 #g = [1.4, 1.4]
 #psg = [0, 0]
 
@@ -166,18 +166,6 @@ def main(show_progress_bar=True):
             data.U_L_p2 = np.empty((mesh.interface_IDs.size,
                 LagrangeSegmentP2.nq, 4))
             data.U_R_p2 = np.empty_like(data.U_L_p2)
-
-            #print('bubdensity', data.U[4, 0])
-            #print(data.phi[0])
-            #print(data.phi[8])
-            #if True:#data.i in [22, 23, 24]:
-            #    print(f'Printing i = {data.i}')
-            #    print(data.U[0])
-            #    flipped = data.U[8].copy()
-            #    flipped[1:3] *= -1
-            #    print(flipped)
-            #    print(data.U[4])
-            #    #if data.i == 24: reakpoint()
 
             # -- Copy solution, then update -- #
             U_old = data.U.copy()

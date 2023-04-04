@@ -286,7 +286,7 @@ def post_process():
                                 phi, levels = [0,], colors='purple',
                                 linewidths=2*lw_scale, linestyles='dashed')
                         # Plot nodes near interface
-                        cutoff = .009
+                        cutoff = .004
                         near_interface = np.abs(phi) < cutoff
                         ax.plot(mesh.xy[near_interface, 0],
                                 mesh.xy[near_interface, 1], 'r.', ms=5)

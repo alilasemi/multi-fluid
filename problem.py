@@ -636,12 +636,12 @@ class Cavitation(Problem):
 
     # Ambient state (rho, u, v, p)
     ambient = np.array([
-            1000, 0, 0, 7e4
+            1000, 0, 0, 1e5
     ])
 
     # Bubble state (rho, u, v, p)
     bubble = np.array([
-            10, 0, 0, 2e4
+            1, 0, 0, 5e4
     ])
 
 #    #TODO: Hack initial state
@@ -653,7 +653,7 @@ class Cavitation(Problem):
 #    ])
 
     # Initial radius
-    radius = .3e-1
+    radius = 1e-2
 
     # Levels to use for contour plots
     levels = [
@@ -705,7 +705,7 @@ class Cavitation(Problem):
         n_points = 100
         theta = np.linspace(0, 2*np.pi, n_points)
 
-        coeffs = np.loadtxt('../../mnt/ind/projects/cavitation/simulations/case1/postpro/radius_theta.txt')
+        coeffs = np.loadtxt('../../mnt/ind/home/alasemi/projects/cavitation/simulations/case1/postpro/radius_theta.txt')
         k = 11
         X_hat = np.empty_like(coeffs)
         for i in range(k + 1):
