@@ -636,12 +636,12 @@ class Cavitation(Problem):
 
     # Ambient state (rho, u, v, p)
     ambient = np.array([
-            1000, 0, 0, 7e4#1e5
+            1000, 0, 0, 1e5
     ])
 
     # Bubble state (rho, u, v, p)
     bubble = np.array([
-            1, 0, 0, 2e4#7e4
+            1, 0, 0, 2.5e4
     ])
 
 #    #TODO: Hack initial state
@@ -653,7 +653,7 @@ class Cavitation(Problem):
 #    ])
 
     # Initial radius
-    radius = 3e-2
+    radius = 2e-2
 
     # Levels to use for contour plots
     levels = [
