@@ -51,7 +51,32 @@ def compute_limiter(data, mesh):
         limiter_j[index] = 1
         # Take the minimum across each face point
         limiter[:, k] = damping * np.min(limiter_j, axis=1)
-    return limiter
+    # Cap to a max of 1
+    limiter[limiter > 1] = 1
+
+    # -- Now repeat the same, but for phi -- #
+    # Compute extrapolated value
+    # In the paper, this is the value of u_i - u_A
+    phi_face_diff = np.einsum('id, ijd -> ij', data.grad_phi,
+            mesh.cell_point_coords - mesh.xy.reshape((mesh.n, 1, 2)))
+    u_A_min = np.min(data.phi[mesh.limiter_stencil], axis=1)
+    u_A_max = np.max(data.phi[mesh.limiter_stencil], axis=1)
+    # Limiter value for all face points of cell i
+    limiter_j = np.empty((mesh.n, mesh.max_num_face_points))
+    # Condition 1
+    index = np.nonzero(phi_face_diff > 0)
+    limiter_j[index] = (u_A_max[index[0]] - data.phi[index[0]]) / phi_face_diff[index]
+    # Condition 2
+    index = np.nonzero(phi_face_diff < 0)
+    limiter_j[index] = (u_A_min[index[0]] - data.phi[index[0]]) / phi_face_diff[index]
+    # Condition 3
+    index = np.nonzero(phi_face_diff == 0)
+    limiter_j[index] = 1
+    # Take the minimum across each face point
+    limiter_phi = damping * np.min(limiter_j, axis=1)
+    # Cap to a max of 1
+    limiter_phi[limiter_phi > 1] = 1
+    return limiter, limiter_phi
 
 
 def get_residual(data, mesh, problem):
@@ -66,7 +91,7 @@ def get_residual(data, mesh, problem):
     residual = np.zeros_like(U)
 
     # Compute limiter
-    limiter = compute_limiter(data, mesh)
+    limiter, _ = compute_limiter(data, mesh)
 
     g = [4.4, 1.4]
     psg = [6e5, 0]
@@ -140,7 +165,7 @@ def get_residual_phi(data, mesh, problem):
     residual_phi = np.zeros_like(phi)
 
     # Compute limiter
-    limiter = compute_limiter(data, mesh)
+    limiter, limiter_phi = compute_limiter(data, mesh)
 
     # -- Interior Faces -- #
     # Evaluate solution at left and right
@@ -157,8 +182,8 @@ def get_residual_phi(data, mesh, problem):
     phi_R = phi[R]
     # Second order component
     quad_pts = .5 * (mesh.xy[L] + mesh.xy[R])
-    phi_L += np.einsum('ik, ik -> i', data.grad_phi[L], quad_pts - mesh.xy[L])
-    phi_R += np.einsum('ik, ik -> i', data.grad_phi[R], quad_pts - mesh.xy[R])
+    phi_L += limiter_phi[L] * np.einsum('ik, ik -> i', data.grad_phi[L], quad_pts - mesh.xy[L])
+    phi_R += limiter_phi[R] * np.einsum('ik, ik -> i', data.grad_phi[R], quad_pts - mesh.xy[R])
     # Evalute interior fluxes
     F = flux_phi.compute_flux(U_L_p1, U_R_p1, phi_L, phi_R,
             mesh.area_normals_p1[interior_face_IDs])
@@ -189,11 +214,13 @@ def get_residual_phi(data, mesh, problem):
     # Copy for each quadrature point
     phi_L = np.tile(phi_L, [4, 1]).T
     phi_R = np.tile(phi_R, [4, 1]).T
+    limiter_phi_L_tile = np.tile(limiter_phi[L], [4, 1]).T
+    limiter_phi_R_tile = np.tile(limiter_phi[R], [4, 1]).T
     # Second order component
     quad_pts = mesh.quad_pts_phys[interface_IDs]
-    phi_L += np.einsum('ik, ijk -> ij', data.grad_phi[L],
+    phi_L += limiter_phi_L_tile * np.einsum('ik, ijk -> ij', data.grad_phi[L],
             quad_pts - mesh.xy[L].reshape(-1, 1, 2))
-    phi_R += np.einsum('ik, ijk -> ij', data.grad_phi[R],
+    phi_R += limiter_phi_R_tile * np.einsum('ik, ijk -> ij', data.grad_phi[R],
             quad_pts - mesh.xy[R].reshape(-1, 1, 2))
     # Evaluate interior fluxes
     F = np.empty((interface_IDs.size, nq))

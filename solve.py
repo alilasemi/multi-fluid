@@ -12,12 +12,12 @@ from lagrange import LagrangeSegmentP2
 
 # Solver inputs
 Problem = Cavitation
-nx = 71
-ny = 71
+nx = 51
+ny = 51
 #n_t = 5
 cfl = .2
 #t_final = 5e-3
-t_final = 4e-3
+t_final = 3e-2
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
 adaptive = False
@@ -26,7 +26,7 @@ linear_reconstruction = True
 
 # Physical parameters
 g = [4.4, 1.4]
-psg = [1e7, 0]#[6e8, 0]
+psg = [1e5, 0]#[6e8, 0]
 #g = [1.4, 1.4]
 #psg = [0, 0]
 
