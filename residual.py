@@ -73,7 +73,7 @@ def compute_limiter(data, mesh):
     index = np.nonzero(phi_face_diff == 0)
     limiter_j[index] = 1
     # Take the minimum across each face point
-    limiter_phi = damping * np.min(limiter_j, axis=1)
+    limiter_phi = np.min(limiter_j, axis=1)
     # Cap to a max of 1
     limiter_phi[limiter_phi > 1] = 1
     return limiter, limiter_phi
