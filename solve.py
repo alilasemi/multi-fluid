@@ -12,8 +12,8 @@ from lagrange import LagrangeSegmentP2
 
 # Solver inputs
 Problem = Cavitation
-nx = 51
-ny = 51
+nx = 31
+ny = 31
 #n_t = 5
 cfl = .2
 #t_final = 5e-3
@@ -107,7 +107,15 @@ def main(show_progress_bar=True):
                 compute_gradient_phi(data.phi, mesh.xy, mesh.neighbors,
                         data.grad_phi)
                 # Update the mesh
+                old_quad_pts = mesh.quad_pts_phys.copy()
                 mesh.update(data, problem)
+                # Compute the "velocity" at which the quad points moved
+                if i > 0:
+                    quad_pt_velocity = (mesh.quad_pts_phys - old_quad_pts) / dt
+                else:
+                    quad_pt_velocity = np.zeros_like(mesh.quad_pts_phys)
+                # TODO: Store this
+                mesh.quad_pt_velocity = quad_pt_velocity
             # Update the stencil to not include points across the interface
             mesh.update_stencil(data.phi)
 
