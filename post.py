@@ -10,10 +10,10 @@ from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
 from solve import SimulationData, adaptive
 
 Problem = Cavitation
-file_name = 'data_final_highorder.npz'
+file_name = 'data_final_laptop/data_final_loworder.npz'
 show_progress_bar = True
 plot_profile = False
-plot_mesh = True
+plot_mesh = False
 plot_contour = True
 mark_volume_points = False
 plot_phi_contours = True
@@ -311,7 +311,20 @@ def post_process():
                         zero_contour = ax.tricontour(mesh.xy[:, 0], mesh.xy[:, 1],
                                 phi, levels = [0,], colors='purple',
                                 linewidths=2*lw_scale, linestyles='dashed')
+
                         # Plot nodes near interface
+                        # TODO: This method is probably most accurate, but
+                        # results in some wierd (non-smooth) plots for a low
+                        # order interface.
+                        #is_surrogate = phi[mesh.edge[:, 0]] * phi[mesh.edge[:, 1]] < 0
+                        #interface_IDs = np.argwhere(is_surrogate)[:, 0]
+                        #points = [mesh.get_face_point_coords(face_ID,
+                        #        edge_points_list, vol_points_list) for face_ID
+                        #        in interface_IDs]
+                        #radii = [np.mean(np.linalg.norm(p, axis=1)) for p in
+                        #        points]
+                        #radius[i_iter] = np.mean(radii)
+
                         cutoff = .01
                         near_interface = np.abs(phi) < cutoff
                         ax.plot(mesh.xy[near_interface, 0],
