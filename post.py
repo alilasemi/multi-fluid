@@ -10,10 +10,10 @@ from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
 from solve import SimulationData, adaptive
 
 Problem = Cavitation
-file_name = 'data.npz'
+file_name = 'data_final_highorder.npz'
 show_progress_bar = True
 plot_profile = False
-plot_mesh = False
+plot_mesh = True
 plot_contour = True
 mark_volume_points = False
 plot_phi_contours = True
@@ -142,22 +142,24 @@ def post_process():
                 if problem.exact:
                     ax.plot(x_exact, f_exact[idx], '--k', linewidth=1)
                 if only_rho:
-                    axes[i, idx].set_xlabel('x (m)', fontsize=10)
+                    axes[i, idx].set_xlabel('$x$ (m)', fontsize=10)
                 ax.set_ylabel(ylabels[idx], fontsize=10)
                 ax.tick_params(labelsize=10)
                 ax.grid(linestyle='--')
                 ax.set_xlim([mesh.xL, mesh.xR])
         for idx in range(num_vars):
             if not only_rho:
-                axes[-1, idx].set_xlabel('x (m)', fontsize=10)
+                axes[-1, idx].set_xlabel('$x$ (m)', fontsize=10)
         # Save
         save_plot('profile', mesh)
 
     # Mesh plots
+    seperate_files = True
     lw_scale = .5
     if plot_mesh:
-        fig, axes = plt.subplots(n_times, 1, figsize=(6.5, 4*n_times),
-                squeeze=False)
+        if not seperate_files:
+            fig, axes = plt.subplots(n_times, 1, figsize=(6.5, 4*n_times),
+                    squeeze=False)
         # Progress bar setup
         with Progress() as progress:
             task1 = progress.add_task('Plotting primal cells...',
@@ -170,11 +172,21 @@ def post_process():
                 edge_points_list = data.edge_points_list[i_iter]
                 vol_points_list = data.vol_points_list[i_iter]
 
-                ax = axes[i_iter, 0]
+                if seperate_files:
+                    fig = plt.figure(figsize=(6.5, 4))
+                    ax = plt.gca()
+                else:
+                    ax = axes[i_iter, 0]
+
                 if equal_aspect_ratio:
                     ax.set_aspect('equal', adjustable='box')
-                ax.set_xlim([mesh.xL, mesh.xR])
-                ax.set_ylim([mesh.yL, mesh.yR])
+                #ax.set_xlim([mesh.xL, mesh.xR])
+                #ax.set_ylim([mesh.yL, mesh.yR])
+                lim = .048
+                ax.set_xlim([-lim, lim])
+                ax.set_ylim([-lim, lim])
+                ax.set_xlabel('$x$ (m)', fontsize=10)
+                ax.set_ylabel('$y$ (m)', fontsize=10)
                 if has_exact_phi:
                     problem.plot_exact_interface(ax, mesh, data.t_list[i_iter],
                             lw_scale)
@@ -207,14 +219,26 @@ def post_process():
                         ax.plot(points[indices, 0], points[indices, 1], **options)
                     progress.update(task2, advance=1)
 
+                # Write each frame seperately if desired
+                if seperate_files:
+                    if mesh_legend:
+                        plt.plot(0, 0, 'k', lw=.5*lw_scale, label='Primal Mesh')
+                        plt.plot(0, 0, '--k', lw=1*lw_scale, label='Dual Mesh')
+                        plt.plot(0, 0, 'k', lw=3*lw_scale, label='Surrogate Interface')
+                        plt.plot(0, 0, 'r', lw=3*lw_scale, label='True Interface')
+                        plt.legend(fontsize=10, loc='lower right', framealpha=.9)
+                    save_plot(f'meshes/mesh_{i_iter}', mesh, seperate_files)
+                    plt.close(fig)
+
         # Save
-        if mesh_legend:
-            plt.plot(0, 0, 'k', lw=.5*lw_scale, label='Primal Mesh')
-            plt.plot(0, 0, '--k', lw=1*lw_scale, label='Dual Mesh')
-            plt.plot(0, 0, 'k', lw=3*lw_scale, label='Surrogate Interface')
-            plt.plot(0, 0, 'r', lw=3*lw_scale, label='True Interface')
-            plt.legend(fontsize=10, loc='lower right', framealpha=.9)
-        save_plot('mesh', mesh)
+        if not seperate_files:
+            if mesh_legend:
+                plt.plot(0, 0, 'k', lw=.5*lw_scale, label='Primal Mesh')
+                plt.plot(0, 0, '--k', lw=1*lw_scale, label='Dual Mesh')
+                plt.plot(0, 0, 'k', lw=3*lw_scale, label='Surrogate Interface')
+                plt.plot(0, 0, 'r', lw=3*lw_scale, label='True Interface')
+                plt.legend(fontsize=10, loc='lower right', framealpha=.9)
+            save_plot('mesh', mesh)
 
     # Density, velocity, and pressure contour plots
     radius = np.zeros(n_times)
@@ -302,9 +326,9 @@ def post_process():
                     progress.update(task1, advance=1)
 
         for idx in range(num_vars):
-            axes[-1, idx].set_xlabel('x (m)', fontsize=10)
+            axes[-1, idx].set_xlabel('$x$ (m)', fontsize=10)
         for idx in range(n_times):
-            axes[idx, 0].set_ylabel('y (m)', fontsize=10)
+            axes[idx, 0].set_ylabel('$y$ (m)', fontsize=10)
         # Save
         save_plot('contour', mesh)
         # Write radius to file for separate processing
@@ -313,15 +337,16 @@ def post_process():
 
     print(f'Plots written to files ({mesh.nx}x{mesh.ny}).')
 
-def save_plot(plot_name, mesh):
+def save_plot(plot_name, mesh, seperate_files=False):
     print(f'Saving {plot_name} plot...', end='', flush=True)
     plt.tight_layout()
     plot_file = f'{plot_name}_{mesh.nx}x{mesh.ny}.{filetype}'
     # Write figure to file
     plt.savefig(f'figs/{plot_file}', bbox_inches='tight')
     # Create symlink
-    os.symlink(plot_file, f'figs/new_{plot_name}.{filetype}')
-    os.replace(f'figs/new_{plot_name}.{filetype}', f'figs/{plot_name}.{filetype}')
+    if not seperate_files:
+        os.symlink(plot_file, f'figs/new_{plot_name}.{filetype}')
+        os.replace(f'figs/new_{plot_name}.{filetype}', f'figs/{plot_name}.{filetype}')
     print('done')
 
 if __name__ == '__main__':
