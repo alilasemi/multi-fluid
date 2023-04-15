@@ -10,10 +10,10 @@ from problem import (RiemannProblem, AdvectedContact, AdvectedBubble,
 from solve import SimulationData, adaptive
 
 Problem = Cavitation
-file_name = 'data_final_laptop/data_final_loworder.npz'
+file_name = 'data.npz'
 show_progress_bar = True
 plot_profile = False
-plot_mesh = False
+plot_mesh = True
 plot_contour = True
 mark_volume_points = False
 plot_phi_contours = True

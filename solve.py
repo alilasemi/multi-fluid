@@ -19,7 +19,7 @@ cfl = .2
 t_final = 2e-2
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
-adaptive = False
+adaptive = True
 rho_levels = np.linspace(.15, 1.05, 19)
 linear_reconstruction = True
 
