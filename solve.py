@@ -19,7 +19,7 @@ cfl = .2
 t_final = 2e-2
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
-adaptive = True
+adaptive = False
 rho_levels = np.linspace(.15, 1.05, 19)
 linear_reconstruction = True
 
@@ -537,6 +537,7 @@ class SimulationData:
         self.t_list = t_list.copy()
         self.edge_points_list = []
         self.vol_points_list = []
+        self.area_list = []
         # Name of file to write to
         self.file_name = file_name
 
@@ -553,6 +554,8 @@ class SimulationData:
         self.fluid_ID_list.append(self.fluid_ID.copy())
         self.edge_points_list.append(mesh.edge_points.copy())
         self.vol_points_list.append(mesh.vol_points.copy())
+        self.area_list.append(mesh.area.copy())
+        breakpoint()
 
     def write_to_file(self):
         with open(file_name, 'wb') as f:
@@ -560,7 +563,8 @@ class SimulationData:
                     psg=self.psg, fluid_ID_list=self.fluid_ID_list, U_list=self.U_list,
                     phi_list=self.phi_list, t_list=self.t_list,
                     edge_points_list=self.edge_points_list,
-                    vol_points_list=self.vol_points_list, allow_pickle=True)
+                    vol_points_list=self.vol_points_list,
+                    area_list=self.area_list, allow_pickle=True)
 
     @classmethod
     def read_from_file(cls, file_name):
@@ -573,6 +577,7 @@ class SimulationData:
             sim_data.edge_points_list = data['edge_points_list']
             sim_data.vol_points_list = data['vol_points_list']
             sim_data.fluid_ID_list = data['fluid_ID_list']
+            sim_data.area_list = data['area_list']
         return sim_data
 
 if __name__ == '__main__':

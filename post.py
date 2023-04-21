@@ -154,7 +154,7 @@ def post_process():
         save_plot('profile', mesh)
 
     # Mesh plots
-    seperate_files = True
+    seperate_files = False
     lw_scale = .5
     if plot_mesh:
         if not seperate_files:
@@ -334,6 +334,10 @@ def post_process():
                         weights = 1 - np.abs(phi[near_interface]) / cutoff
                         radii = np.linalg.norm(mesh.xy[near_interface], axis=1)
                         radius[i_iter] = (weights @ radii) / np.sum(weights)
+
+#                        # Update radius based on the area of the bubble
+#                        areas = data.area_list[i_iter][data.fluid_ID_list[i_iter].astype(bool)]
+#                        radius[i_iter] = np.sqrt(areas.sum() / np.pi)
 
                     # Update progress bar
                     progress.update(task1, advance=1)
