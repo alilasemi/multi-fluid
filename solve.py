@@ -12,14 +12,15 @@ from lagrange import LagrangeSegmentP2
 
 # Solver inputs
 Problem = Cavitation
-nx = 51
-ny = 51
+nx = 26
+ny = 26
 #n_t = 1
 cfl = .2
-t_final = 2e-2
+t_final = .00063178#2e-2
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
-adaptive = False
+adaptive = True
+ale = True
 rho_levels = np.linspace(.15, 1.05, 19)
 linear_reconstruction = True
 
@@ -36,7 +37,7 @@ linear_ghost_extrapolation = False
 levelset = True
 
 # List of times at which the solution should be written to file
-t_list = np.linspace(0, t_final, 51).tolist()
+t_list = np.linspace(0, t_final, 11).tolist()
 
 def main(show_progress_bar=True):
     # Create mesh
@@ -177,7 +178,7 @@ def main(show_progress_bar=True):
             # -- Copy solution, then update -- #
             U_old = data.U.copy()
             try:
-                data.U = update(dt, data, mesh, problem)
+                data.U = update(dt, data, mesh, problem, adaptive, ale)
             # Handle errors from the Riemann solver
             except RuntimeError as err:
                 data.U = U_old
@@ -211,7 +212,7 @@ def main(show_progress_bar=True):
                 data.phi = problem.compute_exact_phi(mesh.xy, data.t)
             else:
                 if levelset:
-                    data.phi = update_phi(dt, data, mesh, problem)
+                    data.phi = update_phi(dt, data, mesh, problem, adaptive, ale)
 #                    # TODO: This is a hack to try a prescribed phi
 #                    theta = np.loadtxt('../../mnt/ind/projects/cavitation/simulations/case1/postpro/radius_theta.txt')
 #                    k = 11
@@ -377,18 +378,18 @@ def main(show_progress_bar=True):
     # Save solution
     data.write_to_file()
 
-def update(dt, data, mesh, problem):
+def update(dt, data, mesh, problem, adaptive, ale):
     U_new = data.U.copy()
     # Compute residual
-    R = get_residual(data, mesh, problem)
+    R = get_residual(data, mesh, problem, adaptive, ale)
     # Forward euler
     U_new += dt * R
     return U_new
 
-def update_phi(dt, data, mesh, problem):
+def update_phi(dt, data, mesh, problem, adaptive, ale):
     phi_new = data.phi.copy()
     # Compute residual
-    R = get_residual_phi(data, mesh, problem)
+    R = get_residual_phi(data, mesh, problem, adaptive, ale)
     # Forward euler
     phi_new += dt * R
     return phi_new
@@ -555,7 +556,6 @@ class SimulationData:
         self.edge_points_list.append(mesh.edge_points.copy())
         self.vol_points_list.append(mesh.vol_points.copy())
         self.area_list.append(mesh.area.copy())
-        breakpoint()
 
     def write_to_file(self):
         with open(file_name, 'wb') as f:

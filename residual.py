@@ -79,7 +79,7 @@ def compute_limiter(data, mesh):
     return limiter, limiter_phi
 
 
-def get_residual(data, mesh, problem):
+def get_residual(data, mesh, problem, adaptive, ale):
     # Unpack
     U = data.U
     gradV = data.gradV
@@ -93,27 +93,6 @@ def get_residual(data, mesh, problem):
     # Compute limiter
     limiter, _ = compute_limiter(data, mesh)
 
-    g = [4.4, 1.4]
-    psg = [6e5, 0]
-    g_i = np.array(g)[data.fluid_ID]
-    psg_i = np.array(psg)[data.fluid_ID]
-    r  = data.U[:, 0]
-    ru = data.U[:, 1]
-    rv = data.U[:, 2]
-    re = data.U[:, 3]
-    # Compute pressure
-    p = (g_i - 1) * (re - .5 * (ru**2 + rv**2) / r) - g_i * psg_i;
-#    if np.any(p < 0):
-#        #TODO Ultrahack
-#        U[p<0, 3] = ( (100 + g_i[p<0] * psg_i[p<0]) / (g_i[p<0] - 1)
-#                + .5 * (ru[p<0]**2 + rv[p<0]**2) / r[p<0] )
-#        limiter[p<0] = 0
-    #mask = np.linalg.norm(mesh.xy, axis=1) > .1
-    #limiter[mask] = 0
-    #if data.i ==13:
-    #    reakpoint()
-
-
     # Compute the interior face residual
     # TODO: is Pybind OOP a thing? Seems to not be...
     # TODO: Ditch the whole area_normals_p2 vs regular normals thing (actually
@@ -123,6 +102,26 @@ def get_residual(data, mesh, problem):
             mesh.interior_face_IDs, mesh.edge, limiter, gradV.flatten().data,
             mesh.xy, mesh.area_normals_p1, mesh.area, data.fluid_ID, data.g,
             data.psg, residual)
+
+    # -- Contribution from the interior face ALE flux -- #
+    if adaptive and ale:
+        # Average velocity of each interior face
+        w_interior = np.mean(mesh.quad_pt_velocity[mesh.interior_face_IDs], axis=1)
+        # Dot this velocity with the normal vector
+        wn_interior = np.sum(
+                w_interior * mesh.area_normals_p1[mesh.interior_face_IDs],
+                axis=1, keepdims=True)
+        # Compute the residual on left and right
+        for LR in 0, 1:
+            if LR == 0:
+                U_face = data.U_L_p1
+                sign = 1
+            else:
+                U_face = data.U_R_p1
+                sign = -1
+            np.add.at(residual, mesh.edge[mesh.interior_face_IDs, LR], sign * (
+                    (1 / mesh.area[mesh.edge[mesh.interior_face_IDs, LR]]).reshape(-1, 1)
+                    * U_face * wn_interior))
 
     # Compute the boundary face residual
     compute_boundary_face_residual(U, mesh.bc_type, LagrangeSegment.quad_wts,
@@ -150,9 +149,31 @@ def get_residual(data, mesh, problem):
         data.U_L_p2 = U_L_p2.reshape(data.U_L_p2.shape)
         data.U_R_p2 = U_R_p2.reshape(data.U_R_p2.shape)
 
+        # -- Contribution from the interior face ALE flux -- #
+        if adaptive and ale:
+            # Velocity of each interface quadrature point
+            w_interface = mesh.quad_pt_velocity[mesh.interface_IDs]
+            # Dot this velocity with the normal vector
+            wn_interface = np.sum(
+                    w_interface * mesh.area_normals_p2[mesh.interface_IDs],
+                    axis=2, keepdims=True)
+            # Compute the residual on left and right
+            for LR in 0, 1:
+                if LR == 0:
+                    U_face = data.U_L_p2
+                    sign = 1
+                else:
+                    U_face = data.U_R_p2
+                    sign = -1
+                np.add.at(residual, mesh.edge[mesh.interface_IDs, LR], sign * (
+                        (1 / mesh.area[mesh.edge[mesh.interface_IDs, LR]]).reshape(-1, 1)
+                        * np.sum(
+                                U_face * wn_interface
+                                * LagrangeSegment.quad_wts.reshape(1, -1, 1),
+                                axis=1)))
     return residual
 
-def get_residual_phi(data, mesh, problem):
+def get_residual_phi(data, mesh, problem, adaptive, ale):
     # Unpack
     U = data.U
     phi = data.phi
