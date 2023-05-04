@@ -16,7 +16,7 @@ nx = 26
 ny = 26
 #n_t = 1
 cfl = .2
-t_final = .00063178#2e-2
+t_final = 5e-3#2e-2#.00063178
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
 adaptive = True
@@ -111,11 +111,23 @@ def main(show_progress_bar=True):
                 mesh.update(data, problem)
                 # Compute the "velocity" at which the quad points moved
                 if i > 0:
+                    k_velocity = 10
                     quad_pt_velocity = (mesh.quad_pts_phys - old_quad_pts) / dt
+                    mesh.quad_pt_velocity_list.append( quad_pt_velocity )
+                    if i > k_velocity:
+                        mesh.quad_pt_velocity_list.pop(0)
                 else:
                     quad_pt_velocity = np.zeros_like(mesh.quad_pts_phys)
+                    mesh.quad_pt_velocity_list = []
                 # TODO: Store this
-                mesh.quad_pt_velocity = quad_pt_velocity
+                #mesh.quad_pt_velocity = quad_pt_velocity
+                mesh.quad_pt_velocity = np.zeros_like(mesh.quad_pts_phys)
+                for vel in mesh.quad_pt_velocity_list:
+                    mesh.quad_pt_velocity += vel
+                if i > 0:
+                    mesh.quad_pt_velocity /= len(mesh.quad_pt_velocity_list)
+                #if data.i == 59:
+                #    reakpoint()
             # Update the stencil to not include points across the interface
             mesh.update_stencil(data.phi)
 
@@ -132,7 +144,7 @@ def main(show_progress_bar=True):
                 rv = data.U[:, 2]
                 re = data.U[:, 3]
                 # Compute pressure
-                p = (g_i - 1) * (re - .5 * (ru**2 + rv**2) / r) - g_i * psg_i;
+                p = (g_i - 1) * (re - .5 * (ru**2 + rv**2) / r) - g_i * psg_i
                 # Speed of sound
                 a = np.sqrt(g_i * (p + psg_i) / r)
                 # Norm of velocity

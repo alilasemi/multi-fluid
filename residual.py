@@ -103,6 +103,10 @@ def get_residual(data, mesh, problem, adaptive, ale):
             mesh.xy, mesh.area_normals_p1, mesh.area, data.fluid_ID, data.g,
             data.psg, residual)
 
+    #if data.i == 59:
+    #    print(residual[378])
+    #    reakpoint()
+
     # -- Contribution from the interior face ALE flux -- #
     if adaptive and ale:
         # Average velocity of each interior face
@@ -119,9 +123,15 @@ def get_residual(data, mesh, problem, adaptive, ale):
             else:
                 U_face = data.U_R_p1
                 sign = -1
+            #TODO:HACK
+            sign *= -1
             np.add.at(residual, mesh.edge[mesh.interior_face_IDs, LR], sign * (
                     (1 / mesh.area[mesh.edge[mesh.interior_face_IDs, LR]]).reshape(-1, 1)
                     * U_face * wn_interior))
+
+    #if data.i == 59:
+    #    print(residual[378])
+    #    reakpoint()
 
     # Compute the boundary face residual
     compute_boundary_face_residual(U, mesh.bc_type, LagrangeSegment.quad_wts,
@@ -165,6 +175,8 @@ def get_residual(data, mesh, problem, adaptive, ale):
                 else:
                     U_face = data.U_R_p2
                     sign = -1
+                #TODO: HACK
+                sign *= -1
                 np.add.at(residual, mesh.edge[mesh.interface_IDs, LR], sign * (
                         (1 / mesh.area[mesh.edge[mesh.interface_IDs, LR]]).reshape(-1, 1)
                         * np.sum(
