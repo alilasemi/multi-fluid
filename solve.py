@@ -16,7 +16,7 @@ nx = 51
 ny = 51
 #n_t = 1
 cfl = .2
-t_final = 2e-2
+t_final = .0075#2e-2
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
 adaptive = True
@@ -37,7 +37,7 @@ linear_ghost_extrapolation = False
 levelset = True
 
 # List of times at which the solution should be written to file
-t_list = np.linspace(0, t_final, 51).tolist()
+t_list = np.linspace(0, t_final, 21).tolist()
 
 def main(show_progress_bar=True):
     # Create mesh
@@ -108,6 +108,7 @@ def main(show_progress_bar=True):
                         data.grad_phi)
                 # Update the mesh
                 old_quad_pts = mesh.quad_pts_phys.copy()
+                old_area = mesh.area.copy()
                 mesh.update(data, problem)
                 # Compute the "velocity" at which the quad points moved
                 if i > 0:
@@ -132,10 +133,19 @@ def main(show_progress_bar=True):
                     k_velocity = 1
                     if i > k_velocity:
                         mesh.quad_pt_velocity_list.pop(0)
+
+                    # Also compute the area rate of change, also clipped in a
+                    # similar way
+                    d_A_dt = (mesh.area - old_area) / dt
+                    max_area_rate = mesh.dx / 2
+                    fast_cell_IDs = np.nonzero(np.abs(d_A_dt) > max_area_rate)
+                    d_A_dt[fast_cell_IDs] = (
+                            np.sign(d_A_dt[fast_cell_IDs]) * max_area_rate)
                 # For iteration 0, just take the velocity to be zero
                 else:
                     quad_pt_velocity = np.zeros_like(mesh.quad_pts_phys)
                     mesh.quad_pt_velocity_list = []
+                    d_A_dt = np.zeros_like(mesh.area)
 
                 # TODO: Store this
                 #mesh.quad_pt_velocity = quad_pt_velocity
@@ -146,6 +156,7 @@ def main(show_progress_bar=True):
                     mesh.quad_pt_velocity /= len(mesh.quad_pt_velocity_list)
                 #if data.i == 59:
                 #    reakpoint()
+                mesh.d_A_dt = d_A_dt
             # Update the stencil to not include points across the interface
             mesh.update_stencil(data.phi)
 

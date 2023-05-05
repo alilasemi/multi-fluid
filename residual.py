@@ -183,6 +183,11 @@ def get_residual(data, mesh, problem, adaptive, ale):
                                 U_face * wn_interface
                                 * LagrangeSegment.quad_wts.reshape(1, -1, 1),
                                 axis=1)))
+
+    # -- Contribution from the ALE volumetric term -- #
+    if adaptive and ale:
+        residual -= ((1 / mesh.area) * mesh.d_A_dt).reshape(-1, 1) * data.U
+
     return residual
 
 def get_residual_phi(data, mesh, problem, adaptive, ale):
