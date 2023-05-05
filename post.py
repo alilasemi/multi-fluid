@@ -316,14 +316,14 @@ def post_process():
                         # TODO: This method is probably most accurate, but
                         # results in some wierd (non-smooth) plots for a low
                         # order interface.
-                        #is_surrogate = phi[mesh.edge[:, 0]] * phi[mesh.edge[:, 1]] < 0
-                        #interface_IDs = np.argwhere(is_surrogate)[:, 0]
-                        #points = [mesh.get_face_point_coords(face_ID,
-                        #        edge_points_list, vol_points_list) for face_ID
-                        #        in interface_IDs]
-                        #radii = [np.mean(np.linalg.norm(p, axis=1)) for p in
-                        #        points]
-                        #radius[i_iter] = np.mean(radii)
+                 #       is_surrogate = phi[mesh.edge[:, 0]] * phi[mesh.edge[:, 1]] < 0
+                 #       interface_IDs = np.argwhere(is_surrogate)[:, 0]
+                 #       points = [mesh.get_face_point_coords(face_ID,
+                 #               edge_points_list, vol_points_list) for face_ID
+                 #               in interface_IDs]
+                 #       radii = [np.mean(np.linalg.norm(p, axis=1)) for p in
+                 #               points]
+                 #       radius[i_iter] = np.mean(radii)
 
                         cutoff = .01
                         near_interface = np.abs(phi) < cutoff

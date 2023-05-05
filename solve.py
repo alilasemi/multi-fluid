@@ -12,11 +12,11 @@ from lagrange import LagrangeSegmentP2
 
 # Solver inputs
 Problem = Cavitation
-nx = 26
-ny = 26
+nx = 51
+ny = 51
 #n_t = 1
 cfl = .2
-t_final = 5e-3#2e-2#.00063178
+t_final = 2e-2
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
 adaptive = True
@@ -37,7 +37,7 @@ linear_ghost_extrapolation = False
 levelset = True
 
 # List of times at which the solution should be written to file
-t_list = np.linspace(0, t_final, 11).tolist()
+t_list = np.linspace(0, t_final, 51).tolist()
 
 def main(show_progress_bar=True):
     # Create mesh
@@ -111,14 +111,32 @@ def main(show_progress_bar=True):
                 mesh.update(data, problem)
                 # Compute the "velocity" at which the quad points moved
                 if i > 0:
-                    k_velocity = 10
+                    # Compute velocity of each quadrature point relative to the
+                    # last with a finite difference
                     quad_pt_velocity = (mesh.quad_pts_phys - old_quad_pts) / dt
+
+                    # Find the face IDs which have a mean speed that is too high
+                    max_face_speed = 5
+                    avg_face_speed = np.linalg.norm(np.mean(
+                            quad_pt_velocity, axis=1), axis=1)
+                    fast_face_IDs = np.nonzero(avg_face_speed > max_face_speed)
+                    # Set these faces to have zero motion
+                    #quad_pt_velocity[fast_face_IDs] = 0
+                    # Clip these faces to the max speed
+                    quad_pt_velocity[fast_face_IDs] /= (
+                            avg_face_speed[fast_face_IDs].reshape(-1, 1, 1))
+                    quad_pt_velocity[fast_face_IDs] *= max_face_speed
+
+                    # Store the velocities from the past k timesteps
                     mesh.quad_pt_velocity_list.append( quad_pt_velocity )
+                    k_velocity = 1
                     if i > k_velocity:
                         mesh.quad_pt_velocity_list.pop(0)
+                # For iteration 0, just take the velocity to be zero
                 else:
                     quad_pt_velocity = np.zeros_like(mesh.quad_pts_phys)
                     mesh.quad_pt_velocity_list = []
+
                 # TODO: Store this
                 #mesh.quad_pt_velocity = quad_pt_velocity
                 mesh.quad_pt_velocity = np.zeros_like(mesh.quad_pts_phys)
