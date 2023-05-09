@@ -124,14 +124,14 @@ def get_residual(data, mesh, problem, adaptive, ale):
                 U_face = data.U_R_p1
                 sign = -1
             #TODO:HACK
-            sign *= -1
+            #sign *= -1
+
+            #mean_qp = np.mean(mesh.quad_pts_phys, axis=1)
+            #w_interior[np.linalg.norm(w_interior, axis=1) > 1e-8, :]
+            #breakpoint()
             np.add.at(residual, mesh.edge[mesh.interior_face_IDs, LR], sign * (
                     (1 / mesh.area[mesh.edge[mesh.interior_face_IDs, LR]]).reshape(-1, 1)
                     * U_face * wn_interior))
-
-    #if data.i == 59:
-    #    print(residual[378])
-    #    reakpoint()
 
     # Compute the boundary face residual
     compute_boundary_face_residual(U, mesh.bc_type, LagrangeSegment.quad_wts,
@@ -176,7 +176,7 @@ def get_residual(data, mesh, problem, adaptive, ale):
                     U_face = data.U_R_p2
                     sign = -1
                 #TODO: HACK
-                sign *= -1
+                #sign *= -1
                 np.add.at(residual, mesh.edge[mesh.interface_IDs, LR], sign * (
                         (1 / mesh.area[mesh.edge[mesh.interface_IDs, LR]]).reshape(-1, 1)
                         * np.sum(
@@ -185,8 +185,8 @@ def get_residual(data, mesh, problem, adaptive, ale):
                                 axis=1)))
 
     # -- Contribution from the ALE volumetric term -- #
-    if adaptive and ale:
-        residual -= ((1 / mesh.area) * mesh.d_A_dt).reshape(-1, 1) * data.U
+#    if adaptive and ale:
+#        residual -= ((1 / mesh.area) * mesh.d_A_dt).reshape(-1, 1) * data.U
 
     return residual
 
