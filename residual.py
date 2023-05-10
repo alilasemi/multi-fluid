@@ -128,7 +128,7 @@ def get_residual(data, mesh, problem, adaptive, ale):
 
             #mean_qp = np.mean(mesh.quad_pts_phys, axis=1)
             #w_interior[np.linalg.norm(w_interior, axis=1) > 1e-8, :]
-            #breakpoint()
+            #reakpoint()
             np.add.at(residual, mesh.edge[mesh.interior_face_IDs, LR], sign * (
                     (1 / mesh.area[mesh.edge[mesh.interior_face_IDs, LR]]).reshape(-1, 1)
                     * U_face * wn_interior))
@@ -149,15 +149,19 @@ def get_residual(data, mesh, problem, adaptive, ale):
         # Compute the fluid-fluid interface residual
         U_L_p2 = np.empty_like(data.U_L_p2).flatten()
         U_R_p2 = np.empty_like(data.U_R_p2).flatten()
+        U_L_Rie = np.empty_like(data.U_L_p2).flatten()
+        U_R_Rie = np.empty_like(data.U_R_p2).flatten()
         compute_fluid_fluid_face_residual(U, U_L_p2,
                 U_R_p2, mesh.interface_IDs, mesh.edge,
                 LagrangeSegment.quad_wts, mesh.quad_pts_phys.flatten().data,
                 limiter, gradV.flatten().data, mesh.xy,
                 mesh.area_normals_p2.flatten().data, mesh.area, data.fluid_ID,
-                data.g, data.psg, residual)
+                data.g, data.psg, residual, U_L_Rie, U_R_Rie)
         # TODO: Look into cleaner ways to pass multidimensional arrays back
         data.U_L_p2 = U_L_p2.reshape(data.U_L_p2.shape)
         data.U_R_p2 = U_R_p2.reshape(data.U_R_p2.shape)
+        U_L_Rie = U_L_Rie.reshape(data.U_L_p2.shape)
+        U_R_Rie = U_R_Rie.reshape(data.U_R_p2.shape)
 
         # -- Contribution from the interior face ALE flux -- #
         if adaptive and ale:
@@ -170,13 +174,29 @@ def get_residual(data, mesh, problem, adaptive, ale):
             # Compute the residual on left and right
             for LR in 0, 1:
                 if LR == 0:
-                    U_face = data.U_L_p2
+                    U_face = U_L_Rie#data.U_L_p2
                     sign = 1
                 else:
-                    U_face = data.U_R_p2
+                    U_face = U_R_Rie#data.U_R_p2
                     sign = -1
                 #TODO: HACK
                 #sign *= -1
+    #            if data.i == 60:
+    #                g = [4.4, 1.4]
+    #                psg = [1e6, 0]#[6e8, 0]
+    #                # Get fluid data for each cell
+    #                g_i = np.array(g)[data.fluid_ID]
+    #                psg_i = np.array(psg)[data.fluid_ID]
+    #                r  = data.U[:, 0]
+    #                ru = data.U[:, 1]
+    #                rv = data.U[:, 2]
+    #                re = data.U[:, 3]
+    #                # Compute pressure
+    #                p = (g_i - 1) * (re - .5 * (ru**2 + rv**2) / r) - g_i * psg_i
+
+    #                print(p[217], p[218], p[219])
+    #                reakpoint()
+
                 np.add.at(residual, mesh.edge[mesh.interface_IDs, LR], sign * (
                         (1 / mesh.area[mesh.edge[mesh.interface_IDs, LR]]).reshape(-1, 1)
                         * np.sum(
@@ -232,16 +252,24 @@ def get_residual_phi(data, mesh, problem, adaptive, ale):
 
     # -- Interfaces -- #
     # Evaluate solution at left and right
+    # TODO: This uses the residual function, which does a lot more work than is
+    # really needed here
     U_L_p2 = np.empty_like(data.U_L_p2).flatten()
     U_R_p2 = np.empty_like(data.U_R_p2).flatten()
-    evaluate_solution_at_interfaces(U, mesh.interface_IDs, mesh.edge,
+    U_L_Rie = np.empty_like(data.U_L_p2).flatten()
+    U_R_Rie = np.empty_like(data.U_R_p2).flatten()
+    compute_fluid_fluid_face_residual(U, U_L_p2,
+            U_R_p2, mesh.interface_IDs, mesh.edge,
             LagrangeSegment.quad_wts, mesh.quad_pts_phys.flatten().data,
-            limiter, data.gradV.flatten().data, mesh.xy, data.fluid_ID,
-            data.g, data.psg, U_L_p2, U_R_p2)
+            limiter, data.gradV.flatten().data, mesh.xy,
+            mesh.area_normals_p2.flatten().data, mesh.area, data.fluid_ID,
+            data.g, data.psg, np.zeros((mesh.n, 4)), U_L_Rie, U_R_Rie)
     data.U_L_p2 = U_L_p2.reshape(data.U_L_p2.shape)
     data.U_R_p2 = U_R_p2.reshape(data.U_R_p2.shape)
     U_L_p2 = data.U_L_p2
     U_R_p2 = data.U_R_p2
+    U_L_Rie = U_L_Rie.reshape(data.U_L_p2.shape)
+    U_R_Rie = U_R_Rie.reshape(data.U_R_p2.shape)
     nq = U_L_p2.shape[1]
     # Left and right cell IDs
     L = mesh.edge[interface_IDs, 0]
@@ -263,8 +291,11 @@ def get_residual_phi(data, mesh, problem, adaptive, ale):
     # Evaluate interior fluxes
     F = np.empty((interface_IDs.size, nq))
     for i in range(nq):
+        # TODO: Test which is better
         F[:, i] = flux_phi.compute_flux(U_L_p2[:, i], U_R_p2[:, i], phi_L[:, i],
                 phi_R[:, i], mesh.area_normals_p2[interface_IDs, i])
+        #F[:, i] = flux_phi.compute_flux(U_L_Rie[:, i], U_R_Rie[:, i], phi_L[:, i],
+        #        phi_R[:, i], mesh.area_normals_p2[interface_IDs, i])
     # Quadrature rule
     F = F @ LagrangeSegment.quad_wts
 

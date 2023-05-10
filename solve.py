@@ -12,11 +12,11 @@ from lagrange import LagrangeSegmentP2
 
 # Solver inputs
 Problem = Cavitation
-nx = 51
-ny = 51
+nx = 21
+ny = 21
 #n_t = 1
 cfl = .2
-t_final = 2e-2
+t_final = .0075#2e-2
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
 adaptive = True
@@ -37,7 +37,7 @@ linear_ghost_extrapolation = False
 levelset = True
 
 # List of times at which the solution should be written to file
-t_list = np.linspace(0, t_final, 51).tolist()
+t_list = np.linspace(0, t_final, 21).tolist()
 
 def main(show_progress_bar=True):
     # Create mesh

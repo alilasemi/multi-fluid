@@ -641,7 +641,7 @@ class Cavitation(Problem):
 
     # Bubble state (rho, u, v, p)
     bubble = np.array([
-            1, 0, 0, 5e4
+            1, 0, 0, 9.5e4
     ])
 
 #    #TODO: Hack initial state

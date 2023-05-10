@@ -163,7 +163,8 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         matrix_ref<double> xy, std::vector<double> area_normals_p2,
         matrix_ref<double> area, vector_ref<long> fluid_ID,
         std::vector<double> g, std::vector<double> psg,
-        matrix_ref<double> residual) {
+        matrix_ref<double> residual, vector_ref<double> U_L_Rie,
+        vector_ref<double> U_R_Rie) {
     auto nq = quad_wts.rows();
 
     // Compute U_L and U_R
@@ -252,6 +253,11 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
             //        cout << U_R_Riemann << endl;
             //    }
             //}
+            // Store the left and right state on either side of the contact
+            for (int k = 0; k < 4; k++) {
+                U_L_Rie[i_face*nq*4 + i*4 + k] = U_L_Riemann(k);
+                U_R_Rie[i_face*nq*4 + i*4 + k] = U_R_Riemann(k);
+            }
 
             //if (L == 11 or R == 11) {
             //    cout << "_______________________ i = " << i << " _____________________" << endl;

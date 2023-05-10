@@ -21,7 +21,8 @@ void compute_fluid_fluid_face_residual(matrix_ref<double> U,
         matrix_ref<double> xy, std::vector<double> area_normals_p2,
         matrix_ref<double> area, vector_ref<long> fluid_ID,
         std::vector<double> g, std::vector<double> psg,
-        matrix_ref<double> residual);
+        matrix_ref<double> residual, vector_ref<double> U_L_Rie,
+        vector_ref<double> U_R_Rie);
 
 // Compute the boundary faces' contributions to the residual.
 void compute_boundary_face_residual(matrix_ref<double> U,
