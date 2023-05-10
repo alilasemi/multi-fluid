@@ -12,15 +12,15 @@ from lagrange import LagrangeSegmentP2
 
 # Solver inputs
 Problem = Cavitation
-nx = 21
-ny = 21
+nx = 51
+ny = 51
 #n_t = 1
 cfl = .2
 t_final = .0075#2e-2
 max_n_t = 99999999999
 level_set_reinitialization_rate = 0
-adaptive = True
-ale = True
+adaptive = False
+ale = False
 rho_levels = np.linspace(.15, 1.05, 19)
 linear_reconstruction = True
 
@@ -117,7 +117,7 @@ def main(show_progress_bar=True):
                     quad_pt_velocity = (mesh.quad_pts_phys - old_quad_pts) / dt
 
                     # Find the face IDs which have a mean speed that is too high
-                    max_face_speed = 5
+                    max_face_speed = 2#5
                     avg_face_speed = np.linalg.norm(np.mean(
                             quad_pt_velocity, axis=1), axis=1)
                     fast_face_IDs = np.nonzero(avg_face_speed > max_face_speed)

@@ -183,8 +183,8 @@ def post_process():
                 #ax.set_xlim([mesh.xL, mesh.xR])
                 #ax.set_ylim([mesh.yL, mesh.yR])
                 lim = .048
-                ax.set_xlim([-lim, lim])
-                ax.set_ylim([-lim, lim])
+                #ax.set_xlim([-lim, lim])
+                #ax.set_ylim([-lim, lim])
                 ax.set_xlabel('$x$ (m)', fontsize=10)
                 ax.set_ylabel('$y$ (m)', fontsize=10)
                 if has_exact_phi:
@@ -316,24 +316,25 @@ def post_process():
                         # TODO: This method is probably most accurate, but
                         # results in some wierd (non-smooth) plots for a low
                         # order interface.
-                 #       is_surrogate = phi[mesh.edge[:, 0]] * phi[mesh.edge[:, 1]] < 0
-                 #       interface_IDs = np.argwhere(is_surrogate)[:, 0]
-                 #       points = [mesh.get_face_point_coords(face_ID,
-                 #               edge_points_list, vol_points_list) for face_ID
-                 #               in interface_IDs]
-                 #       radii = [np.mean(np.linalg.norm(p, axis=1)) for p in
-                 #               points]
-                 #       radius[i_iter] = np.mean(radii)
-
-                        cutoff = .01
-                        near_interface = np.abs(phi) < cutoff
-                        ax.plot(mesh.xy[near_interface, 0],
-                                mesh.xy[near_interface, 1], 'r.', ms=5)
-                        # Update radius based on a weighted average of these
-                        # points
-                        weights = 1 - np.abs(phi[near_interface]) / cutoff
-                        radii = np.linalg.norm(mesh.xy[near_interface], axis=1)
-                        radius[i_iter] = (weights @ radii) / np.sum(weights)
+                        if False:#adaptive:
+                            is_surrogate = phi[mesh.edge[:, 0]] * phi[mesh.edge[:, 1]] < 0
+                            interface_IDs = np.argwhere(is_surrogate)[:, 0]
+                            points = [mesh.get_face_point_coords(face_ID,
+                                    edge_points_list, vol_points_list) for face_ID
+                                    in interface_IDs]
+                            radii = [np.mean(np.linalg.norm(p, axis=1)) for p in
+                                    points]
+                            radius[i_iter] = np.mean(radii)
+                        else:
+                            cutoff = .01
+                            near_interface = np.abs(phi) < cutoff
+                            ax.plot(mesh.xy[near_interface, 0],
+                                    mesh.xy[near_interface, 1], 'r.', ms=5)
+                            # Update radius based on a weighted average of these
+                            # points
+                            weights = 1 - np.abs(phi[near_interface]) / cutoff
+                            radii = np.linalg.norm(mesh.xy[near_interface], axis=1)
+                            radius[i_iter] = (weights @ radii) / np.sum(weights)
 
 #                        # Update radius based on the area of the bubble
 #                        areas = data.area_list[i_iter][data.fluid_ID_list[i_iter].astype(bool)]
